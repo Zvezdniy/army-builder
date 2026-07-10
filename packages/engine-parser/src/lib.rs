@@ -2,6 +2,7 @@
 
 pub mod error;
 pub mod limits;
+pub mod raw;
 pub mod xml;
 pub mod zip;
 

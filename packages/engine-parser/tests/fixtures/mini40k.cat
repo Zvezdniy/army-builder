@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="cat.mini40k" name="Mini 40k" revision="1" gameSystemId="gs.40k"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <costTypes>
+    <costType id="pts" name="Points" defaultCostLimit="-1"/>
+  </costTypes>
+  <categoryEntries>
+    <categoryEntry id="cat.hq" name="HQ"/>
+    <categoryEntry id="cat.troops" name="Troops"/>
+  </categoryEntries>
+  <sharedSelectionEntries/>
+  <selectionEntries>
+    <selectionEntry id="e.captain" name="Captain" type="model">
+      <costs><cost name="Points" typeId="pts" value="90"/></costs>
+      <categoryLinks><categoryLink id="cl1" targetId="cat.hq" primary="true"/></categoryLinks>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>
