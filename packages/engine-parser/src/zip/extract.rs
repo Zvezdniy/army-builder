@@ -28,23 +28,23 @@ fn extract_with_caps(bytes: &[u8], max_total: u64, max_ratio: u64) -> Result<Vec
         if file.enclosed_name().is_none() || name.contains("..") {
             return Err(ParseError::ZipSlip(name));
         }
+        if !is_catalogue_xml(&name) {
+            continue; // non-XML sidecars are never decompressed
+        }
+        // Cheap fast-fail for honestly-declared bombs. NOT authoritative: a lying
+        // header defeats it, so the real-byte aggregate cap below is the backstop.
         let compressed = file.compressed_size().max(1);
-        let declared = file.size();
-        if declared / compressed > max_ratio {
+        if file.size() / compressed > max_ratio {
             return Err(ParseError::ZipBombRatio(max_ratio));
         }
-        if !is_catalogue_xml(&name) {
-            continue; // ignore non-XML sidecars
-        }
-        total = total.saturating_add(declared);
-        if total > max_total {
-            return Err(ParseError::ZipBombSize);
-        }
-        // Stream with a hard byte cap in case `declared` lies.
+        // Authoritative guard: read with a hard cap on the REMAINING real-byte
+        // budget, then account ACTUAL bytes read. A lying `size()` is irrelevant.
+        let remaining = max_total.saturating_sub(total);
         let mut out = Vec::new();
-        let mut limited = file.by_ref().take(max_total + 1);
+        let mut limited = file.by_ref().take(remaining.saturating_add(1));
         limited.read_to_end(&mut out).map_err(|e| ParseError::Io(e.to_string()))?;
-        if out.len() as u64 > max_total {
+        total = total.saturating_add(out.len() as u64);
+        if total > max_total {
             return Err(ParseError::ZipBombSize);
         }
         found.push(out);
@@ -73,5 +73,22 @@ mod tests {
         let z = buf.into_inner();
         // total cap generous, ratio cap tiny => ratio guard fires.
         assert_eq!(extract_with_caps(&z, u64::MAX, 2), Err(ParseError::ZipBombRatio(2)));
+    }
+
+    #[test]
+    fn size_cap_enforced_on_real_bytes_across_entries() {
+        let mut buf = std::io::Cursor::new(Vec::new());
+        {
+            let mut w = ::zip::ZipWriter::new(&mut buf);
+            w.start_file("a.cat", SimpleFileOptions::default()).unwrap();
+            w.write_all(&vec![b'a'; 100_000]).unwrap();
+            w.start_file("b.cat", SimpleFileOptions::default()).unwrap();
+            w.write_all(&vec![b'a'; 100_000]).unwrap();
+            w.finish().unwrap();
+        }
+        let z = buf.into_inner();
+        // ratio cap huge so the ratio heuristic can't fire; total cap small so
+        // the real-byte aggregate cap must trip across the two entries.
+        assert_eq!(extract_with_caps(&z, 150_000, u64::MAX), Err(ParseError::ZipBombSize));
     }
 }
