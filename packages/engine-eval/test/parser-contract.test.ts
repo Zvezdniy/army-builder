@@ -47,4 +47,24 @@ describe("parser IR contract", () => {
     expect(result.valid).toBe(false);
     expect(result.issues.some((i) => i.constraintId === "fc.hq.max")).toBe(true);
   });
+
+  it("engine-eval enforces a parsed group choose-N limit", () => {
+    const cat = IrCatalogue.parse(golden);
+    // Captain takes BOTH wargear options → violates g.wargear.max (max 1).
+    const roster: Roster = {
+      id: "r", name: "R", gameSystemId: cat.gameSystemId,
+      catalogueId: cat.id, catalogueRevision: cat.revision, pointsLimit: 1000,
+      selections: [{
+        id: "cap", entryId: "e.captain", count: 1,
+        selections: [
+          { id: "w1", entryId: "e.captain.sword", count: 1, selections: [] },
+          { id: "w2", entryId: "e.captain.axe", count: 1, selections: [] },
+        ],
+      }],
+    };
+    const result = evaluate(roster, cat);
+    expect(result.valid).toBe(false);
+    const issue = result.issues.find((i) => i.constraintId === "g.wargear.max");
+    expect(issue?.code).toBe("group.max");
+  });
 });

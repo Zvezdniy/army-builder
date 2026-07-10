@@ -26,6 +26,33 @@
               "value": 5.0
             }
           ]
+        },
+        {
+          "id": "e.captain.axe",
+          "name": "Power Axe",
+          "costs": [
+            {
+              "name": "points",
+              "value": 10.0
+            }
+          ]
+        }
+      ],
+      "groups": [
+        {
+          "id": "g.wargear",
+          "name": "Wargear",
+          "memberEntryIds": [
+            "e.captain.sword",
+            "e.captain.axe"
+          ],
+          "constraints": [
+            {
+              "id": "g.wargear.max",
+              "type": "max",
+              "value": 1.0
+            }
+          ]
         }
       ]
     },
