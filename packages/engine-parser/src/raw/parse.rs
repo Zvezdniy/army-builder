@@ -2,8 +2,8 @@ use quick_xml::events::{BytesStart, Event};
 use crate::error::ParseError;
 use crate::xml::SafeXmlReader;
 use super::model::{
-    RawCatalogue, RawCategoryLink, RawConstraint, RawCost, RawEntry, RawEntryLink, RawForce,
-    RawGroup,
+    RawCatalogue, RawCategoryLink, RawCondition, RawConditionGroup, RawConstraint, RawCost,
+    RawEntry, RawEntryLink, RawForce, RawGroup, RawModifier,
 };
 
 fn attr(e: &BytesStart, key: &[u8]) -> Option<String> {
@@ -164,8 +164,7 @@ fn read_entry(start: &BytesStart, r: &mut SafeXmlReader) -> Result<RawEntry, Par
                         read_groups_into(&mut entry.groups, r, b"selectionEntryGroups")?
                     }
                     b"entryLinks" => read_entrylinks_into(&mut entry.entry_links, r)?,
-                    // Task 7 replaces this skip with real modifier/condition parsing.
-                    b"modifiers" => skip_element(r, b"modifiers")?,
+                    b"modifiers" => read_modifiers_into(&mut entry.modifiers, r)?,
                     other => {
                         let name = other.to_vec();
                         skip_element(r, &name)?;
@@ -425,6 +424,180 @@ fn read_constraints_into(
             None => {
                 return Err(ParseError::MalformedXml(
                     "unexpected EOF in constraints".to_string(),
+                ))
+            }
+        }
+    }
+}
+
+fn read_modifiers_into(
+    dst: &mut Vec<RawModifier>,
+    r: &mut SafeXmlReader,
+) -> Result<(), ParseError> {
+    loop {
+        match r.read_event()? {
+            Some(ev) => match ev.event {
+                Event::Start(e) if e.local_name().as_ref() == b"modifier" => {
+                    dst.push(read_modifier(&e, r)?);
+                }
+                Event::Empty(e) if e.local_name().as_ref() == b"modifier" => {
+                    dst.push(RawModifier {
+                        kind: attr(&e, b"type").unwrap_or_default(),
+                        field: attr(&e, b"field").unwrap_or_default(),
+                        value: attr_f64(&e, b"value").unwrap_or(0.0),
+                        ..Default::default()
+                    });
+                }
+                Event::End(end) if end.local_name().as_ref() == b"modifiers" => return Ok(()),
+                Event::Start(e) => {
+                    skip_element(r, e.local_name().as_ref())?;
+                }
+                _ => {}
+            },
+            None => {
+                return Err(ParseError::MalformedXml(
+                    "unexpected EOF in modifiers".to_string(),
+                ))
+            }
+        }
+    }
+}
+
+fn read_modifier(start: &BytesStart, r: &mut SafeXmlReader) -> Result<RawModifier, ParseError> {
+    let mut modifier = RawModifier {
+        kind: attr(start, b"type").unwrap_or_default(),
+        field: attr(start, b"field").unwrap_or_default(),
+        value: attr_f64(start, b"value").unwrap_or(0.0),
+        ..Default::default()
+    };
+    loop {
+        match r.read_event()? {
+            Some(ev) => match ev.event {
+                Event::Start(e) => match e.local_name().as_ref() {
+                    b"conditions" => read_conditions_into(&mut modifier.conditions, r)?,
+                    b"conditionGroups" => {
+                        read_condition_groups_into(&mut modifier.condition_groups, r)?
+                    }
+                    b"repeats" => {
+                        modifier.has_repeats = true;
+                        skip_element(r, b"repeats")?;
+                    }
+                    other => {
+                        let name = other.to_vec();
+                        skip_element(r, &name)?;
+                    }
+                },
+                Event::Empty(e) if e.local_name().as_ref() == b"repeats" => {
+                    modifier.has_repeats = true;
+                }
+                Event::Empty(_) => {}
+                Event::End(end) if end.local_name().as_ref() == b"modifier" => {
+                    return Ok(modifier)
+                }
+                _ => {}
+            },
+            None => {
+                return Err(ParseError::MalformedXml(
+                    "unexpected EOF in modifier".to_string(),
+                ))
+            }
+        }
+    }
+}
+
+fn read_conditions_into(
+    dst: &mut Vec<RawCondition>,
+    r: &mut SafeXmlReader,
+) -> Result<(), ParseError> {
+    loop {
+        match r.read_event()? {
+            Some(ev) => match ev.event {
+                Event::Start(e) | Event::Empty(e) if e.local_name().as_ref() == b"condition" => {
+                    dst.push(RawCondition {
+                        comparator: attr(&e, b"type").unwrap_or_default(),
+                        field: attr(&e, b"field").unwrap_or_default(),
+                        scope: attr(&e, b"scope").unwrap_or_default(),
+                        value: attr_f64(&e, b"value").unwrap_or(0.0),
+                        child_id: attr(&e, b"childId").unwrap_or_default(),
+                        include_child_selections: attr_bool(&e, b"includeChildSelections"),
+                    });
+                }
+                Event::End(end) if end.local_name().as_ref() == b"conditions" => return Ok(()),
+                Event::Start(e) => {
+                    skip_element(r, e.local_name().as_ref())?;
+                }
+                _ => {}
+            },
+            None => {
+                return Err(ParseError::MalformedXml(
+                    "unexpected EOF in conditions".to_string(),
+                ))
+            }
+        }
+    }
+}
+
+fn read_condition_groups_into(
+    dst: &mut Vec<RawConditionGroup>,
+    r: &mut SafeXmlReader,
+) -> Result<(), ParseError> {
+    loop {
+        match r.read_event()? {
+            Some(ev) => match ev.event {
+                Event::Start(e) if e.local_name().as_ref() == b"conditionGroup" => {
+                    dst.push(read_condition_group(&e, r)?);
+                }
+                Event::Empty(e) if e.local_name().as_ref() == b"conditionGroup" => {
+                    dst.push(RawConditionGroup {
+                        kind: attr(&e, b"type").unwrap_or_default(),
+                        ..Default::default()
+                    });
+                }
+                Event::End(end) if end.local_name().as_ref() == b"conditionGroups" => {
+                    return Ok(())
+                }
+                Event::Start(e) => {
+                    skip_element(r, e.local_name().as_ref())?;
+                }
+                _ => {}
+            },
+            None => {
+                return Err(ParseError::MalformedXml(
+                    "unexpected EOF in conditionGroups".to_string(),
+                ))
+            }
+        }
+    }
+}
+
+fn read_condition_group(
+    start: &BytesStart,
+    r: &mut SafeXmlReader,
+) -> Result<RawConditionGroup, ParseError> {
+    let mut group = RawConditionGroup {
+        kind: attr(start, b"type").unwrap_or_default(),
+        ..Default::default()
+    };
+    loop {
+        match r.read_event()? {
+            Some(ev) => match ev.event {
+                Event::Start(e) => match e.local_name().as_ref() {
+                    b"conditions" => read_conditions_into(&mut group.conditions, r)?,
+                    b"conditionGroups" => read_condition_groups_into(&mut group.groups, r)?,
+                    other => {
+                        let name = other.to_vec();
+                        skip_element(r, &name)?;
+                    }
+                },
+                Event::Empty(_) => {}
+                Event::End(end) if end.local_name().as_ref() == b"conditionGroup" => {
+                    return Ok(group)
+                }
+                _ => {}
+            },
+            None => {
+                return Err(ParseError::MalformedXml(
+                    "unexpected EOF in conditionGroup".to_string(),
                 ))
             }
         }

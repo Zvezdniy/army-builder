@@ -16,6 +16,20 @@
       <constraints>
         <constraint id="sq.models.min" type="min" value="5" field="selections" scope="self" includeChildSelections="true"/>
       </constraints>
+      <modifiers>
+        <modifier type="decrement" field="pts" value="10">
+          <conditions>
+            <condition type="atLeast" field="selections" scope="roster" value="3" childId="cat.troops" includeChildSelections="false"/>
+          </conditions>
+          <conditionGroups>
+            <conditionGroup type="or">
+              <conditions>
+                <condition type="atMost" field="selections" scope="roster" value="10" childId="cat.troops"/>
+              </conditions>
+            </conditionGroup>
+          </conditionGroups>
+        </modifier>
+      </modifiers>
       <selectionEntries>
         <selectionEntry id="squad-body.model" name="Trooper" type="model">
           <costs><cost name="Points" typeId="pts" value="20"/></costs>

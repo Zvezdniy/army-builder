@@ -50,3 +50,18 @@ fn colliding_named_container_does_not_drop_siblings() {
     assert!(raw.entries.iter().any(|e| e.id == "e.smuggled"),
         "sibling after a name-colliding nested container was dropped");
 }
+
+#[test]
+fn reads_modifiers_and_conditions() {
+    let raw = parse_raw(include_bytes!("fixtures/mini40k.cat")).unwrap();
+    let squad = raw.shared_entries.iter().find(|e| e.id == "squad-body").unwrap();
+    let m = &squad.modifiers[0];
+    assert_eq!(m.kind, "decrement");
+    assert_eq!(m.field, "pts");
+    assert_eq!(m.value, 10.0);
+    assert_eq!(m.conditions[0].comparator, "atLeast");
+    assert_eq!(m.conditions[0].value, 3.0);
+    assert_eq!(m.conditions[0].child_id, "cat.troops");
+    assert_eq!(m.condition_groups[0].kind, "or");
+    assert_eq!(m.condition_groups[0].conditions[0].comparator, "atMost");
+}
