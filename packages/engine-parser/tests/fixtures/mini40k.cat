@@ -7,12 +7,40 @@
   <categoryEntries>
     <categoryEntry id="cat.hq" name="HQ"/>
     <categoryEntry id="cat.troops" name="Troops"/>
+    <categoryEntry id="cat.model" name="Model"/>
   </categoryEntries>
-  <sharedSelectionEntries/>
+  <sharedSelectionEntries>
+    <selectionEntry id="squad-body" name="Battle Squad" type="unit">
+      <costs><cost name="Points" typeId="pts" value="100"/></costs>
+      <categoryLinks><categoryLink id="cl.sq" targetId="cat.troops" primary="true"/></categoryLinks>
+      <constraints>
+        <constraint id="sq.models.min" type="min" value="5" field="selections" scope="self" includeChildSelections="true"/>
+      </constraints>
+      <selectionEntries>
+        <selectionEntry id="squad-body.model" name="Trooper" type="model">
+          <costs><cost name="Points" typeId="pts" value="20"/></costs>
+          <categoryLinks><categoryLink id="cl.m" targetId="cat.model" primary="true"/></categoryLinks>
+        </selectionEntry>
+      </selectionEntries>
+    </selectionEntry>
+  </sharedSelectionEntries>
   <selectionEntries>
     <selectionEntry id="e.captain" name="Captain" type="model">
       <costs><cost name="Points" typeId="pts" value="90"/></costs>
       <categoryLinks><categoryLink id="cl1" targetId="cat.hq" primary="true"/></categoryLinks>
     </selectionEntry>
+    <selectionEntry id="e.squad" name="Battle Squad" type="unit">
+      <categoryLinks><categoryLink id="cl2" targetId="cat.troops" primary="true"/></categoryLinks>
+      <entryLinks><entryLink id="el1" targetId="squad-body" type="selectionEntry"/></entryLinks>
+    </selectionEntry>
   </selectionEntries>
+  <forceEntries>
+    <forceEntry id="fe.army" name="Army">
+      <constraints>
+        <constraint id="fc.hq.min" type="min" value="1" field="selections" scope="force"/>
+        <constraint id="fc.hq.max" type="max" value="2" field="selections" scope="force"/>
+      </constraints>
+      <categoryLinks><categoryLink id="fcl.hq" targetId="cat.hq" primary="false"/></categoryLinks>
+    </forceEntry>
+  </forceEntries>
 </catalogue>
