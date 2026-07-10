@@ -9,11 +9,11 @@ export function evaluate(roster: Roster, catalogue: IrCatalogue): ValidationResu
   const symbols = buildSymbolTable(catalogue);
   const state = buildState(roster, symbols);
   const { costOf, converged } = resolveCosts(state);
-  const issues: Issue[] = [];
+  const raw: Issue[] = [];
 
   const totalPoints = totalCost(state, costOf);
   if (totalPoints > roster.pointsLimit) {
-    issues.push({
+    raw.push({
       severity: "error",
       code: "points.over",
       message: `Over points limit: ${totalPoints} exceeds ${roster.pointsLimit}`,
@@ -21,7 +21,7 @@ export function evaluate(roster: Roster, catalogue: IrCatalogue): ValidationResu
   }
 
   if (!converged) {
-    issues.push({
+    raw.push({
       severity: "warning",
       code: "modifiers.nonconvergent",
       message: "Cost modifiers did not reach a stable value; results may be approximate.",
@@ -30,16 +30,33 @@ export function evaluate(roster: Roster, catalogue: IrCatalogue): ValidationResu
 
   for (const constraint of catalogue.forceConstraints) {
     const issue = checkConstraint(constraint, null, state, costOf);
-    if (issue) issues.push(issue);
+    if (issue) raw.push(issue);
   }
-
   for (const node of state.all) {
     for (const constraint of node.entry.constraints) {
       const issue = checkConstraint(constraint, node, state, costOf);
-      if (issue) issues.push(issue);
+      if (issue) raw.push(issue);
     }
   }
 
-  const valid = !issues.some((i) => i.severity === "error");
-  return { valid, totalPoints, pointsLimit: roster.pointsLimit, issues, dismissed: [], hasHouseRules: false };
+  const overrides = roster.overrides ?? [];
+  const matchingOverride = (issue: Issue) =>
+    issue.constraintId === undefined
+      ? undefined
+      : overrides.find(
+          (o) =>
+            o.constraintId === issue.constraintId &&
+            (o.selectionId === undefined || o.selectionId === issue.selectionId),
+        );
+
+  const dismissed: Issue[] = [];
+  const active: Issue[] = [];
+  for (const issue of raw) {
+    if (matchingOverride(issue)) dismissed.push(issue);
+    else active.push(issue);
+  }
+
+  const hasHouseRules = dismissed.some((d) => matchingOverride(d)?.source === "user");
+  const valid = !active.some((i) => i.severity === "error");
+  return { valid, totalPoints, pointsLimit: roster.pointsLimit, issues: active, dismissed, hasHouseRules };
 }
