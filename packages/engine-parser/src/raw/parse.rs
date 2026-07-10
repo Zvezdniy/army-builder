@@ -349,10 +349,17 @@ fn read_catlinks_into(
     loop {
         match r.read_event()? {
             Some(ev) => match ev.event {
-                Event::Start(e) | Event::Empty(e) if e.local_name().as_ref() == b"categoryLink" => {
+                // A <categoryLink> with children (its nested <constraints> carry the
+                // per-category min/max, e.g. "1-2 HQ") is read fully; the category
+                // it targets is this link's own targetId — an unambiguous FK.
+                Event::Start(e) if e.local_name().as_ref() == b"categoryLink" => {
+                    dst.push(read_catlink(&e, r)?);
+                }
+                Event::Empty(e) if e.local_name().as_ref() == b"categoryLink" => {
                     dst.push(RawCategoryLink {
                         target_id: attr(&e, b"targetId").unwrap_or_default(),
                         primary: attr_bool(&e, b"primary"),
+                        ..Default::default()
                     });
                 }
                 Event::End(end) if end.local_name().as_ref() == b"categoryLinks" => return Ok(()),
@@ -364,6 +371,37 @@ fn read_catlinks_into(
             None => {
                 return Err(ParseError::MalformedXml(
                     "unexpected EOF in categoryLinks".to_string(),
+                ))
+            }
+        }
+    }
+}
+
+fn read_catlink(start: &BytesStart, r: &mut SafeXmlReader) -> Result<RawCategoryLink, ParseError> {
+    let mut link = RawCategoryLink {
+        target_id: attr(start, b"targetId").unwrap_or_default(),
+        primary: attr_bool(start, b"primary"),
+        ..Default::default()
+    };
+    loop {
+        match r.read_event()? {
+            Some(ev) => match ev.event {
+                Event::Start(e) => match e.local_name().as_ref() {
+                    b"constraints" => read_constraints_into(&mut link.constraints, r)?,
+                    other => {
+                        let name = other.to_vec();
+                        skip_element(r, &name)?;
+                    }
+                },
+                Event::Empty(_) => {}
+                Event::End(end) if end.local_name().as_ref() == b"categoryLink" => {
+                    return Ok(link)
+                }
+                _ => {}
+            },
+            None => {
+                return Err(ParseError::MalformedXml(
+                    "unexpected EOF in categoryLink".to_string(),
                 ))
             }
         }

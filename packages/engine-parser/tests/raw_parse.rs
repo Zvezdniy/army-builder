@@ -28,8 +28,12 @@ fn reads_entry_tree_and_forces() {
     let squad = raw.entries.iter().find(|e| e.id == "e.squad").unwrap();
     assert_eq!(squad.entry_links[0].target_id, "squad-body");
 
+    // The force's 1-2 HQ min/max are nested inside the HQ categoryLink (the real
+    // BattleScribe pattern), not as direct forceEntry children.
     let force = &raw.force_entries[0];
-    assert_eq!(force.constraints.iter().filter(|c| c.field == "selections").count(), 2);
+    let hq_link = force.category_links.iter().find(|l| l.target_id == "cat.hq").unwrap();
+    assert_eq!(hq_link.constraints.iter().filter(|c| c.field == "selections").count(), 2);
+    assert!(force.constraints.is_empty());
 }
 
 #[test]

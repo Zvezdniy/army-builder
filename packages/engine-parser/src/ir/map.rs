@@ -21,27 +21,32 @@ pub fn to_ir(cat: &RawCatalogue) -> (IrCatalogue, Vec<Diagnostic>) {
     (ir, diags)
 }
 
-/// Map a force's constraints, deriving their targetId from the force's own
-/// categoryLinks (the 40k "1-2 HQ on the force" pattern: the force entry that
-/// carries the min/max is category-linked to the category it constrains).
-/// Zero or multiple category links make that association ambiguous for the
-/// walking skeleton, so the whole force's constraints are diagnosed and dropped
-/// rather than guessed at.
+/// Map a force's per-category constraints. In BattleScribe the "1-2 HQ" style
+/// min/max is nested inside the categoryLink it constrains (categoryLink extends
+/// ContainerEntryBase, so it carries its own <constraints>), which makes the
+/// target category a structural FK — the owning link's targetId — regardless of
+/// how many categoryLinks the force has. Constraints placed directly under the
+/// forceEntry are force-global (no category); the IR has no whole-force target,
+/// so those are diagnosed and dropped rather than guessed onto a category.
 fn map_force_constraints(force: &crate::raw::RawForce, cat: &RawCatalogue, diags: &mut Vec<Diagnostic>) -> Vec<IrConstraint> {
-    if force.category_links.len() != 1 {
+    let mut out: Vec<IrConstraint> = Vec::new();
+    for link in &force.category_links {
+        for c in &link.constraints {
+            if let Some(mapped) = map_constraint(c, "category", &link.target_id, cat, diags) {
+                out.push(mapped);
+            }
+        }
+    }
+    for c in &force.constraints {
         diags.push(Diagnostic {
-            code: "constraint.force_target_ambiguous".to_string(),
+            code: "constraint.force_global_unrepresentable".to_string(),
             message: format!(
-                "force {} constraints cannot be unambiguously associated with a category",
-                force.id
+                "force {} constraint {} is force-global (no category) and has no IR representation (dropped)",
+                force.id, c.id
             ),
         });
-        return Vec::new();
     }
-    let target_id = &force.category_links[0].target_id;
-    force.constraints.iter()
-        .filter_map(|c| map_constraint(c, "category", target_id, cat, diags))
-        .collect()
+    out
 }
 
 fn map_entry(e: &RawEntry, cat: &RawCatalogue, diags: &mut Vec<Diagnostic>) -> IrEntry {
@@ -49,6 +54,12 @@ fn map_entry(e: &RawEntry, cat: &RawCatalogue, diags: &mut Vec<Diagnostic>) -> I
     let mut constraints: Vec<IrConstraint> = e.constraints.iter()
         .filter_map(|c| map_constraint(c, "entry", &e.id, cat, diags))
         .collect();
+    // A categoryLink can nest its own <constraints> (per-category min/max scoped
+    // to this entry). Their target is the link's category, not the entry itself.
+    for link in &e.category_links {
+        constraints.extend(link.constraints.iter()
+            .filter_map(|c| map_constraint(c, "category", &link.target_id, cat, diags)));
+    }
 
     // Attach each raw modifier to the IR cost or constraint it targets, based
     // on where its `field` points: a known cost-type id is a cost modifier, a
