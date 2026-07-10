@@ -29,3 +29,6 @@ target/
 
 # SDD scratch (progress ledger, task briefs/reports)
 .superpowers/
+
+# Turborepo cache
+.turbo/
