@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { Roster, RosterSelection } from "@muster/domain";
+import { Roster, RosterSelection, RosterOverride } from "@muster/domain";
 
 describe("roster schemas", () => {
   it("rejects a non-positive count", () => {
@@ -27,5 +27,20 @@ describe("roster schemas", () => {
     });
     expect(roster.selections[0]?.selections[0]?.count).toBe(2);
     expect(roster.selections[0]?.selections[0]?.selections).toEqual([]);
+  });
+});
+
+describe("RosterOverride", () => {
+  it("parses a user override", () => {
+    const o = RosterOverride.parse({ constraintId: "k1", source: "user", reason: "club house rule" });
+    expect(o.source).toBe("user");
+    expect(o.selectionId).toBeUndefined();
+  });
+
+  it("Roster still parses with no overrides (backward compat)", () => {
+    const r = Roster.parse({
+      id: "r", name: "R", gameSystemId: "gs", catalogueId: "c", catalogueRevision: 1, pointsLimit: 2000,
+    });
+    expect(r.overrides).toBeUndefined();
   });
 });

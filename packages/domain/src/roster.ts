@@ -17,6 +17,14 @@ export const RosterSelection: z.ZodType<RosterSelection, z.ZodTypeDef, unknown> 
   }),
 );
 
+export const RosterOverride = z.object({
+  constraintId: z.string(),
+  selectionId: z.string().optional(),
+  source: z.enum(["user", "system"]),
+  reason: z.string().optional(),
+});
+export type RosterOverride = z.infer<typeof RosterOverride>;
+
 export const Roster = z.object({
   id: z.string(),
   name: z.string(),
@@ -25,5 +33,6 @@ export const Roster = z.object({
   catalogueRevision: z.number(),
   pointsLimit: z.number(),
   selections: z.array(RosterSelection).default([]),
+  overrides: z.array(RosterOverride).optional(),
 });
 export type Roster = z.infer<typeof Roster>;

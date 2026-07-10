@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { IrCatalogue, IrConstraint, Roster } from "@muster/domain";
-import { buildSymbolTable, buildState, checkConstraint } from "@muster/engine-eval";
+import { buildSymbolTable, buildState, checkConstraint, effectiveConstraintValue } from "@muster/engine-eval";
 
 const cat: IrCatalogue = {
   id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [],
@@ -39,5 +39,44 @@ describe("checkConstraint", () => {
     const state = buildState(roster, buildSymbolTable(cat));
     const issue = checkConstraint(c({ type: "min", value: 6 }), null, state);
     expect(issue?.code).toBe("constraint.min");
+  });
+});
+
+describe("checkConstraint with a modified bound", () => {
+  // Heavy max is 1, but +1 when there are at least 2 heavies present (unlocks a second slot).
+  const catMod: IrCatalogue = {
+    id: "c", name: "C", gameSystemId: "gs", revision: 1,
+    entries: [{ id: "e.heavy", name: "Heavy", costs: [], categories: ["cat.heavy"], constraints: [], children: [] }],
+    forceConstraints: [{
+      id: "fc.heavy", type: "max", value: 1, field: "selections", scope: "force", targetType: "category", targetId: "cat.heavy",
+      includeChildSelections: false,
+      modifiers: [{ id: "unlock", type: "increment", value: 1, conditions: [
+        { id: "c", comparator: "atLeast", value: 2, field: "selections", scope: "force", targetType: "category", targetId: "cat.heavy", includeChildSelections: false },
+      ] }],
+    }],
+  };
+  const rosterN = (n: number) => ({
+    id: "r", name: "R", gameSystemId: "gs", catalogueId: "c", catalogueRevision: 1, pointsLimit: 2000,
+    selections: Array.from({ length: n }, (_, i) => ({ id: `h${i}`, entryId: "e.heavy", count: 1, selections: [] })),
+  });
+
+  it("effectiveConstraintValue reflects an applicable increment", () => {
+    const state = buildState(rosterN(2), buildSymbolTable(catMod));
+    const c = catMod.forceConstraints[0]!;
+    expect(effectiveConstraintValue(c, null, state)).toBe(2); // base 1 + 1 (>=2 heavies)
+  });
+
+  it("2 heavies is legal because the bound became 2", () => {
+    const state = buildState(rosterN(2), buildSymbolTable(catMod));
+    const c = catMod.forceConstraints[0]!;
+    expect(checkConstraint(c, null, state)).toBeNull();
+  });
+
+  it("3 heavies still violates the raised bound of 2", () => {
+    const state = buildState(rosterN(3), buildSymbolTable(catMod));
+    const c = catMod.forceConstraints[0]!;
+    const issue = checkConstraint(c, null, state);
+    expect(issue?.code).toBe("constraint.max");
+    expect(issue?.message).toMatch(/3 .*max 2/);
   });
 });

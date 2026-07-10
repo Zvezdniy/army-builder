@@ -1,0 +1,53 @@
+import { describe, it, expect } from "vitest";
+import { IrCondition, IrConditionGroup } from "@muster/domain";
+
+describe("IrCondition", () => {
+  it("parses a condition and defaults includeChildSelections", () => {
+    const c = IrCondition.parse({
+      id: "cond1",
+      comparator: "atLeast",
+      value: 3,
+      field: "selections",
+      scope: "force",
+      targetType: "category",
+      targetId: "cat.troops",
+    });
+    expect(c.comparator).toBe("atLeast");
+    expect(c.includeChildSelections).toBe(false);
+  });
+
+  it("rejects an unknown comparator", () => {
+    expect(() =>
+      IrCondition.parse({
+        id: "c",
+        comparator: "roughly",
+        value: 1,
+        field: "selections",
+        scope: "self",
+        targetType: "entry",
+        targetId: "e.x",
+      }),
+    ).toThrow();
+  });
+});
+
+describe("IrConditionGroup", () => {
+  it("parses a nested and/or group; list fields are optional", () => {
+    const g = IrConditionGroup.parse({
+      type: "or",
+      conditions: [
+        { id: "a", comparator: "atLeast", value: 1, field: "selections", scope: "force", targetType: "category", targetId: "cat.hq" },
+      ],
+      conditionGroups: [
+        { type: "and" }, // no lists provided — allowed
+      ],
+    });
+    expect(g.type).toBe("or");
+    expect(g.conditionGroups?.[0]?.type).toBe("and");
+  });
+
+  it("allows a bare group with no lists", () => {
+    const g = IrConditionGroup.parse({ type: "and" });
+    expect(g.conditions).toBeUndefined();
+  });
+});

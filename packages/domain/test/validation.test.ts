@@ -24,4 +24,10 @@ describe("validation schemas", () => {
     });
     expect(result.valid).toBe(true);
   });
+
+  it("ValidationResult defaults dismissed and hasHouseRules", () => {
+    const r = ValidationResult.parse({ valid: true, totalPoints: 0, pointsLimit: 2000, issues: [] });
+    expect(r.dismissed).toEqual([]);
+    expect(r.hasHouseRules).toBe(false);
+  });
 });

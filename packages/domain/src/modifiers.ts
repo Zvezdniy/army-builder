@@ -1,0 +1,11 @@
+import { z } from "zod";
+import { IrCondition, IrConditionGroup } from "./conditions";
+
+export const IrModifier = z.object({
+  id: z.string(),
+  type: z.enum(["set", "increment", "decrement"]),
+  value: z.number(),
+  conditions: z.array(IrCondition).optional(),
+  conditionGroups: z.array(IrConditionGroup).optional(),
+});
+export type IrModifier = z.infer<typeof IrModifier>;
