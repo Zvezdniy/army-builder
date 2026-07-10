@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+.pnp/
+.pnp.*
+
+# Build output
+dist/
+build/
+.next/
+out/
+*.tsbuildinfo
+
+# Native / Rust
+target/
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# Editor / OS
+.DS_Store
+*.log
+.idea/
+*.swp
+
+# Local Claude settings (personal, machine-specific)
+.claude/settings.local.json
