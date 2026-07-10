@@ -33,6 +33,7 @@ impl<'a> SafeXmlReader<'a> {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn from_bytes_with_caps(bytes: &'a [u8], max_depth: usize, max_nodes: u64) -> Self {
         let mut reader = Reader::from_reader(bytes);
         reader.config_mut().trim_text(false);
