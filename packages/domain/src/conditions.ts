@@ -18,3 +18,17 @@ export const IrCondition = z.object({
   includeChildSelections: z.boolean().default(false),
 });
 export type IrCondition = z.infer<typeof IrCondition>;
+
+export interface IrConditionGroup {
+  type: "and" | "or";
+  conditions?: IrCondition[];
+  conditionGroups?: IrConditionGroup[];
+}
+// Input generic `unknown` for the recursive schema (same reason as IrEntry in plan 1).
+export const IrConditionGroup: z.ZodType<IrConditionGroup, z.ZodTypeDef, unknown> = z.lazy(() =>
+  z.object({
+    type: z.enum(["and", "or"]),
+    conditions: z.array(IrCondition).optional(),
+    conditionGroups: z.array(IrConditionGroup).optional(),
+  }),
+);
