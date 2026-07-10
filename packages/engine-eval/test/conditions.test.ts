@@ -35,3 +35,50 @@ describe("evaluateCondition", () => {
     expect(evaluateCondition(cond({ comparator: "lessThan", value: 4 }), null, state)).toBe(true);
   });
 });
+
+import type { IrConditionGroup, IrModifier } from "@muster/domain";
+import { evaluateConditionGroup, gatePasses } from "@muster/engine-eval";
+
+describe("evaluateConditionGroup", () => {
+  const state = () => buildState(roster, buildSymbolTable(cat)); // 3 troops
+  const cTrue = cond({ comparator: "equalTo", value: 3 });   // true
+  const cFalse = cond({ comparator: "equalTo", value: 99 }); // false
+
+  it("and requires all; or requires any", () => {
+    const andG: IrConditionGroup = { type: "and", conditions: [cTrue, cFalse] };
+    const orG: IrConditionGroup = { type: "or", conditions: [cTrue, cFalse] };
+    expect(evaluateConditionGroup(andG, null, state())).toBe(false);
+    expect(evaluateConditionGroup(orG, null, state())).toBe(true);
+  });
+
+  it("empty and is true; empty or is false", () => {
+    expect(evaluateConditionGroup({ type: "and" }, null, state())).toBe(true);
+    expect(evaluateConditionGroup({ type: "or" }, null, state())).toBe(false);
+  });
+
+  it("nests groups", () => {
+    const g: IrConditionGroup = { type: "and", conditions: [cTrue], conditionGroups: [{ type: "or", conditions: [cFalse, cTrue] }] };
+    expect(evaluateConditionGroup(g, null, state())).toBe(true);
+  });
+});
+
+describe("gatePasses", () => {
+  const state = () => buildState(roster, buildSymbolTable(cat));
+  const cTrue = cond({ comparator: "equalTo", value: 3 });
+  const cFalse = cond({ comparator: "equalTo", value: 99 });
+
+  it("empty gate always passes", () => {
+    const m: IrModifier = { id: "m", type: "set", value: 0 };
+    expect(gatePasses(m, null, state())).toBe(true);
+  });
+
+  it("all conditions must pass", () => {
+    expect(gatePasses({ id: "m", type: "set", value: 0, conditions: [cTrue] }, null, state())).toBe(true);
+    expect(gatePasses({ id: "m", type: "set", value: 0, conditions: [cTrue, cFalse] }, null, state())).toBe(false);
+  });
+
+  it("conditions AND groups both required", () => {
+    const m: IrModifier = { id: "m", type: "set", value: 0, conditions: [cTrue], conditionGroups: [{ type: "or", conditions: [cFalse] }] };
+    expect(gatePasses(m, null, state())).toBe(false); // group is false
+  });
+});
