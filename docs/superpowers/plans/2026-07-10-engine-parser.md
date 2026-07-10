@@ -119,6 +119,7 @@ name = "engine-parser"
 version = "0.0.0"
 edition = "2021"
 publish = false
+license = "MIT OR Apache-2.0"
 
 [lib]
 name = "engine_parser"
@@ -129,7 +130,8 @@ name = "muster-parse"
 path = "src/bin/muster-parse.rs"
 
 [dependencies]
-quick-xml = "0.36"
+# quick-xml >=0.41 required: 0.36 carries RUSTSEC-2026-0194/0195 (untrusted-XML DoS).
+quick-xml = "0.41"
 zip = { version = "2.2", default-features = false, features = ["deflate"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -145,7 +147,7 @@ proptest = "1"
 [advisories]
 yanked = "deny"
 [licenses]
-allow = ["MIT", "Apache-2.0", "Unicode-DFS-2016", "BSD-3-Clause", "Zlib"]
+allow = ["MIT", "Apache-2.0", "Unicode-3.0", "BSD-3-Clause", "Zlib"]
 [bans]
 multiple-versions = "warn"
 ```
