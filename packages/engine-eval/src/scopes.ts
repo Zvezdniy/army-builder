@@ -1,5 +1,6 @@
 import type { IrConstraint } from "@muster/domain";
 import type { EvalNode, EvalState } from "./state";
+import { nodePoints } from "./cost";
 
 function subtree(node: EvalNode, includeChildren: boolean): EvalNode[] {
   if (!includeChildren) return [node];
@@ -19,6 +20,10 @@ function scopeNodes(
   state: EvalState,
 ): EvalNode[] {
   switch (constraint.scope) {
+    // Walking-skeleton simplification: force and roster collapse to the same set because
+    // there is currently a single implicit force per roster. Once multiple forces/detachments
+    // land (see the deferred modifier plan), `force` scope must narrow to the owning force's
+    // nodes rather than the whole roster.
     case "force":
     case "roster":
       return state.all;
@@ -50,8 +55,5 @@ export function aggregate(
   if (constraint.field === "selections") {
     return matched.reduce((sum, n) => sum + n.effectiveCount, 0);
   }
-  return matched.reduce((sum, n) => {
-    const cost = n.entry.costs.find((c) => c.name === "points");
-    return sum + (cost?.value ?? 0) * n.effectiveCount;
-  }, 0);
+  return matched.reduce((sum, n) => sum + nodePoints(n), 0);
 }

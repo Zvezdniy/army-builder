@@ -27,6 +27,7 @@ describe("evaluate", () => {
 
   it("flags a missing HQ (force min)", () => {
     const result = evaluate(rosterWith([sel("e.troops")]), mini40kCatalogue);
+    expect(result.valid).toBe(false);
     expect(result.issues.some((i) => i.constraintId === "fc.hq.min")).toBe(true);
   });
 

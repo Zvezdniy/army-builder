@@ -79,4 +79,50 @@ describe("aggregate", () => {
     const c: IrConstraint = { ...base, type: "max", field: "selections", scope: "self", targetType: "category", targetId: "cat.special" };
     expect(() => aggregate(null, c, state)).toThrow(/requires an owning node/i);
   });
+
+  it("self scope with points field and includeChildSelections sums descendant points", () => {
+    const { state, byId } = setup();
+    const squad = byId("s.squad");
+    const c: IrConstraint = { ...base, includeChildSelections: true, type: "max", field: "points", scope: "self", targetType: "category", targetId: "cat.special" };
+    expect(aggregate(squad, c, state)).toBe(20); // 10pts * 2 special
+  });
+
+  it("self scope with points field and no includeChildSelections sees only the node", () => {
+    const { state, byId } = setup();
+    const heavy1 = byId("s.heavy1");
+    const c: IrConstraint = { ...base, type: "max", field: "points", scope: "self", targetType: "category", targetId: "cat.heavy" };
+    expect(aggregate(heavy1, c, state)).toBe(150);
+  });
+
+  it("parent scope with points field sums the parent subtree", () => {
+    const { state, byId } = setup();
+    const special = byId("s.sp");
+    const c: IrConstraint = { ...base, includeChildSelections: true, type: "max", field: "points", scope: "parent", targetType: "category", targetId: "cat.troops" };
+    expect(aggregate(special, c, state)).toBe(100); // the squad itself
+  });
+
+  // Root nodes have no parent, so scope=parent falls back to the node itself (node.parent ?? node).
+  it("parent scope on a root node falls back to the node itself", () => {
+    const { state, byId } = setup();
+    const squad = byId("s.squad"); // root: no parent
+    const c: IrConstraint = { ...base, includeChildSelections: true, type: "max", field: "selections", scope: "parent", targetType: "category", targetId: "cat.special" };
+    expect(aggregate(squad, c, state)).toBe(2);
+  });
+
+  it("parent scope without includeChildSelections sees only the parent node", () => {
+    const { state, byId } = setup();
+    const special = byId("s.sp");
+    const troops: IrConstraint = { ...base, type: "max", field: "selections", scope: "parent", targetType: "category", targetId: "cat.troops" };
+    expect(aggregate(special, troops, state)).toBe(1); // just the squad
+
+    const specials: IrConstraint = { ...base, type: "max", field: "selections", scope: "parent", targetType: "category", targetId: "cat.special" };
+    expect(aggregate(special, specials, state)).toBe(0); // the squad alone is not special
+  });
+
+  it("self scope resolves entry targets through descendants", () => {
+    const { state, byId } = setup();
+    const squad = byId("s.squad");
+    const c: IrConstraint = { ...base, includeChildSelections: true, type: "max", field: "selections", scope: "self", targetType: "entry", targetId: "e.special" };
+    expect(aggregate(squad, c, state)).toBe(2);
+  });
 });
