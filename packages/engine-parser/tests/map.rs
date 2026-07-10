@@ -15,3 +15,19 @@ fn maps_entries_costs_categories() {
     let squad = ir.entries.iter().find(|e| e.id == "e.squad").unwrap();
     assert!(squad.children.iter().any(|c| c.id == "squad-body"));
 }
+
+#[test]
+fn maps_force_and_entry_constraints() {
+    let raw = resolve(parse_raw(include_bytes!("fixtures/mini40k.cat")).unwrap()).unwrap();
+    let (ir, diags) = to_ir(&raw);
+    assert!(ir.force_constraints.iter().any(|c| c.id == "fc.hq.min"
+        && c.target_type == "category" && c.target_id == "cat.hq" && c.type_ == "min"));
+    assert!(ir.force_constraints.iter().any(|c| c.id == "fc.hq.max" && c.type_ == "max"));
+    // squad-body (inlined child of e.squad) carries its self-scope min constraint
+    let squad = ir.entries.iter().find(|e| e.id == "e.squad").unwrap();
+    let body = squad.children.iter().find(|c| c.id == "squad-body").unwrap();
+    assert!(body.constraints.iter().any(|c| c.id == "sq.models.min"
+        && c.field == "selections" && c.scope == "self" && c.target_type == "entry"));
+    // the fixture is fully mappable — no drop diagnostics
+    assert!(diags.iter().all(|d| !d.code.starts_with("constraint.")));
+}

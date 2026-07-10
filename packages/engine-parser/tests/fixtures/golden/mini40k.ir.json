@@ -36,6 +36,18 @@
           "categories": [
             "cat.troops"
           ],
+          "constraints": [
+            {
+              "id": "sq.models.min",
+              "type": "min",
+              "value": 5.0,
+              "field": "selections",
+              "scope": "self",
+              "targetType": "entry",
+              "targetId": "squad-body",
+              "includeChildSelections": true
+            }
+          ],
           "children": [
             {
               "id": "squad-body.model",
@@ -53,6 +65,28 @@
           ]
         }
       ]
+    }
+  ],
+  "forceConstraints": [
+    {
+      "id": "fc.hq.min",
+      "type": "min",
+      "value": 1.0,
+      "field": "selections",
+      "scope": "force",
+      "targetType": "category",
+      "targetId": "cat.hq",
+      "includeChildSelections": false
+    },
+    {
+      "id": "fc.hq.max",
+      "type": "max",
+      "value": 2.0,
+      "field": "selections",
+      "scope": "force",
+      "targetType": "category",
+      "targetId": "cat.hq",
+      "includeChildSelections": false
     }
   ]
 }
