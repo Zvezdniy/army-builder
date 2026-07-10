@@ -15,5 +15,7 @@ export const ValidationResult = z.object({
   totalPoints: z.number(),
   pointsLimit: z.number(),
   issues: z.array(Issue),
+  dismissed: z.array(Issue).default([]),
+  hasHouseRules: z.boolean().default(false),
 });
 export type ValidationResult = z.infer<typeof ValidationResult>;
