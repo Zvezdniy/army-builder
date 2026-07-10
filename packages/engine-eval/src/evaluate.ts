@@ -2,14 +2,16 @@ import type { Roster, IrCatalogue, ValidationResult, Issue } from "@muster/domai
 import { buildSymbolTable } from "./symbols";
 import { buildState } from "./state";
 import { totalCost } from "./cost";
+import { resolveCosts } from "./resolve";
 import { checkConstraint } from "./constraints";
 
 export function evaluate(roster: Roster, catalogue: IrCatalogue): ValidationResult {
   const symbols = buildSymbolTable(catalogue);
   const state = buildState(roster, symbols);
+  const { costOf, converged } = resolveCosts(state);
   const issues: Issue[] = [];
 
-  const totalPoints = totalCost(state);
+  const totalPoints = totalCost(state, costOf);
   if (totalPoints > roster.pointsLimit) {
     issues.push({
       severity: "error",
@@ -18,20 +20,26 @@ export function evaluate(roster: Roster, catalogue: IrCatalogue): ValidationResu
     });
   }
 
+  if (!converged) {
+    issues.push({
+      severity: "warning",
+      code: "modifiers.nonconvergent",
+      message: "Cost modifiers did not reach a stable value; results may be approximate.",
+    });
+  }
+
   for (const constraint of catalogue.forceConstraints) {
-    const issue = checkConstraint(constraint, null, state);
+    const issue = checkConstraint(constraint, null, state, costOf);
     if (issue) issues.push(issue);
   }
 
   for (const node of state.all) {
     for (const constraint of node.entry.constraints) {
-      const issue = checkConstraint(constraint, node, state);
+      const issue = checkConstraint(constraint, node, state, costOf);
       if (issue) issues.push(issue);
     }
   }
 
   const valid = !issues.some((i) => i.severity === "error");
-  // Stopgap: ValidationResult (Task 4) now requires these; Task 11/12 compute them
-  // properly (override/house-rules layer). Kept as defaults so the package typechecks.
   return { valid, totalPoints, pointsLimit: roster.pointsLimit, issues, dismissed: [], hasHouseRules: false };
 }

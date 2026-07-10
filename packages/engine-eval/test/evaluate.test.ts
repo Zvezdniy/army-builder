@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { evaluate } from "@muster/engine-eval";
 import { mini40kCatalogue, legalRoster, rosterWith, sel } from "./fixtures/mini40k";
+import type { IrCatalogue } from "@muster/domain";
 
 describe("evaluate", () => {
   it("passes a legal roster", () => {
@@ -35,5 +36,34 @@ describe("evaluate", () => {
     const a = evaluate(legalRoster, mini40kCatalogue);
     const b = evaluate(legalRoster, mini40kCatalogue);
     expect(a).toEqual(b);
+  });
+});
+
+describe("evaluate with cost modifiers", () => {
+  // Each troop 10 pts, -3 when >=3 troops. 3 troops => 21, under a 25 cap = legal.
+  const cat: IrCatalogue = {
+    id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [],
+    entries: [{
+      id: "e.troop", name: "Troop", categories: ["cat.troops"], constraints: [], children: [],
+      costs: [{ name: "points", value: 10, modifiers: [{ id: "bulk", type: "decrement", value: 3, conditions: [
+        { id: "c", comparator: "atLeast", value: 3, field: "selections", scope: "force", targetType: "category", targetId: "cat.troops", includeChildSelections: false },
+      ] }] }],
+    }],
+  };
+  const roster3 = {
+    id: "r", name: "R", gameSystemId: "gs", catalogueId: "c", catalogueRevision: 1, pointsLimit: 25,
+    selections: [
+      { id: "t1", entryId: "e.troop", count: 1, selections: [] },
+      { id: "t2", entryId: "e.troop", count: 1, selections: [] },
+      { id: "t3", entryId: "e.troop", count: 1, selections: [] },
+    ],
+  };
+
+  it("uses discounted total (21) so a 25-pt cap passes", () => {
+    const result = evaluate(roster3, cat);
+    expect(result.totalPoints).toBe(21);
+    expect(result.valid).toBe(true);
+    expect(result.dismissed).toEqual([]);
+    expect(result.hasHouseRules).toBe(false);
   });
 });
