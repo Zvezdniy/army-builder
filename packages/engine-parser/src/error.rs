@@ -24,6 +24,10 @@ pub enum ParseError {
     UnresolvedRef(String),
     #[error("reference cycle through id {0}")]
     ReferenceCycle(String),
+    #[error("resolved catalogue exceeds node budget ({0})")]
+    ResolvedTooLarge(u64),
+    #[error("reference resolution exceeds depth limit ({0})")]
+    ResolveTooDeep(usize),
     #[error("io error: {0}")]
     Io(String),
 }
