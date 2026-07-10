@@ -20,6 +20,9 @@ export function evaluate(roster: Roster, catalogue: IrCatalogue): ValidationResu
     });
   }
 
+  // When the cost fixed-point did not converge (oscillating modifiers), totalPoints and
+  // valid are a deterministic-but-arbitrary snapshot of the final iteration; the warning
+  // below signals consumers to treat them as approximate.
   if (!converged) {
     raw.push({
       severity: "warning",

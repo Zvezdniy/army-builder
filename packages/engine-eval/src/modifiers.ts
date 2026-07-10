@@ -23,6 +23,10 @@ export function applyModifiers(
       case "decrement":
         value -= modifier.value;
         break;
+      default: {
+        const _exhaustive: never = modifier.type;
+        throw new Error(`Unknown modifier type: ${String(_exhaustive)}`);
+      }
     }
   }
   return value;
