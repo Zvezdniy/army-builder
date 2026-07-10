@@ -26,3 +26,9 @@ target/
 
 # Local Claude settings (personal, machine-specific)
 .claude/settings.local.json
+
+# SDD scratch (progress ledger, task briefs/reports)
+.superpowers/
+
+# Turborepo cache
+.turbo/

@@ -353,7 +353,10 @@ export interface IrEntry {
   constraints: IrConstraint[];
   children: IrEntry[];
 }
-export const IrEntry: z.ZodType<IrEntry> = z.lazy(() =>
+// Input generic is `unknown`: the `.default([])` fields are optional in the
+// schema's INPUT type, so pinning Input to IrEntry (required fields) fails
+// strict typecheck. Output stays IrEntry; `.parse` takes unknown anyway.
+export const IrEntry: z.ZodType<IrEntry, z.ZodTypeDef, unknown> = z.lazy(() =>
   z.object({
     id: z.string(),
     name: z.string(),
@@ -463,7 +466,9 @@ export interface RosterSelection {
   count: number;
   selections: RosterSelection[];
 }
-export const RosterSelection: z.ZodType<RosterSelection> = z.lazy(() =>
+// Input generic is `unknown` for the same reason as IrEntry: the
+// `.default([])` on `selections` makes it optional in the input type.
+export const RosterSelection: z.ZodType<RosterSelection, z.ZodTypeDef, unknown> = z.lazy(() =>
   z.object({
     id: z.string(),
     entryId: z.string(),
