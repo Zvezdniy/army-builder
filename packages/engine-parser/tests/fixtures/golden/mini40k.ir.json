@@ -30,7 +30,43 @@
           "costs": [
             {
               "name": "points",
-              "value": 100.0
+              "value": 100.0,
+              "modifiers": [
+                {
+                  "id": "mod.squad-body.0",
+                  "type": "decrement",
+                  "value": 10.0,
+                  "conditions": [
+                    {
+                      "id": "cond.atLeast.cat.troops",
+                      "comparator": "atLeast",
+                      "value": 3.0,
+                      "field": "selections",
+                      "scope": "roster",
+                      "targetType": "category",
+                      "targetId": "cat.troops",
+                      "includeChildSelections": false
+                    }
+                  ],
+                  "conditionGroups": [
+                    {
+                      "type": "or",
+                      "conditions": [
+                        {
+                          "id": "cond.atMost.cat.troops",
+                          "comparator": "atMost",
+                          "value": 10.0,
+                          "field": "selections",
+                          "scope": "roster",
+                          "targetType": "category",
+                          "targetId": "cat.troops",
+                          "includeChildSelections": false
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
             }
           ],
           "categories": [

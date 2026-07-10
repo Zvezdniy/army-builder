@@ -31,3 +31,21 @@ fn maps_force_and_entry_constraints() {
     // the fixture is fully mappable — no drop diagnostics
     assert!(diags.iter().all(|d| !d.code.starts_with("constraint.")));
 }
+
+#[test]
+fn maps_cost_modifier_with_condition() {
+    let raw = resolve(parse_raw(include_bytes!("fixtures/mini40k.cat")).unwrap()).unwrap();
+    let (ir, _diags) = to_ir(&raw);
+    let squad = ir.entries.iter().find(|e| e.id == "e.squad").unwrap();
+    let body = squad.children.iter().find(|c| c.id == "squad-body").unwrap();
+    let m = &body.costs[0].modifiers.as_ref().unwrap()[0];
+    assert_eq!(m.type_, "decrement");
+    assert_eq!(m.value, 10.0);
+    let conds = m.conditions.as_ref().unwrap();
+    assert_eq!(conds[0].comparator, "atLeast");
+    assert_eq!(conds[0].target_id, "cat.troops");
+    assert_eq!(conds[0].target_type, "category");
+    let groups = m.condition_groups.as_ref().unwrap();
+    assert_eq!(groups[0].type_, "or");
+    assert_eq!(groups[0].conditions.as_ref().unwrap()[0].comparator, "atMost");
+}
