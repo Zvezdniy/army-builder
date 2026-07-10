@@ -69,4 +69,28 @@ describe("group choose-N constraints", () => {
     expect(r.valid).toBe(true);
     expect(r.dismissed.some((i) => i.constraintId === "g.wargear.limit")).toBe(true);
   });
+
+  it("non-member direct children are excluded from the group count", () => {
+    const c = cat("max", 1);
+    c.entries[0].children.push({
+      id: "e.relic", name: "Relic", costs: [], categories: [], constraints: [], children: [], groups: [],
+    });
+    const r = evaluate(
+      {
+        id: "r", name: "R", gameSystemId: "gs", catalogueId: "c",
+        catalogueRevision: 1, pointsLimit: 2000,
+        selections: [{
+          id: "cap", entryId: "e.captain", count: 1,
+          selections: [
+            { id: "m0", entryId: "e.sword", count: 1, selections: [] },
+            { id: "m1", entryId: "e.relic", count: 1, selections: [] },
+          ],
+        }],
+      },
+      c,
+    );
+    // Only the sword counts toward Wargear (1 <= max 1); the relic is not a member.
+    expect(r.valid).toBe(true);
+    expect(r.issues.some((i) => i.constraintId === "g.wargear.limit")).toBe(false);
+  });
 });
