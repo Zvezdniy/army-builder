@@ -31,3 +31,22 @@ fn reads_entry_tree_and_forces() {
     let force = &raw.force_entries[0];
     assert_eq!(force.constraints.iter().filter(|c| c.field == "selections").count(), 2);
 }
+
+#[test]
+fn colliding_named_container_does_not_drop_siblings() {
+    // A nested container sharing its parent's tag name must not cause the parser to
+    // return early and silently drop following siblings (was a data-loss bug).
+    let xml = br#"<?xml version="1.0"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <selectionEntries>
+    <selectionEntries></selectionEntries>
+    <selectionEntry id="e.smuggled" name="Smuggled" type="model">
+      <costs><cost typeId="pts" value="5"/></costs>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let raw = parse_raw(xml).unwrap();
+    assert!(raw.entries.iter().any(|e| e.id == "e.smuggled"),
+        "sibling after a name-colliding nested container was dropped");
+}

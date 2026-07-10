@@ -129,6 +129,9 @@ fn read_entries_into(
                     });
                 }
                 Event::End(end) if end.local_name().as_ref() == container_end => return Ok(()),
+                Event::Start(e) => {
+                    skip_element(r, e.local_name().as_ref())?;
+                }
                 _ => {}
             },
             None => {
@@ -203,6 +206,9 @@ fn read_groups_into(
                     });
                 }
                 Event::End(end) if end.local_name().as_ref() == container_end => return Ok(()),
+                Event::Start(e) => {
+                    skip_element(r, e.local_name().as_ref())?;
+                }
                 _ => {}
             },
             None => {
@@ -272,6 +278,9 @@ fn read_forces_into(
                     });
                 }
                 Event::End(end) if end.local_name().as_ref() == container_end => return Ok(()),
+                Event::Start(e) => {
+                    skip_element(r, e.local_name().as_ref())?;
+                }
                 _ => {}
             },
             None => {
@@ -324,6 +333,9 @@ fn read_costs_into(dst: &mut Vec<RawCost>, r: &mut SafeXmlReader) -> Result<(), 
                     });
                 }
                 Event::End(end) if end.local_name().as_ref() == b"costs" => return Ok(()),
+                Event::Start(e) => {
+                    skip_element(r, e.local_name().as_ref())?;
+                }
                 _ => {}
             },
             None => return Err(ParseError::MalformedXml("unexpected EOF in costs".to_string())),
@@ -345,6 +357,9 @@ fn read_catlinks_into(
                     });
                 }
                 Event::End(end) if end.local_name().as_ref() == b"categoryLinks" => return Ok(()),
+                Event::Start(e) => {
+                    skip_element(r, e.local_name().as_ref())?;
+                }
                 _ => {}
             },
             None => {
@@ -370,6 +385,9 @@ fn read_entrylinks_into(
                     });
                 }
                 Event::End(end) if end.local_name().as_ref() == b"entryLinks" => return Ok(()),
+                Event::Start(e) => {
+                    skip_element(r, e.local_name().as_ref())?;
+                }
                 _ => {}
             },
             None => {
@@ -399,6 +417,9 @@ fn read_constraints_into(
                     });
                 }
                 Event::End(end) if end.local_name().as_ref() == b"constraints" => return Ok(()),
+                Event::Start(e) => {
+                    skip_element(r, e.local_name().as_ref())?;
+                }
                 _ => {}
             },
             None => {
