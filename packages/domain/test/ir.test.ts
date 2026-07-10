@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { IrCatalogue, IrConstraint } from "@muster/domain";
+import { IrCatalogue, IrConstraint, IrGroup, IrGroupConstraint, IrEntry } from "@muster/domain";
 
 describe("IR schemas", () => {
   it("defaults includeChildSelections to false", () => {
@@ -38,5 +38,36 @@ describe("IR schemas", () => {
     expect(cat.entries[0]?.children[0]?.name).toBe("Wargear");
     // children/categories/constraints default to [] when omitted
     expect(cat.entries[0]?.children[0]?.children).toEqual([]);
+  });
+});
+
+describe("IrGroup / IrGroupConstraint", () => {
+  it("parses a group with min/max constraints and members", () => {
+    const g = IrGroup.parse({
+      id: "g.wargear", name: "Wargear",
+      memberEntryIds: ["e.sword", "e.axe"],
+      constraints: [{ id: "g.max", type: "max", value: 1 }],
+    });
+    expect(g.memberEntryIds).toEqual(["e.sword", "e.axe"]);
+    expect(g.constraints[0]).toEqual({ id: "g.max", type: "max", value: 1 });
+  });
+
+  it("defaults memberEntryIds and constraints to empty arrays", () => {
+    const g = IrGroup.parse({ id: "g", name: "G" });
+    expect(g.memberEntryIds).toEqual([]);
+    expect(g.constraints).toEqual([]);
+  });
+
+  it("defaults IrEntry.groups to empty array when absent", () => {
+    const e = IrEntry.parse({ id: "e", name: "E" });
+    expect(e.groups).toEqual([]);
+  });
+
+  it("rejects a non-finite constraint value", () => {
+    expect(IrGroupConstraint.safeParse({ id: "g", type: "max", value: Infinity }).success).toBe(false);
+  });
+
+  it("rejects an unknown constraint type", () => {
+    expect(IrGroupConstraint.safeParse({ id: "g", type: "exactly", value: 1 }).success).toBe(false);
   });
 });
