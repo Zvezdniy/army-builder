@@ -3,7 +3,7 @@ import { IrModifier } from "./modifiers";
 
 export const IrCost = z.object({
   name: z.string(),
-  value: z.number(),
+  value: z.number().finite(),
   modifiers: z.array(IrModifier).optional(),
 });
 export type IrCost = z.infer<typeof IrCost>;
@@ -11,7 +11,7 @@ export type IrCost = z.infer<typeof IrCost>;
 export const IrConstraint = z.object({
   id: z.string(),
   type: z.enum(["min", "max"]),
-  value: z.number(),
+  value: z.number().finite(),
   field: z.enum(["selections", "points"]),
   scope: z.enum(["self", "parent", "force", "roster"]),
   targetType: z.enum(["category", "entry"]),
@@ -47,7 +47,7 @@ export const IrCatalogue = z.object({
   id: z.string(),
   name: z.string(),
   gameSystemId: z.string(),
-  revision: z.number(),
+  revision: z.number().finite(),
   entries: z.array(IrEntry),
   forceConstraints: z.array(IrConstraint).default([]),
 });

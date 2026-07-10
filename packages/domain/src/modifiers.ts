@@ -4,7 +4,7 @@ import { IrCondition, IrConditionGroup } from "./conditions";
 export const IrModifier = z.object({
   id: z.string(),
   type: z.enum(["set", "increment", "decrement"]),
-  value: z.number(),
+  value: z.number().finite(),
   conditions: z.array(IrCondition).optional(),
   conditionGroups: z.array(IrConditionGroup).optional(),
 });
