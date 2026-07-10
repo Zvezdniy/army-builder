@@ -72,7 +72,7 @@ describe("group choose-N constraints", () => {
 
   it("non-member direct children are excluded from the group count", () => {
     const c = cat("max", 1);
-    c.entries[0].children.push({
+    c.entries[0]!.children.push({
       id: "e.relic", name: "Relic", costs: [], categories: [], constraints: [], children: [], groups: [],
     });
     const r = evaluate(
