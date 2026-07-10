@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="cyc" name="Cyclic" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <sharedSelectionEntries>
+    <selectionEntry id="A" name="A" type="upgrade">
+      <entryLinks><entryLink id="la" targetId="B" type="selectionEntry"/></entryLinks>
+    </selectionEntry>
+    <selectionEntry id="B" name="B" type="upgrade">
+      <entryLinks><entryLink id="lb" targetId="A" type="selectionEntry"/></entryLinks>
+    </selectionEntry>
+  </sharedSelectionEntries>
+  <selectionEntries>
+    <selectionEntry id="root" name="Root" type="unit">
+      <entryLinks><entryLink id="lr" targetId="A" type="selectionEntry"/></entryLinks>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>
