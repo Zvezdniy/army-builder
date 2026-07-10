@@ -1,4 +1,4 @@
-use crate::raw::{RawCatalogue, RawCondition, RawConditionGroup, RawConstraint, RawCost, RawEntry, RawModifier};
+use crate::raw::{RawCatalogue, RawCondition, RawConditionGroup, RawConstraint, RawCost, RawEntry, RawGroup, RawModifier};
 use crate::error::Diagnostic;
 use super::model::*;
 
@@ -13,7 +13,7 @@ pub fn to_ir(cat: &RawCatalogue) -> (IrCatalogue, Vec<Diagnostic>) {
     let ir = IrCatalogue {
         id: cat.id.clone(),
         name: cat.name.clone(),
-        game_system_id: cat.game_system_id.clone().unwrap_or_default(),
+        game_system_id: cat.game_system_id.clone().filter(|s| !s.is_empty()).unwrap_or_else(|| cat.id.clone()),
         revision: cat.revision,
         entries,
         force_constraints,
@@ -74,13 +74,41 @@ fn map_entry(e: &RawEntry, cat: &RawCatalogue, diags: &mut Vec<Diagnostic>) -> I
         }
     }
 
+    let mut children: Vec<IrEntry> = e.entries.iter().map(|c| map_entry(c, cat, diags)).collect();
+    for g in &e.groups {
+        collect_group_entries(g, cat, diags, &mut children);
+    }
+
     IrEntry {
         id: e.id.clone(),
         name: e.name.clone(),
         costs,
         categories: e.category_links.iter().map(|l| l.target_id.clone()).collect(),
         constraints,
-        children: e.entries.iter().map(|c| map_entry(c, cat, diags)).collect(),
+        children,
+    }
+}
+
+/// Flatten a selectionEntryGroup's member entries (recursing into nested
+/// sub-groups) into `out`, so entries nested under a group are not silently
+/// dropped from the IR just because a group is not itself an IrEntry. The
+/// group's own constraints (e.g. a choose-max-1 on the group) have no IR
+/// representation in the current domain model, so they are diagnostic-dropped
+/// rather than silently lost.
+fn collect_group_entries(g: &RawGroup, cat: &RawCatalogue, diags: &mut Vec<Diagnostic>, out: &mut Vec<IrEntry>) {
+    for child in &g.entries {
+        out.push(map_entry(child, cat, diags));
+    }
+    for sub in &g.groups {
+        collect_group_entries(sub, cat, diags, out);
+    }
+    // Group-level (choose-N) constraints have no IR representation in the current
+    // domain model; drop with a diagnostic rather than silently lose them.
+    for gc in &g.constraints {
+        diags.push(Diagnostic {
+            code: "group.constraint_dropped".into(),
+            message: format!("selectionEntryGroup {} constraint {} has no IR representation (dropped)", g.id, gc.id),
+        });
     }
 }
 
@@ -94,7 +122,7 @@ fn map_constraint(rc: &RawConstraint, target_type: &str, target_id: &str, cat: &
         "selections".to_string()
     } else {
         let type_name = cat.cost_types.get(&rc.field).cloned().unwrap_or_default();
-        if rc.field == "pts" || type_name.to_lowercase().starts_with("point") {
+        if rc.field == "pts" || type_name.to_lowercase().contains("point") {
             "points".to_string()
         } else {
             diags.push(Diagnostic {
@@ -139,7 +167,7 @@ fn map_field(field: &str, cat: &RawCatalogue, code_prefix: &str, id_for_msg: &st
         return Some("selections".to_string());
     }
     let type_name = cat.cost_types.get(field).cloned().unwrap_or_default();
-    if field == "pts" || type_name.to_lowercase().starts_with("point") {
+    if field == "pts" || type_name.to_lowercase().contains("point") {
         Some("points".to_string())
     } else {
         diags.push(Diagnostic {
@@ -264,7 +292,7 @@ fn map_condition_group(g: &RawConditionGroup, cat: &RawCatalogue, diags: &mut Ve
 /// type whose name starts with "point"); only "points" is scored by engine-eval.
 fn map_cost(c: &RawCost, cat: &RawCatalogue) -> IrCost {
     let type_name = cat.cost_types.get(&c.type_id).cloned().unwrap_or_default();
-    let name = if c.type_id == "pts" || type_name.to_lowercase().starts_with("point") {
+    let name = if c.type_id == "pts" || type_name.to_lowercase().contains("point") {
         "points".to_string()
     } else {
         type_name

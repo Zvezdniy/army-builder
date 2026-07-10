@@ -15,6 +15,18 @@
       ],
       "categories": [
         "cat.hq"
+      ],
+      "children": [
+        {
+          "id": "e.captain.sword",
+          "name": "Power Sword",
+          "costs": [
+            {
+              "name": "points",
+              "value": 5.0
+            }
+          ]
+        }
       ]
     },
     {

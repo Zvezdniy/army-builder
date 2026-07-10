@@ -4,7 +4,7 @@ use engine_parser::{raw::parse_raw, resolve::resolve, ir::to_ir};
 fn maps_entries_costs_categories() {
     let raw = resolve(parse_raw(include_bytes!("fixtures/mini40k.cat")).unwrap()).unwrap();
     let (ir, diags) = to_ir(&raw);
-    assert!(diags.is_empty());
+    assert!(diags.iter().all(|d| d.code == "group.constraint_dropped"), "unexpected diagnostics: {:?}", diags);
     assert_eq!(ir.id, "cat.mini40k");
     assert_eq!(ir.game_system_id, "gs.40k");
     let cap = ir.entries.iter().find(|e| e.id == "e.captain").unwrap();
@@ -48,4 +48,16 @@ fn maps_cost_modifier_with_condition() {
     let groups = m.condition_groups.as_ref().unwrap();
     assert_eq!(groups[0].type_, "or");
     assert_eq!(groups[0].conditions.as_ref().unwrap()[0].comparator, "atMost");
+}
+
+#[test]
+fn maps_group_member_entries_and_diagnoses_group_constraint() {
+    let raw = resolve(parse_raw(include_bytes!("fixtures/mini40k.cat")).unwrap()).unwrap();
+    let (ir, diags) = to_ir(&raw);
+    // the entry nested in a <selectionEntryGroup> is flattened into the parent's children
+    let cap = ir.entries.iter().find(|e| e.id == "e.captain").unwrap();
+    assert!(cap.children.iter().any(|c| c.id == "e.captain.sword"),
+        "group member entry was dropped from the IR");
+    // the group's own choose-max-1 constraint is diagnostic-dropped, never silently lost
+    assert!(diags.iter().any(|d| d.code == "group.constraint_dropped"));
 }
