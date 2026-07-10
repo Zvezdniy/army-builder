@@ -2,6 +2,7 @@
 
 pub mod error;
 pub mod limits;
+pub mod xml;
 
 pub use error::{Diagnostic, ParseError};
 
