@@ -123,13 +123,92 @@ fn maps_cost_modifier_with_condition() {
 }
 
 #[test]
-fn maps_group_member_entries_and_diagnoses_group_constraint() {
+fn maps_group_choose_n_and_flattens_members() {
     let raw = resolve(parse_raw(include_bytes!("fixtures/mini40k.cat")).unwrap()).unwrap();
     let (ir, diags) = to_ir(&raw);
-    // the entry nested in a <selectionEntryGroup> is flattened into the parent's children
     let cap = ir.entries.iter().find(|e| e.id == "e.captain").unwrap();
-    assert!(cap.children.iter().any(|c| c.id == "e.captain.sword"),
-        "group member entry was dropped from the IR");
-    // the group's own choose-max-1 constraint is diagnostic-dropped, never silently lost
-    assert!(diags.iter().any(|d| d.code == "group.constraint_dropped"));
+    // members are still flattened into children
+    assert!(cap.children.iter().any(|c| c.id == "e.captain.sword"));
+    assert!(cap.children.iter().any(|c| c.id == "e.captain.axe"));
+    // the group's choose-max-1 is now preserved as an IrGroup, not dropped
+    let g = cap.groups.iter().find(|g| g.id == "g.wargear").unwrap();
+    assert_eq!(g.name, "Wargear");
+    assert_eq!(g.member_entry_ids, vec!["e.captain.sword", "e.captain.axe"]);
+    assert_eq!(g.constraints.len(), 1);
+    assert_eq!((g.constraints[0].id.as_str(), g.constraints[0].type_.as_str(), g.constraints[0].value),
+               ("g.wargear.max", "max", 1.0));
+    // fixture is fully mappable now — no group drop diagnostics
+    assert!(!diags.iter().any(|d| d.code == "group.constraint_dropped"), "unexpected: {:?}", diags);
+}
+
+#[test]
+fn drops_group_points_and_modifier_and_nested_constraints() {
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <costTypes><costType id="pts" name="Points"/></costTypes>
+  <selectionEntries>
+    <selectionEntry id="e.u" name="Unit" type="unit">
+      <selectionEntryGroups>
+        <selectionEntryGroup id="g.pts" name="Pts">
+          <constraints><constraint id="g.pts.max" type="max" value="30" field="pts" scope="parent"/></constraints>
+          <selectionEntries><selectionEntry id="e.a" name="A" type="upgrade"/></selectionEntries>
+        </selectionEntryGroup>
+        <selectionEntryGroup id="g.mod" name="Mod">
+          <constraints><constraint id="g.mod.max" type="max" value="1" field="selections" scope="parent"/></constraints>
+          <modifiers><modifier type="increment" field="g.mod.max" value="1"/></modifiers>
+          <selectionEntries><selectionEntry id="e.b" name="B" type="upgrade"/></selectionEntries>
+        </selectionEntryGroup>
+        <selectionEntryGroup id="g.outer" name="Outer">
+          <selectionEntryGroups>
+            <selectionEntryGroup id="g.inner" name="Inner">
+              <constraints><constraint id="g.inner.max" type="max" value="1" field="selections" scope="parent"/></constraints>
+              <selectionEntries><selectionEntry id="e.c" name="C" type="upgrade"/></selectionEntries>
+            </selectionEntryGroup>
+          </selectionEntryGroups>
+        </selectionEntryGroup>
+      </selectionEntryGroups>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let raw = resolve(parse_raw(xml).unwrap()).unwrap();
+    let (ir, diags) = to_ir(&raw);
+    let u = ir.entries.iter().find(|e| e.id == "e.u").unwrap();
+    // points-field group, modifier-on-limit group, and nested-group constraint are all dropped → no IrGroup emitted
+    assert!(u.groups.is_empty(), "no group should be emitted: {:?}", u.groups);
+    // members still flattened
+    for id in ["e.a", "e.b", "e.c"] {
+        assert!(u.children.iter().any(|c| c.id == id), "member {} lost", id);
+    }
+    // three loud drop diagnostics (points, modifier-on-limit, nested)
+    assert_eq!(diags.iter().filter(|d| d.code == "group.constraint_dropped").count(), 3, "{:?}", diags);
+}
+
+#[test]
+fn min_and_max_group_constraints_both_map() {
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <selectionEntries>
+    <selectionEntry id="e.u" name="Unit" type="unit">
+      <selectionEntryGroups>
+        <selectionEntryGroup id="g" name="Loadout">
+          <constraints>
+            <constraint id="g.min" type="min" value="1" field="selections" scope="parent"/>
+            <constraint id="g.max" type="max" value="2" field="selections" scope="parent"/>
+          </constraints>
+          <selectionEntries>
+            <selectionEntry id="e.x" name="X" type="upgrade"/>
+            <selectionEntry id="e.y" name="Y" type="upgrade"/>
+          </selectionEntries>
+        </selectionEntryGroup>
+      </selectionEntryGroups>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let (ir, _d) = to_ir(&resolve(parse_raw(xml).unwrap()).unwrap());
+    let g = ir.entries[0].groups.iter().find(|g| g.id == "g").unwrap();
+    assert_eq!(g.constraints.len(), 2);
+    assert!(g.constraints.iter().any(|c| c.type_ == "min" && c.value == 1.0));
+    assert!(g.constraints.iter().any(|c| c.type_ == "max" && c.value == 2.0));
 }

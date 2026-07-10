@@ -51,6 +51,9 @@
             <selectionEntry id="e.captain.sword" name="Power Sword" type="upgrade">
               <costs><cost name="Points" typeId="pts" value="5"/></costs>
             </selectionEntry>
+            <selectionEntry id="e.captain.axe" name="Power Axe" type="upgrade">
+              <costs><cost name="Points" typeId="pts" value="10"/></costs>
+            </selectionEntry>
           </selectionEntries>
         </selectionEntryGroup>
       </selectionEntryGroups>

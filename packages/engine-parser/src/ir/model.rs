@@ -25,6 +25,27 @@ pub struct IrEntry {
     pub constraints: Vec<IrConstraint>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub children: Vec<IrEntry>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub groups: Vec<IrGroup>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IrGroup {
+    pub id: String,
+    pub name: String,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub member_entry_ids: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub constraints: Vec<IrGroupConstraint>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct IrGroupConstraint {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub type_: String,
+    pub value: f64,
 }
 
 #[derive(Debug, Serialize)]

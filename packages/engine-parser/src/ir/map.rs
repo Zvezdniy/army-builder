@@ -86,8 +86,12 @@ fn map_entry(e: &RawEntry, cat: &RawCatalogue, diags: &mut Vec<Diagnostic>) -> I
     }
 
     let mut children: Vec<IrEntry> = e.entries.iter().map(|c| map_entry(c, cat, diags)).collect();
+    let mut groups: Vec<IrGroup> = Vec::new();
     for g in &e.groups {
-        collect_group_entries(g, cat, diags, &mut children);
+        flatten_group_members(g, cat, diags, &mut children);
+        if let Some(ir_group) = map_group(g, diags) {
+            groups.push(ir_group);
+        }
     }
 
     IrEntry {
@@ -97,29 +101,76 @@ fn map_entry(e: &RawEntry, cat: &RawCatalogue, diags: &mut Vec<Diagnostic>) -> I
         categories: e.category_links.iter().map(|l| l.target_id.clone()).collect(),
         constraints,
         children,
+        groups,
     }
 }
 
-/// Flatten a selectionEntryGroup's member entries (recursing into nested
-/// sub-groups) into `out`, so entries nested under a group are not silently
-/// dropped from the IR just because a group is not itself an IrEntry. The
-/// group's own constraints (e.g. a choose-max-1 on the group) have no IR
-/// representation in the current domain model, so they are diagnostic-dropped
-/// rather than silently lost.
-fn collect_group_entries(g: &RawGroup, cat: &RawCatalogue, diags: &mut Vec<Diagnostic>, out: &mut Vec<IrEntry>) {
+/// Flatten a group's member entries (recursing sub-groups) into `out`; members
+/// nested under a group are direct children of the owning entry in the IR.
+fn flatten_group_members(g: &RawGroup, cat: &RawCatalogue, diags: &mut Vec<Diagnostic>, out: &mut Vec<IrEntry>) {
     for child in &g.entries {
         out.push(map_entry(child, cat, diags));
     }
     for sub in &g.groups {
-        collect_group_entries(sub, cat, diags, out);
+        flatten_group_members(sub, cat, diags, out);
     }
-    // Group-level (choose-N) constraints have no IR representation in the current
-    // domain model; drop with a diagnostic rather than silently lose them.
+}
+
+/// Map a group's own choose-N (selections min/max) into an IrGroup. Nested
+/// sub-group constraints are out of scope and diagnostic-dropped. Returns None
+/// when the group has no mappable min/max selections limit (behaviour then
+/// matches the pre-feature drop: members flattened, no IrGroup emitted).
+fn map_group(g: &RawGroup, diags: &mut Vec<Diagnostic>) -> Option<IrGroup> {
+    for sub in &g.groups {
+        drop_group_constraints(sub, diags);
+    }
+    let member_entry_ids: Vec<String> = g.entries.iter().map(|e| e.id.clone()).collect();
+    let mut constraints: Vec<IrGroupConstraint> = Vec::new();
+    for c in &g.constraints {
+        if let Some(gc) = map_group_constraint(c, g, diags) {
+            constraints.push(gc);
+        }
+    }
+    if constraints.is_empty() {
+        return None;
+    }
+    Some(IrGroup { id: g.id.clone(), name: g.name.clone(), member_entry_ids, constraints })
+}
+
+/// A group choose-N limit maps only when it is a selections min/max with no
+/// modifier on the limit itself (a conditional limit we cannot yet model).
+/// Anything else is a loud drop — never a guessed static value.
+fn map_group_constraint(c: &RawConstraint, g: &RawGroup, diags: &mut Vec<Diagnostic>) -> Option<IrGroupConstraint> {
+    let drop = |why: String| Diagnostic {
+        code: "group.constraint_dropped".to_string(),
+        message: format!("selectionEntryGroup {} constraint {} {} (dropped)", g.id, c.id, why),
+    };
+    if c.kind != "min" && c.kind != "max" {
+        diags.push(drop(format!("has unsupported type {}", c.kind)));
+        return None;
+    }
+    if c.field != "selections" {
+        diags.push(drop(format!("is not on selections (field {})", c.field)));
+        return None;
+    }
+    if g.modifiers.iter().any(|m| m.field == c.id) {
+        diags.push(drop("has a modifier on its limit".to_string()));
+        return None;
+    }
+    Some(IrGroupConstraint { id: c.id.clone(), type_: c.kind.clone(), value: c.value })
+}
+
+/// Loudly drop every constraint of a nested sub-group (choose-N on nested groups
+/// is out of scope), recursing so no nested limit is silently lost.
+fn drop_group_constraints(g: &RawGroup, diags: &mut Vec<Diagnostic>) {
     for gc in &g.constraints {
         diags.push(Diagnostic {
-            code: "group.constraint_dropped".into(),
-            message: format!("selectionEntryGroup {} constraint {} has no IR representation (dropped)", g.id, gc.id),
+            code: "group.constraint_dropped".to_string(),
+            message: format!("nested selectionEntryGroup {} constraint {} has no IR representation (dropped)", g.id, gc.id),
         });
+    }
+    for sub in &g.groups {
+        drop_group_constraints(sub, diags);
     }
 }
 

@@ -237,7 +237,7 @@ fn read_group(start: &BytesStart, r: &mut SafeXmlReader) -> Result<RawGroup, Par
                         read_groups_into(&mut group.groups, r, b"selectionEntryGroups")?
                     }
                     b"entryLinks" => read_entrylinks_into(&mut group.entry_links, r)?,
-                    b"modifiers" => skip_element(r, b"modifiers")?,
+                    b"modifiers" => read_modifiers_into(&mut group.modifiers, r)?,
                     other => {
                         let name = other.to_vec();
                         skip_element(r, &name)?;

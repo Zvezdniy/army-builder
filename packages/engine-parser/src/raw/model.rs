@@ -33,6 +33,7 @@ pub struct RawEntry {
     pub id: String, pub name: String,
     pub entries: Vec<RawEntry>, pub groups: Vec<RawGroup>,
     pub entry_links: Vec<RawEntryLink>, pub constraints: Vec<RawConstraint>,
+    pub modifiers: Vec<RawModifier>,
 }
 #[derive(Debug, Default, Clone)] pub struct RawCost { pub type_id: String, pub value: f64 }
 #[derive(Debug, Default, Clone)] pub struct RawCategoryLink { pub target_id: String, pub primary: bool, pub constraints: Vec<RawConstraint> }
