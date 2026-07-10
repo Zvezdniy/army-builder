@@ -31,5 +31,7 @@ export function evaluate(roster: Roster, catalogue: IrCatalogue): ValidationResu
   }
 
   const valid = !issues.some((i) => i.severity === "error");
-  return { valid, totalPoints, pointsLimit: roster.pointsLimit, issues };
+  // Stopgap: ValidationResult (Task 4) now requires these; Task 11/12 compute them
+  // properly (override/house-rules layer). Kept as defaults so the package typechecks.
+  return { valid, totalPoints, pointsLimit: roster.pointsLimit, issues, dismissed: [], hasHouseRules: false };
 }
