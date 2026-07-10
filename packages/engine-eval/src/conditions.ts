@@ -2,6 +2,7 @@ import type { IrCondition, IrConditionGroup, IrModifier } from "@muster/domain";
 import type { EvalNode, EvalState } from "./state";
 import { aggregate } from "./scopes";
 import { nodePoints, type CostFn } from "./cost";
+import { assertDepth } from "./limits";
 
 export function evaluateCondition(
   condition: IrCondition,
@@ -32,11 +33,22 @@ export function evaluateConditionGroup(
   state: EvalState,
   costOf: CostFn = nodePoints,
 ): boolean {
+  return evaluateGroupAtDepth(group, node, state, costOf, 1);
+}
+
+function evaluateGroupAtDepth(
+  group: IrConditionGroup,
+  node: EvalNode | null,
+  state: EvalState,
+  costOf: CostFn,
+  depth: number,
+): boolean {
+  assertDepth(depth, "Condition group");
   const conditionResults = (group.conditions ?? []).map((c) =>
     evaluateCondition(c, node, state, costOf),
   );
   const groupResults = (group.conditionGroups ?? []).map((g) =>
-    evaluateConditionGroup(g, node, state, costOf),
+    evaluateGroupAtDepth(g, node, state, costOf, depth + 1),
   );
   const members = [...conditionResults, ...groupResults];
   return group.type === "and" ? members.every(Boolean) : members.some(Boolean);

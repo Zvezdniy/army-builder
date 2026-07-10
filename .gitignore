@@ -10,6 +10,9 @@ build/
 out/
 *.tsbuildinfo
 
+# Test coverage
+coverage/
+
 # Native / Rust
 target/
 

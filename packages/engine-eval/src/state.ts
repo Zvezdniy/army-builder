@@ -1,5 +1,6 @@
 import type { Roster, RosterSelection, IrEntry } from "@muster/domain";
 import type { SymbolTable } from "./symbols";
+import { assertDepth } from "./limits";
 
 export interface EvalNode {
   selectionId: string;
@@ -24,7 +25,9 @@ export function buildState(roster: Roster, symbols: SymbolTable): EvalState {
     selection: RosterSelection,
     parent: EvalNode | null,
     parentMultiplier: number,
+    depth: number,
   ): EvalNode => {
+    assertDepth(depth, "Roster selection");
     const entry = symbols.get(selection.entryId);
     if (!entry) {
       throw new Error(`Unknown entryId in roster: ${selection.entryId}`);
@@ -41,11 +44,11 @@ export function buildState(roster: Roster, symbols: SymbolTable): EvalState {
     };
     all.push(node);
     node.children = selection.selections.map((child) =>
-      build(child, node, node.effectiveCount),
+      build(child, node, node.effectiveCount, depth + 1),
     );
     return node;
   };
 
-  const roots = roster.selections.map((s) => build(s, null, 1));
+  const roots = roster.selections.map((s) => build(s, null, 1, 1));
   return { roots, all };
 }
