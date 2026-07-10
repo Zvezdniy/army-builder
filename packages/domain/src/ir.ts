@@ -1,8 +1,10 @@
 import { z } from "zod";
+import { IrModifier } from "./modifiers";
 
 export const IrCost = z.object({
   name: z.string(),
   value: z.number(),
+  modifiers: z.array(IrModifier).optional(),
 });
 export type IrCost = z.infer<typeof IrCost>;
 
@@ -15,6 +17,7 @@ export const IrConstraint = z.object({
   targetType: z.enum(["category", "entry"]),
   targetId: z.string(),
   includeChildSelections: z.boolean().default(false),
+  modifiers: z.array(IrModifier).optional(),
 });
 export type IrConstraint = z.infer<typeof IrConstraint>;
 
