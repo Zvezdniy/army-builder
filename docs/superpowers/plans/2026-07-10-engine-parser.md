@@ -535,23 +535,24 @@ fn extract_with_caps(bytes: &[u8], max_total: u64, max_ratio: u64) -> Result<Vec
         if file.enclosed_name().is_none() || name.contains("..") {
             return Err(ParseError::ZipSlip(name));
         }
+        if !is_catalogue_xml(&name) {
+            continue; // non-XML sidecars are never decompressed
+        }
+        // Cheap fast-fail for honestly-declared bombs. NOT authoritative — a lying
+        // `size()` header defeats it, so the real-byte aggregate cap below is the backstop.
         let compressed = file.compressed_size().max(1);
-        let declared = file.size();
-        if declared / compressed > max_ratio {
+        if file.size() / compressed > max_ratio {
             return Err(ParseError::ZipBombRatio(max_ratio));
         }
-        if !is_catalogue_xml(&name) {
-            continue; // ignore non-XML sidecars
-        }
-        total = total.saturating_add(declared);
-        if total > max_total {
-            return Err(ParseError::ZipBombSize);
-        }
-        // Stream with a hard byte cap in case `declared` lies.
+        // Authoritative guard: read with a hard cap on the REMAINING real-byte budget,
+        // then account ACTUAL bytes read. The attacker-controlled `size()` is irrelevant;
+        // transient allocation is bounded by max_total across ALL entries combined.
+        let remaining = max_total.saturating_sub(total);
         let mut out = Vec::new();
-        let mut limited = file.by_ref().take(max_total + 1);
+        let mut limited = file.by_ref().take(remaining.saturating_add(1));
         limited.read_to_end(&mut out).map_err(|e| ParseError::Io(e.to_string()))?;
-        if out.len() as u64 > max_total {
+        total = total.saturating_add(out.len() as u64);
+        if total > max_total {
             return Err(ParseError::ZipBombSize);
         }
         found.push(out);
