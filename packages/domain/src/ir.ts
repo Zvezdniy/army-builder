@@ -27,7 +27,9 @@ export interface IrEntry {
   constraints: IrConstraint[];
   children: IrEntry[];
 }
-export const IrEntry: z.ZodType<IrEntry> = z.lazy(() =>
+// Use `unknown` for the input generic because `.default([])` makes those fields optional in input,
+// not matching the strict required-field interface. Output type stays `IrEntry`.
+export const IrEntry: z.ZodType<IrEntry, z.ZodTypeDef, unknown> = z.lazy(() =>
   z.object({
     id: z.string(),
     name: z.string(),
