@@ -1,0 +1,58 @@
+{
+  "id": "cat.mini40k",
+  "name": "Mini 40k",
+  "gameSystemId": "gs.40k",
+  "revision": 1,
+  "entries": [
+    {
+      "id": "e.captain",
+      "name": "Captain",
+      "costs": [
+        {
+          "name": "points",
+          "value": 90.0
+        }
+      ],
+      "categories": [
+        "cat.hq"
+      ]
+    },
+    {
+      "id": "e.squad",
+      "name": "Battle Squad",
+      "categories": [
+        "cat.troops"
+      ],
+      "children": [
+        {
+          "id": "squad-body",
+          "name": "Battle Squad",
+          "costs": [
+            {
+              "name": "points",
+              "value": 100.0
+            }
+          ],
+          "categories": [
+            "cat.troops"
+          ],
+          "children": [
+            {
+              "id": "squad-body.model",
+              "name": "Trooper",
+              "costs": [
+                {
+                  "name": "points",
+                  "value": 20.0
+                }
+              ],
+              "categories": [
+                "cat.model"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

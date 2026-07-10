@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 pub mod error;
+pub mod ir;
 pub mod limits;
 pub mod raw;
 pub mod resolve;
