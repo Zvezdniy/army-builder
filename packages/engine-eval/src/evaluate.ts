@@ -4,6 +4,7 @@ import { buildState } from "./state";
 import { totalCost } from "./cost";
 import { resolveCosts } from "./resolve";
 import { checkConstraint } from "./constraints";
+import { checkGroupConstraint } from "./groups";
 
 export function evaluate(roster: Roster, catalogue: IrCatalogue): ValidationResult {
   const symbols = buildSymbolTable(catalogue);
@@ -39,6 +40,12 @@ export function evaluate(roster: Roster, catalogue: IrCatalogue): ValidationResu
     for (const constraint of node.entry.constraints) {
       const issue = checkConstraint(constraint, node, state, costOf);
       if (issue) raw.push(issue);
+    }
+    for (const group of node.entry.groups ?? []) {
+      for (const gc of group.constraints) {
+        const issue = checkGroupConstraint(gc, node, group);
+        if (issue) raw.push(issue);
+      }
     }
   }
 
