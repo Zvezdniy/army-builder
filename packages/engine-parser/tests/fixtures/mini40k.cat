@@ -62,11 +62,14 @@
   </selectionEntries>
   <forceEntries>
     <forceEntry id="fe.army" name="Army">
-      <constraints>
-        <constraint id="fc.hq.min" type="min" value="1" field="selections" scope="force"/>
-        <constraint id="fc.hq.max" type="max" value="2" field="selections" scope="force"/>
-      </constraints>
-      <categoryLinks><categoryLink id="fcl.hq" targetId="cat.hq" primary="false"/></categoryLinks>
+      <categoryLinks>
+        <categoryLink id="fcl.hq" targetId="cat.hq" primary="false">
+          <constraints>
+            <constraint id="fc.hq.min" type="min" value="1" field="selections" scope="force"/>
+            <constraint id="fc.hq.max" type="max" value="2" field="selections" scope="force"/>
+          </constraints>
+        </categoryLink>
+      </categoryLinks>
     </forceEntry>
   </forceEntries>
 </catalogue>

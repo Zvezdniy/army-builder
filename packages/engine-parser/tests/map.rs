@@ -32,6 +32,78 @@ fn maps_force_and_entry_constraints() {
     assert!(diags.iter().all(|d| !d.code.starts_with("constraint.")));
 }
 
+/// A force with MULTIPLE categoryLinks, each carrying its own nested
+/// <constraints>, is the real multi-role detachment pattern (e.g. 1-2 HQ AND
+/// 3-6 Troops). Each constraint's target category is the categoryLink it is
+/// nested under, so the association is unambiguous no matter how many links the
+/// force has. Regression for the prior walking-skeleton behaviour that dropped
+/// ALL force constraints whenever a force had more than one categoryLink.
+#[test]
+fn maps_force_constraints_nested_in_each_category_link() {
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <categoryEntries>
+    <categoryEntry id="cat.hq" name="HQ"/>
+    <categoryEntry id="cat.troops" name="Troops"/>
+  </categoryEntries>
+  <forceEntries>
+    <forceEntry id="fe" name="Detachment">
+      <categoryLinks>
+        <categoryLink id="cl.hq" targetId="cat.hq" primary="false">
+          <constraints>
+            <constraint id="hq.min" type="min" value="1" field="selections" scope="force"/>
+            <constraint id="hq.max" type="max" value="2" field="selections" scope="force"/>
+          </constraints>
+        </categoryLink>
+        <categoryLink id="cl.tr" targetId="cat.troops" primary="false">
+          <constraints>
+            <constraint id="tr.min" type="min" value="3" field="selections" scope="force"/>
+          </constraints>
+        </categoryLink>
+      </categoryLinks>
+    </forceEntry>
+  </forceEntries>
+</catalogue>"#;
+    let raw = resolve(parse_raw(xml).unwrap()).unwrap();
+    let (ir, diags) = to_ir(&raw);
+    // No ambiguity diagnostic — the category is structural, not guessed.
+    assert!(!diags.iter().any(|d| d.code == "constraint.force_target_ambiguous"),
+        "unexpected ambiguity diagnostic: {:?}", diags);
+    let find = |id: &str| ir.force_constraints.iter().find(|c| c.id == id)
+        .unwrap_or_else(|| panic!("force constraint {} missing (dropped): {:?}", id, ir.force_constraints));
+    let hq_min = find("hq.min");
+    assert_eq!((hq_min.target_type.as_str(), hq_min.target_id.as_str(), hq_min.type_.as_str()), ("category", "cat.hq", "min"));
+    assert_eq!(find("hq.max").target_id, "cat.hq");
+    let tr_min = find("tr.min");
+    assert_eq!((tr_min.target_type.as_str(), tr_min.target_id.as_str(), tr_min.type_.as_str()), ("category", "cat.troops", "min"));
+    assert_eq!(ir.force_constraints.len(), 3);
+}
+
+/// A constraint placed directly under <forceEntry> (not inside a categoryLink)
+/// is force-global — it has no category association. The current IR has no
+/// whole-force target, so it is diagnostic-dropped, never silently lost and
+/// never miscompiled onto a guessed category.
+#[test]
+fn diagnoses_force_global_constraint_without_category() {
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <forceEntries>
+    <forceEntry id="fe" name="Detachment">
+      <constraints>
+        <constraint id="fg.max" type="max" value="2000" field="pts" scope="force"/>
+      </constraints>
+    </forceEntry>
+  </forceEntries>
+</catalogue>"#;
+    let raw = resolve(parse_raw(xml).unwrap()).unwrap();
+    let (ir, diags) = to_ir(&raw);
+    assert!(ir.force_constraints.is_empty(), "force-global constraint should not be emitted");
+    assert!(diags.iter().any(|d| d.code == "constraint.force_global_unrepresentable"),
+        "expected loud diagnostic for dropped force-global constraint: {:?}", diags);
+}
+
 #[test]
 fn maps_cost_modifier_with_condition() {
     let raw = resolve(parse_raw(include_bytes!("fixtures/mini40k.cat")).unwrap()).unwrap();
