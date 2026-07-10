@@ -1,6 +1,15 @@
-import type { IrConstraint } from "@muster/domain";
 import type { EvalNode, EvalState } from "./state";
-import { nodePoints } from "./cost";
+import { nodePoints, type CostFn } from "./cost";
+
+// The shared shape aggregate() reads. Both IrConstraint and IrCondition satisfy it.
+export interface AggregateSpec {
+  id: string;
+  field: "selections" | "points";
+  scope: "self" | "parent" | "force" | "roster";
+  targetType: "category" | "entry";
+  targetId: string;
+  includeChildSelections: boolean;
+}
 
 function subtree(node: EvalNode, includeChildren: boolean): EvalNode[] {
   if (!includeChildren) return [node];
@@ -13,47 +22,44 @@ function subtree(node: EvalNode, includeChildren: boolean): EvalNode[] {
   return acc;
 }
 
-// The candidate node set a constraint sees, before target filtering.
 function scopeNodes(
   node: EvalNode | null,
-  constraint: IrConstraint,
+  spec: AggregateSpec,
   state: EvalState,
 ): EvalNode[] {
-  switch (constraint.scope) {
+  switch (spec.scope) {
     // Walking-skeleton simplification: force and roster collapse to the same set because
     // there is currently a single implicit force per roster. Once multiple forces/detachments
-    // land (see the deferred modifier plan), `force` scope must narrow to the owning force's
-    // nodes rather than the whole roster.
+    // land, `force` scope must narrow to the owning force's nodes rather than the whole roster.
     case "force":
     case "roster":
       return state.all;
     case "self":
-      if (!node) throw new Error(`Constraint ${constraint.id} (scope=self) requires an owning node`);
-      return subtree(node, constraint.includeChildSelections);
+      if (!node) throw new Error(`Spec ${spec.id} (scope=self) requires an owning node`);
+      return subtree(node, spec.includeChildSelections);
     case "parent": {
-      if (!node) throw new Error(`Constraint ${constraint.id} (scope=parent) requires an owning node`);
+      if (!node) throw new Error(`Spec ${spec.id} (scope=parent) requires an owning node`);
       const anchor = node.parent ?? node;
-      return subtree(anchor, constraint.includeChildSelections);
+      return subtree(anchor, spec.includeChildSelections);
     }
   }
 }
 
-function matchesTarget(node: EvalNode, constraint: IrConstraint): boolean {
-  return constraint.targetType === "category"
-    ? node.categories.includes(constraint.targetId)
-    : node.entry.id === constraint.targetId;
+function matchesTarget(node: EvalNode, spec: AggregateSpec): boolean {
+  return spec.targetType === "category"
+    ? node.categories.includes(spec.targetId)
+    : node.entry.id === spec.targetId;
 }
 
 export function aggregate(
   node: EvalNode | null,
-  constraint: IrConstraint,
+  spec: AggregateSpec,
   state: EvalState,
+  costOf: CostFn = nodePoints,
 ): number {
-  const matched = scopeNodes(node, constraint, state).filter((n) =>
-    matchesTarget(n, constraint),
-  );
-  if (constraint.field === "selections") {
+  const matched = scopeNodes(node, spec, state).filter((n) => matchesTarget(n, spec));
+  if (spec.field === "selections") {
     return matched.reduce((sum, n) => sum + n.effectiveCount, 0);
   }
-  return matched.reduce((sum, n) => sum + nodePoints(n), 0);
+  return matched.reduce((sum, n) => sum + costOf(n), 0);
 }
