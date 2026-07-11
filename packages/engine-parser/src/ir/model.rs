@@ -27,6 +27,8 @@ pub struct IrEntry {
     pub children: Vec<IrEntry>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub groups: Vec<IrGroup>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub profiles: Vec<IrProfile>,
 }
 
 #[derive(Debug, Serialize)]
@@ -109,4 +111,19 @@ pub struct IrConditionGroup {
     pub conditions: Option<Vec<IrCondition>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub condition_groups: Option<Vec<IrConditionGroup>>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IrProfile {
+    pub name: String,
+    pub type_name: String,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub characteristics: Vec<IrCharacteristic>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct IrCharacteristic {
+    pub name: String,
+    pub value: String,
 }

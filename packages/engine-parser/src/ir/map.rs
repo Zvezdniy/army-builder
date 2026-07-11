@@ -1,4 +1,4 @@
-use crate::raw::{RawCatalogue, RawCondition, RawConditionGroup, RawConstraint, RawCost, RawEntry, RawGroup, RawModifier};
+use crate::raw::{RawCatalogue, RawCondition, RawConditionGroup, RawConstraint, RawCost, RawEntry, RawGroup, RawModifier, RawProfile};
 use crate::error::Diagnostic;
 use super::model::*;
 
@@ -93,6 +93,7 @@ fn map_entry(e: &RawEntry, cat: &RawCatalogue, diags: &mut Vec<Diagnostic>) -> I
             groups.push(ir_group);
         }
     }
+    let profiles: Vec<IrProfile> = e.profiles.iter().map(map_profile).collect();
 
     IrEntry {
         id: e.id.clone(),
@@ -102,6 +103,19 @@ fn map_entry(e: &RawEntry, cat: &RawCatalogue, diags: &mut Vec<Diagnostic>) -> I
         constraints,
         children,
         groups,
+        profiles,
+    }
+}
+
+fn map_profile(p: &RawProfile) -> IrProfile {
+    IrProfile {
+        name: p.name.clone(),
+        type_name: p.type_name.clone(),
+        characteristics: p
+            .characteristics
+            .iter()
+            .map(|c| IrCharacteristic { name: c.name.clone(), value: c.value.clone() })
+            .collect(),
     }
 }
 

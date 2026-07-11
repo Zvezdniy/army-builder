@@ -372,6 +372,25 @@ fn surfaces_catalogue_root_entrylinks() {
 }
 
 #[test]
+fn maps_profiles_onto_ir_entries() {
+    let (ir, _diags) = engine_parser::parse_bytes(
+        include_bytes!("fixtures/mini40k.cat"),
+        false,
+    )
+    .unwrap();
+    let captain = ir.entries.iter().find(|e| e.id == "e.captain").unwrap();
+    let unit = captain.profiles.iter().find(|p| p.type_name == "Unit").unwrap();
+    assert_eq!(unit.name, "Captain");
+    let m = unit.characteristics.iter().find(|c| c.name == "M").unwrap();
+    assert_eq!(m.value, "6\"");
+    assert!(captain.profiles.iter().any(|p| p.type_name == "Abilities"));
+
+    // the wargear weapon profile is on the flattened child entry
+    let sword = captain.children.iter().find(|e| e.id == "e.captain.sword").unwrap();
+    assert_eq!(sword.profiles[0].type_name, "Melee Weapons");
+}
+
+#[test]
 fn root_entrylink_into_cycle_is_typed_error() {
     let xml = br#"<?xml version="1.0"?>
 <catalogue id="c" name="C" revision="1" gameSystemId="gs"
