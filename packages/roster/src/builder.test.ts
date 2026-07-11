@@ -7,7 +7,7 @@ import {
 
 const catalogue: IrCatalogue = {
   id: "cat", name: "Cat", gameSystemId: "gs", revision: 1,
-  forceConstraints: [],
+  forceConstraints: [], categoryNames: {},
   entries: [
     {
       id: "e.captain", name: "Captain", costs: [{ name: "points", value: 90 }],
@@ -137,7 +137,7 @@ describe("roster builder", () => {
 // A unit with a choose-1 weapon group and a choose-2 trinket group.
 const swapCat: IrCatalogue = {
   id: "cat", name: "Cat", gameSystemId: "gs", revision: 1,
-  forceConstraints: [],
+  forceConstraints: [], categoryNames: {},
   entries: [
     {
       id: "e.hero", name: "Hero", costs: [{ name: "points", value: 50 }],
@@ -320,7 +320,7 @@ describe("catalogueEntry", () => {
 });
 
 const defCat: IrCatalogue = {
-  id: "c", name: "C", gameSystemId: "g", revision: 1, forceConstraints: [],
+  id: "c", name: "C", gameSystemId: "g", revision: 1, forceConstraints: [], categoryNames: {},
   entries: [{
     id: "u", name: "U", costs: [], categories: [], constraints: [],
     children: [
@@ -385,7 +385,7 @@ describe("addUnit prepopulates from defaults and mins", () => {
 
   it("seeds a nested subtree: a seeded child that itself has group defaults/mins", () => {
     const nestedCat: IrCatalogue = {
-      id: "c", name: "C", gameSystemId: "g", revision: 1, forceConstraints: [],
+      id: "c", name: "C", gameSystemId: "g", revision: 1, forceConstraints: [], categoryNames: {},
       entries: [{
         id: "u", name: "U", costs: [], categories: [], constraints: [],
         children: [
@@ -414,7 +414,7 @@ describe("addUnit prepopulates from defaults and mins", () => {
 
   it("treats a parent-scoped min constraint the same as a self-scoped one", () => {
     const parentScopedCat: IrCatalogue = {
-      id: "c", name: "C", gameSystemId: "g", revision: 1, forceConstraints: [],
+      id: "c", name: "C", gameSystemId: "g", revision: 1, forceConstraints: [], categoryNames: {},
       entries: [{
         id: "u", name: "U", costs: [], categories: [], constraints: [],
         children: [
