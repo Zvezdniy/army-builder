@@ -42,6 +42,12 @@ importers:
         specifier: workspace:*
         version: link:../domain
 
+  packages/roster:
+    dependencies:
+      '@muster/domain':
+        specifier: workspace:*
+        version: link:../domain
+
 packages:
 
   '@ampproject/remapping@2.3.0':

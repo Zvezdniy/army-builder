@@ -12,7 +12,8 @@
     "baseUrl": ".",
     "paths": {
       "@muster/domain": ["packages/domain/src/index.ts"],
-      "@muster/engine-eval": ["packages/engine-eval/src/index.ts"]
+      "@muster/engine-eval": ["packages/engine-eval/src/index.ts"],
+      "@muster/roster": ["packages/roster/src/index.ts"]
     }
   }
 }
