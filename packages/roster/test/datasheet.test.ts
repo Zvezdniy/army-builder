@@ -32,6 +32,13 @@ describe("datasheet", () => {
     expect(datasheet(bare, sel("e.bare"))).toEqual([]);
   });
 
+  it("tolerates an entry whose profiles field is absent entirely", () => {
+    const noField = { ...cat, entries: [
+      { id: "e.nf", name: "NF", costs: [], categories: [], constraints: [], children: [], groups: [] },
+    ] } as unknown as IrCatalogue;
+    expect(datasheet(noField, sel("e.nf"))).toEqual([]);
+  });
+
   it("groups the unit's own profiles by typeName in first-seen order", () => {
     const out = datasheet(cat, sel("e.hero"));
     expect(out.map((s) => s.typeName)).toEqual(["Unit", "Abilities"]);

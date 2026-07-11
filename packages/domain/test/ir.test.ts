@@ -50,8 +50,8 @@ describe("IrProfile / IrCharacteristic", () => {
         characteristics: [{ name: "M", value: '6"' }, { name: "T", value: "4" }],
       }],
     });
-    expect(entry.profiles[0]?.typeName).toBe("Unit");
-    expect(entry.profiles[0]?.characteristics[1]?.value).toBe("4");
+    expect(entry.profiles?.[0]?.typeName).toBe("Unit");
+    expect(entry.profiles?.[0]?.characteristics[1]?.value).toBe("4");
   });
 
   it("defaults profiles to an empty array when absent", () => {

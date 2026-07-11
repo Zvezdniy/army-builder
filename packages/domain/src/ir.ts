@@ -56,7 +56,7 @@ export interface IrEntry {
   constraints: IrConstraint[];
   children: IrEntry[];
   groups?: IrGroup[];
-  profiles: IrProfile[];
+  profiles?: IrProfile[];
 }
 // Use `unknown` for the input generic because `.default([])` makes those fields optional in input,
 // not matching the strict required-field interface. Output type stays `IrEntry`.

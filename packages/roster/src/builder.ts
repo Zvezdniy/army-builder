@@ -73,7 +73,7 @@ export function datasheet(catalogue: IrCatalogue, selection: RosterSelection): D
     // A selection's entryId always resolves within its own catalogue (the same
     // invariant mapTree/removeTree rely on), so no defensive fallback here.
     const entry = catalogueEntry(catalogue, sel.entryId)!;
-    for (const profile of entry.profiles) {
+    for (const profile of entry.profiles ?? []) {
       const key = profileKey(profile);
       if (seen.has(key)) continue;
       seen.add(key);
