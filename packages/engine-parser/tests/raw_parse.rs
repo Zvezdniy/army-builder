@@ -191,6 +191,6 @@ fn rule_without_description_is_skipped() {
       </sharedRules>
     </catalogue>"#;
     let cat = parse_raw(xml).unwrap();
-    assert!(cat.rules.get("Empty").is_none());
+    assert!(!cat.rules.contains_key("Empty"));
     assert_eq!(cat.rules.get("HasText").map(String::as_str), Some("\"quoted\" text"));
 }
