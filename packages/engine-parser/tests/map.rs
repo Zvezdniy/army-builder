@@ -520,7 +520,7 @@ fn drops_hidden_modifier_with_unsupported_scope() {
       <modifiers>
         <modifier type="set" value="true" field="hidden">
           <conditionGroups><conditionGroup type="or"><conditions>
-            <condition type="instanceOf" value="1" field="selections" scope="root-entry" childId="cat.x"/>
+            <condition type="instanceOf" value="1" field="selections" scope="bogus-scope" childId="cat.x"/>
           </conditions></conditionGroup></conditionGroups>
         </modifier>
       </modifiers>
@@ -576,36 +576,10 @@ fn hidden_modifier_instance_of_maps_to_at_least_one() {
 }
 
 #[test]
-fn drops_hidden_modifier_with_parent_scope() {
-    // parent scope maps for cost/constraint conditions, but NOT for visibility:
-    // hidden is evaluated on a parentless synthetic node where parent collapses to
-    // self and would over-hide. It must drop the whole modifier → entry visible.
-    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
-<catalogue id="c" name="C" revision="1" gameSystemId="gs"
-           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
-  <selectionEntries>
-    <selectionEntry id="e.u" name="U" type="upgrade">
-      <modifiers>
-        <modifier type="set" value="true" field="hidden">
-          <conditions>
-            <condition type="notInstanceOf" value="1" field="selections" scope="parent" childId="cat.x"/>
-          </conditions>
-        </modifier>
-      </modifiers>
-    </selectionEntry>
-  </selectionEntries>
-</catalogue>"#;
-    let (ir, diags) = to_ir(&resolve(parse_raw(xml).unwrap()).unwrap());
-    let e = ir.entries.iter().find(|e| e.id == "e.u").unwrap();
-    assert!(e.visibility_modifiers.is_empty(), "parent-scoped hidden gate must be dropped");
-    assert!(!e.hidden);
-    assert!(diags.iter().any(|d| d.code == "modifier.hidden_condition_unmapped"));
-}
-
-#[test]
 fn hidden_modifier_partial_or_group_drops_whole_modifier() {
-    // Never over-hide: an `or` group with one mappable + one unmappable (root-entry
-    // scope) condition must drop the ENTIRE modifier, not keep the mappable sibling.
+    // Never over-hide: an `or` group with one mappable + one unmappable (genuinely
+    // unknown scope) condition must drop the ENTIRE modifier, not keep the mappable
+    // sibling.
     let xml = br#"<?xml version="1.0" encoding="utf-8"?>
 <catalogue id="c" name="C" revision="1" gameSystemId="gs"
            xmlns="http://www.battlescribe.net/schema/catalogueSchema">
@@ -615,7 +589,7 @@ fn hidden_modifier_partial_or_group_drops_whole_modifier() {
         <modifier type="set" value="true" field="hidden">
           <conditionGroups><conditionGroup type="or"><conditions>
             <condition type="instanceOf" value="1" field="selections" scope="roster" childId="cat.ok"/>
-            <condition type="instanceOf" value="1" field="selections" scope="root-entry" childId="cat.bad"/>
+            <condition type="instanceOf" value="1" field="selections" scope="bogus-scope" childId="cat.bad"/>
           </conditions></conditionGroup></conditionGroups>
         </modifier>
       </modifiers>
@@ -643,4 +617,75 @@ fn root_entrylink_into_cycle_is_typed_error() {
     let mut diags = Vec::new();
     let res = resolve_with_diags(parse_raw(xml).unwrap(), &mut diags);
     assert!(matches!(res, Err(ParseError::ReferenceCycle(_))), "expected cycle error, got {:?}", res);
+}
+
+#[test]
+fn maps_hidden_modifier_with_parent_and_context_scopes() {
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <selectionEntries>
+    <selectionEntry id="e.u" name="U" type="upgrade">
+      <modifiers>
+        <modifier type="set" value="true" field="hidden">
+          <conditions>
+            <condition type="notInstanceOf" value="1" field="selections" scope="parent" childId="cat.a"/>
+            <condition type="instanceOf" value="1" field="selections" scope="root-entry" childId="cat.b"/>
+            <condition type="notInstanceOf" value="1" field="selections" scope="ancestor" childId="cat.c"/>
+            <condition type="instanceOf" value="1" field="selections" scope="primary-catalogue" childId="cat.d"/>
+          </conditions>
+        </modifier>
+      </modifiers>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let (ir, diags) = to_ir(&resolve(parse_raw(xml).unwrap()).unwrap());
+    let e = ir.entries.iter().find(|e| e.id == "e.u").unwrap();
+    assert_eq!(e.visibility_modifiers.len(), 1, "gate with context scopes must now map");
+    let cs = e.visibility_modifiers[0].conditions.as_ref().unwrap();
+    let scopes: Vec<&str> = cs.iter().map(|c| c.scope.as_str()).collect();
+    assert_eq!(scopes, vec!["parent", "root-entry", "ancestor", "roster"]); // primary-catalogue -> roster
+    assert!(!diags.iter().any(|d| d.code == "modifier.hidden_condition_unmapped"));
+}
+
+#[test]
+fn cost_modifier_condition_root_entry_scope_maps() {
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <costTypes><costType id="pts" name="Points"/></costTypes>
+  <selectionEntries>
+    <selectionEntry id="e.u" name="U" type="upgrade">
+      <costs><cost name="Points" typeId="pts" value="5"/></costs>
+      <modifiers>
+        <modifier type="increment" field="pts" value="3">
+          <conditions><condition type="atLeast" value="2" field="selections" scope="root-entry" childId="cat.x"/></conditions>
+        </modifier>
+      </modifiers>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let (ir, diags) = to_ir(&resolve(parse_raw(xml).unwrap()).unwrap());
+    let e = ir.entries.iter().find(|e| e.id == "e.u").unwrap();
+    let m = e.costs.iter().find(|c| c.name == "points").unwrap().modifiers.as_ref().unwrap();
+    assert_eq!(m[0].conditions.as_ref().unwrap()[0].scope, "root-entry");
+    assert!(!diags.iter().any(|d| d.code == "condition.scope_unmapped"));
+}
+
+#[test]
+fn constraint_root_entry_scope_still_dropped() {
+    // Scope broadening is conditions-only; constraints keep the 4 scopes.
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <selectionEntries>
+    <selectionEntry id="e.u" name="U" type="unit">
+      <constraints><constraint id="k" type="max" value="1" field="selections" scope="root-entry"/></constraints>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let (ir, diags) = to_ir(&resolve(parse_raw(xml).unwrap()).unwrap());
+    let e = ir.entries.iter().find(|e| e.id == "e.u").unwrap();
+    assert!(e.constraints.is_empty());
+    assert!(diags.iter().any(|d| d.code == "constraint.scope_unmapped"));
 }

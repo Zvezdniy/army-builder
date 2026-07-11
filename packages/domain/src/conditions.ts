@@ -12,7 +12,7 @@ export const IrCondition = z.object({
   ]),
   value: z.number().finite(),
   field: z.enum(["selections", "points"]),
-  scope: z.enum(["self", "parent", "force", "roster"]),
+  scope: z.enum(["self", "parent", "force", "roster", "root-entry", "ancestor"]),
   targetType: z.enum(["category", "entry"]),
   targetId: z.string(),
   includeChildSelections: z.boolean().default(false),

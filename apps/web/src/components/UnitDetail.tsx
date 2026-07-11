@@ -3,12 +3,11 @@ import { catalogueEntry } from "@muster/roster";
 import { SelectionNode } from "./SelectionNode";
 
 export function UnitDetail({
-  roster, catalogue, selectedUnitId, hiddenIds, onBack, onAddOption, onToggleGroupMember, onRemove, onSetCount,
+  roster, catalogue, selectedUnitId, onBack, onAddOption, onToggleGroupMember, onRemove, onSetCount,
 }: {
   roster: Roster;
   catalogue: IrCatalogue;
   selectedUnitId: string | undefined;
-  hiddenIds: Set<string>;
   onBack: () => void;
   onAddOption: (parentId: string, entryId: string) => void;
   onToggleGroupMember: (parentId: string, group: IrGroup, entryId: string) => void;
@@ -33,7 +32,7 @@ export function UnitDetail({
         </div>
       )}
       <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-        <SelectionNode roster={roster} selection={sel} catalogue={catalogue} depth={0} hiddenIds={hiddenIds}
+        <SelectionNode roster={roster} selection={sel} catalogue={catalogue} depth={0}
           onAddOption={onAddOption} onToggleGroupMember={onToggleGroupMember}
           onRemove={onRemove} onSetCount={onSetCount} />
       </ul>

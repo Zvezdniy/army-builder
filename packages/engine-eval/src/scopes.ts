@@ -5,7 +5,7 @@ import { nodePoints, type CostFn } from "./cost";
 export interface AggregateSpec {
   id: string;
   field: "selections" | "points";
-  scope: "self" | "parent" | "force" | "roster";
+  scope: "self" | "parent" | "force" | "roster" | "root-entry" | "ancestor";
   targetType: "category" | "entry";
   targetId: string;
   includeChildSelections: boolean;
@@ -41,6 +41,18 @@ function scopeNodes(
       if (!node) throw new Error(`Spec ${spec.id} (scope=parent) requires an owning node`);
       const anchor = node.parent ?? node;
       return subtree(anchor, spec.includeChildSelections);
+    }
+    case "root-entry": {
+      if (!node) throw new Error(`Spec ${spec.id} (scope=root-entry) requires an owning node`);
+      let top = node;
+      while (top.parent) top = top.parent;
+      return subtree(top, spec.includeChildSelections);
+    }
+    case "ancestor": {
+      if (!node) throw new Error(`Spec ${spec.id} (scope=ancestor) requires an owning node`);
+      const acc: EvalNode[] = [];
+      for (let a = node.parent; a; a = a.parent) acc.push(a);
+      return acc;
     }
   }
 }

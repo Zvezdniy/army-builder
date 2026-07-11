@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { IrCatalogue, IrConstraint, Roster } from "@muster/domain";
+import type { IrCatalogue, IrCondition, IrConstraint, Roster } from "@muster/domain";
 import { buildSymbolTable, buildState, aggregate } from "@muster/engine-eval";
 import type { EvalNode } from "@muster/engine-eval";
 
@@ -124,5 +124,52 @@ describe("aggregate", () => {
     const squad = byId("s.squad");
     const c: IrConstraint = { ...base, includeChildSelections: true, type: "max", field: "selections", scope: "self", targetType: "entry", targetId: "e.special" };
     expect(aggregate(squad, c, state)).toBe(2);
+  });
+
+  it("root-entry scope counts from the topmost ancestor's subtree", () => {
+    const { state, byId } = setup();
+    const special = byId("s.sp"); // deep node: s.squad -> s.sp
+    const c: IrCondition = { id: "c1", value: 0, includeChildSelections: true, comparator: "atLeast", field: "selections", scope: "root-entry", targetType: "category", targetId: "cat.special" };
+    expect(aggregate(special, c, state)).toBe(2); // root (squad) subtree contains both specials
+  });
+
+  it("root-entry scope with no match at the root returns 0", () => {
+    const { state, byId } = setup();
+    const special = byId("s.sp");
+    const c: IrCondition = { id: "c1", value: 0, includeChildSelections: true, comparator: "atLeast", field: "selections", scope: "root-entry", targetType: "category", targetId: "cat.heavy" };
+    expect(aggregate(special, c, state)).toBe(0); // heavy units are siblings, not in the squad's root-entry subtree
+  });
+
+  it("ancestor scope counts a matching ancestor node", () => {
+    const { state, byId } = setup();
+    const special = byId("s.sp");
+    const c: IrCondition = { id: "c1", value: 0, includeChildSelections: false, comparator: "atLeast", field: "selections", scope: "ancestor", targetType: "category", targetId: "cat.troops" };
+    expect(aggregate(special, c, state)).toBe(1); // s.squad (the parent/ancestor) is cat.troops
+  });
+
+  it("ancestor scope with no matching ancestor returns 0", () => {
+    const { state, byId } = setup();
+    const special = byId("s.sp");
+    const c: IrCondition = { id: "c1", value: 0, includeChildSelections: false, comparator: "atLeast", field: "selections", scope: "ancestor", targetType: "category", targetId: "cat.heavy" };
+    expect(aggregate(special, c, state)).toBe(0); // no ancestor of s.sp is cat.heavy
+  });
+
+  it("ancestor scope on a root node (no ancestors) returns 0", () => {
+    const { state, byId } = setup();
+    const squad = byId("s.squad"); // root: no parent
+    const c: IrCondition = { id: "c1", value: 0, includeChildSelections: false, comparator: "atLeast", field: "selections", scope: "ancestor", targetType: "category", targetId: "cat.troops" };
+    expect(aggregate(squad, c, state)).toBe(0);
+  });
+
+  it("throws if root-entry scope is given a null node", () => {
+    const { state } = setup();
+    const c: IrCondition = { id: "c1", value: 0, includeChildSelections: false, comparator: "atLeast", field: "selections", scope: "root-entry", targetType: "category", targetId: "cat.special" };
+    expect(() => aggregate(null, c, state)).toThrow(/requires an owning node/i);
+  });
+
+  it("throws if ancestor scope is given a null node", () => {
+    const { state } = setup();
+    const c: IrCondition = { id: "c1", value: 0, includeChildSelections: false, comparator: "atLeast", field: "selections", scope: "ancestor", targetType: "category", targetId: "cat.special" };
+    expect(() => aggregate(null, c, state)).toThrow(/requires an owning node/i);
   });
 });
