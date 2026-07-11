@@ -287,15 +287,20 @@ fn map_field(field: &str, cat: &RawCatalogue, code_prefix: &str, id_for_msg: &st
     }
 }
 
-/// Shared scope-mapping rule for constraints and conditions: only the four
-/// BattleScribe scopes engine-eval understands pass through; anything else
-/// is unmappable and produces a `<code_prefix>.scope_unmapped` diagnostic.
-fn map_scope(scope: &str, code_prefix: &str, id_for_msg: &str, diags: &mut Vec<Diagnostic>) -> Option<String> {
+/// Scope mapping for CONDITIONS (visibility + cost/constraint modifier gates).
+/// Broader than `map_constraint`'s own inline scope check (which stays limited to
+/// the four BattleScribe scopes engine-eval understands for constraints): adds the
+/// context-dependent scopes the engine resolves against a node's ancestor chain,
+/// and aliases `primary-catalogue` to `roster` (single-catalogue model).
+/// Constraints are unaffected — `map_constraint` still drops `root-entry`/`ancestor`.
+fn map_condition_scope(scope: &str, id_for_msg: &str, diags: &mut Vec<Diagnostic>) -> Option<String> {
     match scope {
-        "parent" | "force" | "roster" | "self" => Some(scope.to_string()),
+        "self" | "parent" | "force" | "roster" => Some(scope.to_string()),
+        "root-entry" | "ancestor" => Some(scope.to_string()),
+        "primary-catalogue" => Some("roster".to_string()),
         other => {
             diags.push(Diagnostic {
-                code: format!("{}.scope_unmapped", code_prefix),
+                code: "condition.scope_unmapped".to_string(),
                 message: format!("{} has unmappable scope {}", id_for_msg, other),
             });
             None
@@ -356,7 +361,7 @@ fn map_condition(c: &RawCondition, cat: &RawCatalogue, diags: &mut Vec<Diagnosti
 
     let id_for_msg = format!("condition on {}", c.child_id);
     let field = map_field(&c.field, cat, "condition", &id_for_msg, diags)?;
-    let scope = map_scope(&c.scope, "condition", &id_for_msg, diags)?;
+    let scope = map_condition_scope(&c.scope, &id_for_msg, diags)?;
 
     let target_type = if cat.categories.contains_key(&c.child_id) { "category" } else { "entry" }.to_string();
 
@@ -401,21 +406,6 @@ fn map_condition_group(g: &RawConditionGroup, cat: &RawCatalogue, diags: &mut Ve
     })
 }
 
-/// Map a condition for a VISIBILITY gate. Identical to `map_condition` except
-/// that scope `parent` is ALSO treated as unmappable. Visibility is evaluated on
-/// a parentless synthetic self-node (see engine-eval `hiddenEntryIds`), where a
-/// `parent` scope would silently collapse to `self` and mis-fire — over-hiding a
-/// valid option. Deferring it (whole modifier dropped → entry stays visible)
-/// upholds the never-over-hide invariant. self/force/roster pass through.
-fn map_hidden_condition(c: &RawCondition, cat: &RawCatalogue) -> Option<IrCondition> {
-    let mut sink = Vec::new();
-    let ic = map_condition(c, cat, &mut sink)?;
-    if ic.scope == "parent" {
-        return None;
-    }
-    Some(ic)
-}
-
 /// Strict all-or-nothing condition-group mapping for visibility gates: if any
 /// nested condition or sub-group is unmappable, the whole group fails (`?`
 /// propagates None) so the caller can drop the entire hidden modifier rather
@@ -426,9 +416,10 @@ fn map_condition_group_strict(g: &RawConditionGroup, cat: &RawCatalogue) -> Opti
         "and" | "or" => g.kind.clone(),
         _ => return None,
     };
+    let mut sink = Vec::new();
     let mut conditions = Vec::new();
     for c in &g.conditions {
-        conditions.push(map_hidden_condition(c, cat)?);
+        conditions.push(map_condition(c, cat, &mut sink)?);
     }
     let mut condition_groups = Vec::new();
     for sub in &g.groups {
@@ -445,9 +436,10 @@ fn map_condition_group_strict(g: &RawConditionGroup, cat: &RawCatalogue) -> Opti
 /// ANY condition/group is unmappable — the caller then drops the whole modifier
 /// (never over-hide). `set` is the boolean the modifier writes to `hidden`.
 fn map_visibility_modifier(m: &RawModifier, cat: &RawCatalogue) -> Option<IrVisibilityModifier> {
+    let mut sink = Vec::new();
     let mut conditions = Vec::new();
     for c in &m.conditions {
-        conditions.push(map_hidden_condition(c, cat)?);
+        conditions.push(map_condition(c, cat, &mut sink)?);
     }
     let mut condition_groups = Vec::new();
     for g in &m.condition_groups {
