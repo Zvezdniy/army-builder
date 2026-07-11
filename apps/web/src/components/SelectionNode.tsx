@@ -30,7 +30,7 @@ export function SelectionNode({
         : <strong>{name}</strong>}
       {depth === 0 && <UnitStatline catalogue={catalogue} selection={selection} />}
       {depth === 0 && <Datasheet catalogue={catalogue} selection={selection} />}
-      <UnitConfig roster={roster} selection={selection} catalogue={catalogue}
+      <UnitConfig roster={roster} selection={selection} catalogue={catalogue} canRemove={depth > 0}
         onAddOption={onAddOption} onToggleGroupMember={onToggleGroupMember}
         onRemove={onRemove} onSetCount={onSetCount} />
       {freeChildren.length > 0 && (

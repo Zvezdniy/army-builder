@@ -16,13 +16,16 @@ export function UnitDetail({
 }) {
   const sel = selectedUnitId ? roster.selections.find((s) => s.id === selectedUnitId) : undefined;
   if (!sel) {
-    return <section className="ud ud-empty">Выберите юнит слева</section>;
+    return <section className="ud ud-empty">Select a unit on the left</section>;
   }
   const entry = catalogueEntry(catalogue, sel.entryId);
+  const name = entry?.name ?? sel.entryId;
   const keywords = (entry?.categories ?? []).map((id) => catalogue.categoryNames?.[id] ?? id);
   return (
     <section className="ud">
-      <button className="ud-back" aria-label="back to list" onClick={onBack}>‹ назад</button>
+      <button className="ud-remove" title="Remove unit" aria-label={`remove ${name}`}
+        onClick={() => onRemove(sel.id)}>🗑</button>
+      <button className="ud-back" aria-label="back to list" onClick={onBack}>‹ Back</button>
       {keywords.length > 0 && (
         <div className="ud-kw">
           {keywords.map((k) => <span key={k} className="kw">{k}</span>)}

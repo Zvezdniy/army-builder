@@ -15,10 +15,10 @@ export function RosterList({
   return (
     <section data-testid="roster-list" className="rl">
       <div className="rl-head">
-        <h2 className="rl-title">Ростер</h2>
-        <button className="rl-add-open" onClick={onOpenPicker}>+ добавить юнит</button>
+        <h2 className="rl-title">Roster</h2>
+        <button className="rl-add-open" onClick={onOpenPicker}>+ Add unit</button>
       </div>
-      {groups.length === 0 && <div className="rl-empty">Ростер пуст — добавь юнит</div>}
+      {groups.length === 0 && <div className="rl-empty">Roster is empty — add a unit</div>}
       {groups.map((g) => (
         <div key={g.role} className="rl-group">
           <h3 className="rl-role">{g.role}</h3>
@@ -32,7 +32,7 @@ export function RosterList({
                     className={u.id === selectedUnitId ? "rl-unit selected" : "rl-unit"}
                     aria-label={`open ${name}`} onClick={() => onSelect(u.id)}>
                     <span>{name}</span>
-                    <span className="rl-models">{models} models</span>
+                    <span className="rl-models">{models} model{models === 1 ? "" : "s"}</span>
                   </button>
                 </li>
               );

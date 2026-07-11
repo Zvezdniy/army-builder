@@ -73,7 +73,7 @@ section { background: var(--panel); border: 1px solid var(--line); border-radius
   color: var(--fg, inherit); margin: 0 0 8px; padding-bottom: 6px; border-bottom: 2px solid var(--accent); }
 /* Statline reads as one solid stat bar directly under the name. */
 .ds-statline { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 0;
-  margin: 10px 0 14px; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--panel); }
+  margin: 0; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--panel); }
 .ds-chip { display: flex; flex-direction: column; align-items: center; gap: 2px;
   padding: 8px 4px; border: none; border-right: 1px solid var(--line); border-radius: 0; }
 .ds-chip:last-child { border-right: none; }
@@ -83,12 +83,14 @@ section { background: var(--panel); border: 1px solid var(--line); border-radius
   .ds-statline { grid-auto-flow: row; grid-template-columns: repeat(3, 1fr); }
   .ds-chip:nth-child(3n) { border-right: none; }
 }
-/* Invulnerable-save chip, sitting just under the statline bar. */
-.ds-invuln { display: inline-flex; align-items: stretch; margin: -6px 0 14px; border: 1px solid var(--line);
-  border-radius: 8px; overflow: hidden; }
-.ds-invuln-value { padding: 6px 12px; font-size: 18px; font-weight: 800; font-variant-numeric: tabular-nums;
+/* Invulnerable-save chip, hanging under the Toughness column of the statline. */
+.ds-statwrap { margin: 10px 0 14px; }
+.ds-invuln-row { display: grid; }
+.ds-invuln { justify-self: start; margin-top: -1px; display: inline-flex; align-items: stretch; white-space: nowrap;
+  border: 1px solid var(--line); border-top: none; border-radius: 0 0 8px 8px; overflow: hidden; }
+.ds-invuln-value { padding: 5px 10px; font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums;
   background: var(--head-bg); color: var(--head-ink); }
-.ds-invuln-label { display: flex; align-items: center; padding: 6px 12px; font-size: 11px;
+.ds-invuln-label { display: flex; align-items: center; padding: 5px 10px; font-size: 11px;
   text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
 
 /* Two-column datasheet body: weapons left, description right (stacks on mobile). */
@@ -151,7 +153,10 @@ section { background: var(--panel); border: 1px solid var(--line); border-radius
 .picker-item-name { flex: 1; min-width: 0; }
 .picker-pts { color: var(--muted, #888); font-variant-numeric: tabular-nums; }
 .picker-empty { color: var(--muted, #888); padding: 12px; }
-.ud { min-width: 0; }
+.ud { position: relative; min-width: 0; }
+.ud-remove { position: absolute; top: 12px; right: 12px; z-index: 2; padding: 4px 9px; font-size: 16px; line-height: 1;
+  border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--muted); cursor: pointer; }
+.ud-remove:hover { border-color: var(--error); color: var(--error); }
 .ud-empty { color: var(--muted, #888); padding: 16px; }
 .ud-kw { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px; }
 .ud-kw .kw { font-size: 11px; padding: 2px 8px; border-radius: 20px; border: 1px solid var(--line); color: var(--muted, #888); }

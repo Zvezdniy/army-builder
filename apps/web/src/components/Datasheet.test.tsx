@@ -56,7 +56,7 @@ describe("Datasheet", () => {
 
   it("summarizes the selected wargear as a loadout line", () => {
     render(<Datasheet catalogue={cat} selection={sel("e.hero", [sel("e.sword")])} />);
-    expect(screen.getByText(/снаряжён: Sword/)).toBeInTheDocument();
+    expect(screen.getByText(/equipped with: Sword/)).toBeInTheDocument();
   });
 
   it("shows a weapon row only when the weapon is selected", () => {

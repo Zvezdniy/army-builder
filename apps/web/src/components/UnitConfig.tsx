@@ -2,11 +2,12 @@ import type { IrCatalogue, IrGroup, Roster, RosterSelection } from "@muster/doma
 import { optionsFor, selectedGroupMembers, groupControl, optionControl, catalogueEntry } from "@muster/roster";
 
 export function UnitConfig({
-  roster, selection, catalogue, onAddOption, onToggleGroupMember, onRemove, onSetCount,
+  roster, selection, catalogue, canRemove = true, onAddOption, onToggleGroupMember, onRemove, onSetCount,
 }: {
   roster: Roster;
   selection: RosterSelection;
   catalogue: IrCatalogue;
+  canRemove?: boolean;
   onAddOption: (parentId: string, entryId: string) => void;
   onToggleGroupMember: (parentId: string, group: IrGroup, entryId: string) => void;
   onRemove: (id: string) => void;
@@ -43,7 +44,9 @@ export function UnitConfig({
       {control.kind === "fixed" && (
         <span style={{ marginRight: 8, color: "var(--muted)" }}>×{control.count} (fixed)</span>
       )}
-      <button onClick={() => onRemove(selection.id)} aria-label={`remove ${selection.entryId}`}>remove</button>
+      {canRemove && (
+        <button onClick={() => onRemove(selection.id)} aria-label={`remove ${selection.entryId}`}>remove</button>
+      )}
 
       {groups.map((g) => {
         const ctrl = groupControl(g);

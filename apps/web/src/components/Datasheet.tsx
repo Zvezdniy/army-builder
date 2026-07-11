@@ -7,11 +7,6 @@ const canHover =
   typeof window !== "undefined" && !!window.matchMedia && window.matchMedia("(hover: hover)").matches;
 
 const WEAPON_TYPES = new Set(["Ranged Weapons", "Melee Weapons"]);
-const SECTION_LABELS: Record<string, string> = {
-  "Ranged Weapons": "Дальнобойное оружие",
-  "Melee Weapons": "Оружие ближнего боя",
-};
-const sectionLabel = (typeName: string): string => SECTION_LABELS[typeName] ?? typeName;
 
 /** The Unit statline as a prominent, evenly-divided stat bar. */
 function Statline({ section }: { section: DatasheetSection }) {
@@ -29,23 +24,27 @@ function Statline({ section }: { section: DatasheetSection }) {
   );
 }
 
-/** The unit's statline bar plus its invulnerable-save chip — right under the name. */
+/** The unit's statline bar with the invulnerable-save chip hanging under the
+ *  Toughness column, the way a datasheet shows it. */
 export function UnitStatline({ catalogue, selection }: { catalogue: IrCatalogue; selection: RosterSelection }) {
   const sections = datasheet(catalogue, selection);
   const unit = sections.find((s) => s.typeName === "Unit");
-  const invuln = sections.find((s) => s.typeName === "Invulnerable Save")?.profiles[0];
-  const invulnValue = invuln?.characteristics[0]?.value;
+  const invulnValue = sections.find((s) => s.typeName === "Invulnerable Save")?.profiles[0]?.characteristics[0]?.value;
   if (!unit) return null;
+  const chars = unit.profiles[0]?.characteristics ?? [];
+  const tIndex = chars.findIndex((c) => c.name === "T");
   return (
-    <>
+    <div className="ds-statwrap">
       <Statline section={unit} />
-      {invulnValue && (
-        <div className="ds-invuln">
-          <span className="ds-invuln-value">{invulnValue}</span>
-          <span className="ds-invuln-label">Invulnerable Save</span>
+      {invulnValue && chars.length > 0 && (
+        <div className="ds-invuln-row" style={{ gridTemplateColumns: `repeat(${chars.length}, 1fr)` }}>
+          <div className="ds-invuln" style={{ gridColumn: (tIndex >= 0 ? tIndex : 1) + 1 }}>
+            <span className="ds-invuln-value">{invulnValue}</span>
+            <span className="ds-invuln-label">Invulnerable Save</span>
+          </div>
         </div>
       )}
-    </>
+    </div>
   );
 }
 
@@ -65,7 +64,7 @@ function WeaponTable({ section, rules }: { section: DatasheetSection; rules: Rul
       <table className="ds-table">
         <thead>
           <tr>
-            <th>{sectionLabel(section.typeName)}</th>
+            <th>{section.typeName}</th>
             {columns.map((name) => <th key={name}>{name}</th>)}
           </tr>
         </thead>
@@ -101,12 +100,12 @@ function WeaponTable({ section, rules }: { section: DatasheetSection; rules: Rul
   );
 }
 
-/** Read-only loadout readout ("X снаряжён: a, b"), the way War Organ summarizes wargear. */
+/** Read-only loadout readout ("X equipped with: a, b"), the way War Organ summarizes wargear. */
 function Composition({ loadout }: { loadout: { unit: string; wargear: string[] } }) {
   return (
     <div className="ds-section">
-      <div className="ds-section-head">Состав и снаряжение</div>
-      <p className="ds-loadout">{loadout.unit} снаряжён: {loadout.wargear.join(", ")}.</p>
+      <div className="ds-section-head">Unit Composition &amp; Wargear</div>
+      <p className="ds-loadout">{loadout.unit} equipped with: {loadout.wargear.join(", ")}.</p>
     </div>
   );
 }
@@ -127,7 +126,7 @@ function Abilities({ section }: { section: DatasheetSection }) {
   }
   return (
     <div className="ds-section">
-      <div className="ds-section-head">Способности</div>
+      <div className="ds-section-head">Abilities</div>
       {[...groups].map(([group, names]) => (
         <p key={group} className="ds-ability-line">
           <strong>{group.toUpperCase()}:</strong> {names.join(", ")}
@@ -148,7 +147,7 @@ function Abilities({ section }: { section: DatasheetSection }) {
 function SpecialSection({ section }: { section: DatasheetSection }) {
   return (
     <div className="ds-section">
-      <div className="ds-section-head">{sectionLabel(section.typeName)}</div>
+      <div className="ds-section-head">{section.typeName}</div>
       {section.profiles.map((p) => {
         const desc = p.characteristics.find((c) => c.name === "Description")?.value ?? "";
         return (
@@ -191,7 +190,7 @@ export function Datasheet({
     onHide: () => setTip(null),
     onToggle: (kw, el) => setTip((prev) => (prev?.kw === kw ? null : { kw, ...at(el) })),
   };
-  const ruleText = tip ? (catalogue.ruleTexts?.[tip.kw] ?? "Нет описания правила.") : "";
+  const ruleText = tip ? (catalogue.ruleTexts?.[tip.kw] ?? "No rule description.") : "";
 
   return (
     <div className="ds" data-testid="datasheet">

@@ -20,7 +20,7 @@ describe("RosterList", () => {
     render(<RosterList roster={roster} catalogue={cat} selectedUnitId={undefined}
       onSelect={() => {}} onOpenPicker={() => {}} />);
     expect(screen.getByText("HQ")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /open Captain/i })).toHaveTextContent("1 models");
+    expect(screen.getByRole("button", { name: /open Captain/i })).toHaveTextContent("1 model");
   });
   it("selects a unit on click", async () => {
     const onSelect = vi.fn();
@@ -33,7 +33,7 @@ describe("RosterList", () => {
     const onOpenPicker = vi.fn();
     render(<RosterList roster={roster} catalogue={cat} selectedUnitId={undefined}
       onSelect={() => {}} onOpenPicker={onOpenPicker} />);
-    await userEvent.click(screen.getByRole("button", { name: /добавить юнит/i }));
+    await userEvent.click(screen.getByRole("button", { name: /Add unit/i }));
     expect(onOpenPicker).toHaveBeenCalled();
   });
 });

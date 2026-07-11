@@ -46,13 +46,13 @@ export function AddUnitPicker({
     <div className="picker-overlay" role="dialog" aria-label="add unit" onClick={onClose}>
       <div className="picker" onClick={(e) => e.stopPropagation()}>
         <div className="picker-head">
-          <strong>Добавить юнит</strong>
+          <strong>Add unit</strong>
           <button className="picker-close" aria-label="close" onClick={onClose}>✕</button>
         </div>
-        <input className="picker-search" type="search" placeholder="Поиск юнита…"
+        <input className="picker-search" type="search" placeholder="Search units…"
           value={query} onChange={(e) => setQuery(e.target.value)} autoFocus />
         <div className="picker-list">
-          {groups.length === 0 && <div className="picker-empty">Ничего не найдено</div>}
+          {groups.length === 0 && <div className="picker-empty">Nothing found</div>}
           {groups.map((g) => {
             const open = !collapsed.has(g.role);
             return (
