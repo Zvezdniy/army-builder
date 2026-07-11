@@ -278,6 +278,62 @@ fn drops_group_constraint_with_non_group_local_scope() {
 }
 
 #[test]
+fn group_with_default_emits_default_member_entry_id() {
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <selectionEntries>
+    <selectionEntry id="e.u" name="Unit" type="unit">
+      <selectionEntryGroups>
+        <selectionEntryGroup id="g" name="Loadout" defaultSelectionEntryId="e.def">
+          <constraints>
+            <constraint id="g.max" type="max" value="1" field="selections" scope="parent"/>
+          </constraints>
+          <selectionEntries>
+            <selectionEntry id="e.def" name="Def" type="upgrade"/>
+          </selectionEntries>
+        </selectionEntryGroup>
+      </selectionEntryGroups>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let raw = resolve(parse_raw(xml).unwrap()).unwrap();
+    let (ir, _diags) = to_ir(&raw);
+    let g = ir.entries[0].groups.iter().find(|g| g.id == "g").unwrap();
+    assert_eq!(g.default_member_entry_id.as_deref(), Some("e.def"));
+    let json = serde_json::to_value(g).unwrap();
+    assert_eq!(json.get("defaultMemberEntryId").and_then(|v| v.as_str()), Some("e.def"));
+}
+
+#[test]
+fn group_without_default_omits_default_member_entry_id() {
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <selectionEntries>
+    <selectionEntry id="e.u" name="Unit" type="unit">
+      <selectionEntryGroups>
+        <selectionEntryGroup id="g" name="Loadout">
+          <constraints>
+            <constraint id="g.max" type="max" value="1" field="selections" scope="parent"/>
+          </constraints>
+          <selectionEntries>
+            <selectionEntry id="e.x" name="X" type="upgrade"/>
+          </selectionEntries>
+        </selectionEntryGroup>
+      </selectionEntryGroups>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let raw = resolve(parse_raw(xml).unwrap()).unwrap();
+    let (ir, _diags) = to_ir(&raw);
+    let g = ir.entries[0].groups.iter().find(|g| g.id == "g").unwrap();
+    assert_eq!(g.default_member_entry_id, None);
+    let json = serde_json::to_value(g).unwrap();
+    assert!(json.get("defaultMemberEntryId").is_none(), "key must be absent: {:?}", json);
+}
+
+#[test]
 fn surfaces_catalogue_root_entrylinks() {
     let xml = br#"<?xml version="1.0"?>
 <catalogue id="c" name="C" revision="1" gameSystemId="gs"

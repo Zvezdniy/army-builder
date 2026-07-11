@@ -34,6 +34,8 @@ pub struct IrEntry {
 pub struct IrGroup {
     pub id: String,
     pub name: String,
+    #[serde(rename = "defaultMemberEntryId", skip_serializing_if = "Option::is_none")]
+    pub default_member_entry_id: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub member_entry_ids: Vec<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]

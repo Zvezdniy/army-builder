@@ -202,6 +202,7 @@ fn read_groups_into(
                     dst.push(RawGroup {
                         id: attr(&e, b"id").unwrap_or_default(),
                         name: attr(&e, b"name").unwrap_or_default(),
+                        default_selection_entry_id: attr(&e, b"defaultSelectionEntryId").unwrap_or_default(),
                         ..Default::default()
                     });
                 }
@@ -224,6 +225,7 @@ fn read_group(start: &BytesStart, r: &mut SafeXmlReader) -> Result<RawGroup, Par
     let mut group = RawGroup {
         id: attr(start, b"id").unwrap_or_default(),
         name: attr(start, b"name").unwrap_or_default(),
+        default_selection_entry_id: attr(start, b"defaultSelectionEntryId").unwrap_or_default(),
         ..Default::default()
     };
     loop {
