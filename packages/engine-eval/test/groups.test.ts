@@ -94,3 +94,42 @@ describe("group choose-N constraints", () => {
     expect(r.issues.some((i) => i.constraintId === "g.wargear.limit")).toBe(false);
   });
 });
+
+describe("nested group emitted as a flat IrGroup enforces independently", () => {
+  // Simulates the parser output for a unit with an outer group (choose ≤2 of its
+  // direct members) plus a nested inner group (choose ≤1 of its own members) —
+  // both flat in entry.groups, members all flattened into the entry's children.
+  const cat: IrCatalogue = {
+    id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [],
+    entries: [
+      {
+        id: "e.u", name: "Unit", costs: [{ name: "points", value: 10 }],
+        categories: [], constraints: [], children: [
+          { id: "e.a", name: "A", costs: [], categories: [], constraints: [], children: [], groups: [] },
+          { id: "e.b", name: "B", costs: [], categories: [], constraints: [], children: [], groups: [] },
+          { id: "e.i1", name: "I1", costs: [], categories: [], constraints: [], children: [], groups: [] },
+          { id: "e.i2", name: "I2", costs: [], categories: [], constraints: [], children: [], groups: [] },
+        ],
+        groups: [
+          { id: "g.outer", name: "Outer", memberEntryIds: ["e.a", "e.b"], constraints: [{ id: "g.outer.max", type: "max", value: 2 }] },
+          { id: "g.inner", name: "Inner", memberEntryIds: ["e.i1", "e.i2"], constraints: [{ id: "g.inner.max", type: "max", value: 1 }] },
+        ],
+      },
+    ],
+  };
+  const roster = (members: string[]): Roster => ({
+    id: "r", name: "R", gameSystemId: "gs", catalogueId: "c", catalogueRevision: 1, pointsLimit: 2000,
+    selections: [{ id: "u", entryId: "e.u", count: 1, selections: members.map((m, i) => ({ id: `m${i}`, entryId: m, count: 1, selections: [] })) }],
+  });
+
+  it("flags the nested group's max independently of the outer group", () => {
+    const r = evaluate(roster(["e.i1", "e.i2"]), cat); // 2 in inner, max 1
+    expect(r.valid).toBe(false);
+    expect(r.issues.some((i) => i.constraintId === "g.inner.max")).toBe(true);
+  });
+
+  it("passes when each group is within its own limit", () => {
+    const r = evaluate(roster(["e.a", "e.b", "e.i1"]), cat); // outer 2/2, inner 1/1
+    expect(r.valid).toBe(true);
+  });
+});

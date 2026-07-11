@@ -168,7 +168,7 @@ fn maps_group_choose_n_and_flattens_members() {
 }
 
 #[test]
-fn drops_group_points_and_modifier_and_nested_constraints() {
+fn emits_nested_group_but_drops_points_field_and_modifier_limit() {
     let xml = br#"<?xml version="1.0" encoding="utf-8"?>
 <catalogue id="c" name="C" revision="1" gameSystemId="gs"
            xmlns="http://www.battlescribe.net/schema/catalogueSchema">
@@ -200,14 +200,78 @@ fn drops_group_points_and_modifier_and_nested_constraints() {
     let raw = resolve(parse_raw(xml).unwrap()).unwrap();
     let (ir, diags) = to_ir(&raw);
     let u = ir.entries.iter().find(|e| e.id == "e.u").unwrap();
-    // points-field group, modifier-on-limit group, and nested-group constraint are all dropped → no IrGroup emitted
-    assert!(u.groups.is_empty(), "no group should be emitted: {:?}", u.groups);
+    // The nested group's selections limit is now emitted (no longer dropped).
+    let inner = u.groups.iter().find(|g| g.id == "g.inner").expect("nested group must be emitted");
+    assert_eq!(inner.member_entry_ids, vec!["e.c"]);
+    assert_eq!(inner.constraints.len(), 1);
+    assert_eq!((inner.constraints[0].type_.as_str(), inner.constraints[0].value), ("max", 1.0));
+    // g.pts (points field) and g.mod (modifier-on-limit) still produce no IrGroup.
+    assert!(u.groups.iter().all(|g| g.id != "g.pts" && g.id != "g.mod"));
+    assert!(u.groups.iter().all(|g| g.id != "g.outer"), "constraint-less outer group is not emitted");
     // members still flattened
     for id in ["e.a", "e.b", "e.c"] {
         assert!(u.children.iter().any(|c| c.id == id), "member {} lost", id);
     }
-    // three loud drop diagnostics (points, modifier-on-limit, nested)
-    assert_eq!(diags.iter().filter(|d| d.code == "group.constraint_dropped").count(), 3, "{:?}", diags);
+    // exactly two loud drops remain: points-field and modifier-on-limit
+    assert_eq!(diags.iter().filter(|d| d.code == "group.constraint_dropped").count(), 2, "{:?}", diags);
+}
+
+#[test]
+fn emits_group_constraint_two_levels_deep() {
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <selectionEntries>
+    <selectionEntry id="e.u" name="Unit" type="unit">
+      <selectionEntryGroups>
+        <selectionEntryGroup id="g.l1" name="L1">
+          <selectionEntryGroups>
+            <selectionEntryGroup id="g.l2" name="L2">
+              <selectionEntryGroups>
+                <selectionEntryGroup id="g.l3" name="L3">
+                  <constraints><constraint id="g.l3.max" type="max" value="2" field="selections" scope="parent"/></constraints>
+                  <selectionEntries><selectionEntry id="e.deep" name="Deep" type="upgrade"/></selectionEntries>
+                </selectionEntryGroup>
+              </selectionEntryGroups>
+            </selectionEntryGroup>
+          </selectionEntryGroups>
+        </selectionEntryGroup>
+      </selectionEntryGroups>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let (ir, _d) = to_ir(&resolve(parse_raw(xml).unwrap()).unwrap());
+    let u = ir.entries.iter().find(|e| e.id == "e.u").unwrap();
+    let g = u.groups.iter().find(|g| g.id == "g.l3").expect("deeply nested group emitted");
+    assert_eq!(g.member_entry_ids, vec!["e.deep"]);
+    assert_eq!((g.constraints[0].type_.as_str(), g.constraints[0].value), ("max", 2.0));
+    assert!(u.children.iter().any(|c| c.id == "e.deep"), "deep member flattened");
+}
+
+#[test]
+fn nested_group_roster_scope_still_drops() {
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <selectionEntries>
+    <selectionEntry id="e.u" name="Unit" type="unit">
+      <selectionEntryGroups>
+        <selectionEntryGroup id="g.outer" name="Outer">
+          <selectionEntryGroups>
+            <selectionEntryGroup id="g.inner" name="Inner">
+              <constraints><constraint id="g.inner.max" type="max" value="1" field="selections" scope="roster"/></constraints>
+              <selectionEntries><selectionEntry id="e.x" name="X" type="upgrade"/></selectionEntries>
+            </selectionEntryGroup>
+          </selectionEntryGroups>
+        </selectionEntryGroup>
+      </selectionEntryGroups>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let (ir, diags) = to_ir(&resolve(parse_raw(xml).unwrap()).unwrap());
+    let u = ir.entries.iter().find(|e| e.id == "e.u").unwrap();
+    assert!(u.groups.is_empty(), "roster-scope nested limit must not map: {:?}", u.groups);
+    assert_eq!(diags.iter().filter(|d| d.code == "group.constraint_dropped").count(), 1);
 }
 
 #[test]
