@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { evaluate } from "@muster/engine-eval";
 import { mini40kCatalogue, legalRoster, rosterWith, sel } from "./fixtures/mini40k";
-import type { IrCatalogue } from "@muster/domain";
+import type { IrCatalogue, IrEntry } from "@muster/domain";
 
 describe("evaluate", () => {
   it("passes a legal roster", () => {
@@ -65,5 +65,29 @@ describe("evaluate with cost modifiers", () => {
     expect(result.valid).toBe(true);
     expect(result.dismissed).toEqual([]);
     expect(result.hasHouseRules).toBe(false);
+  });
+});
+
+describe("evaluate tolerates inlined duplicate entry ids", () => {
+  // Mirrors real catalogues: a shared entry inlined (cloned) under two units,
+  // producing a duplicate id. evaluate() must not throw.
+  const shared: IrEntry = {
+    id: "e.shared.wargear", name: "Shared Wargear", costs: [], categories: [], constraints: [], children: [],
+  };
+  const cat: IrCatalogue = {
+    id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [],
+    entries: [
+      { id: "e.u1", name: "U1", costs: [], categories: [], constraints: [], children: [structuredClone(shared)] },
+      { id: "e.u2", name: "U2", costs: [], categories: [], constraints: [], children: [structuredClone(shared)] },
+    ],
+  };
+  const emptyRoster = {
+    id: "r", name: "R", gameSystemId: "gs", catalogueId: "c", catalogueRevision: 1, pointsLimit: 100, selections: [],
+  };
+
+  it("evaluates an empty roster without a duplicate-id crash", () => {
+    const result = evaluate(emptyRoster, cat);
+    expect(result.totalPoints).toBe(0);
+    expect(result.valid).toBe(true);
   });
 });

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { IrCatalogue } from "@muster/domain";
+import type { IrCatalogue, IrEntry } from "@muster/domain";
 import { buildSymbolTable } from "@muster/engine-eval";
 
 const cat: IrCatalogue = {
@@ -29,7 +29,7 @@ describe("buildSymbolTable", () => {
     expect(table.size).toBe(2);
   });
 
-  it("throws on duplicate ids", () => {
+  it("throws on an id collision between differing entries", () => {
     const dup: IrCatalogue = {
       ...cat,
       entries: [
@@ -38,5 +38,48 @@ describe("buildSymbolTable", () => {
       ],
     };
     expect(() => buildSymbolTable(dup)).toThrow(/duplicate/i);
+  });
+
+  it("dedups an identical inlined entry (first wins, subtree walked once)", () => {
+    const shared: IrEntry = {
+      id: "e.shared",
+      name: "Shared",
+      costs: [],
+      categories: [],
+      constraints: [],
+      children: [
+        { id: "e.shared.child", name: "Child", costs: [], categories: [], constraints: [], children: [] },
+      ],
+    };
+    const inlined: IrCatalogue = {
+      ...cat,
+      entries: [structuredClone(shared), structuredClone(shared)],
+    };
+    const table = buildSymbolTable(inlined);
+    // e.shared + e.shared.child, each registered exactly once — no throw.
+    expect(table.size).toBe(2);
+    expect(table.get("e.shared")?.name).toBe("Shared");
+    expect(table.get("e.shared.child")?.name).toBe("Child");
+  });
+
+  it("dedups the same shared entry inlined under two different parents", () => {
+    const shared: IrEntry = {
+      id: "e.bolter",
+      name: "Bolter",
+      costs: [],
+      categories: [],
+      constraints: [],
+      children: [],
+    };
+    const nested: IrCatalogue = {
+      ...cat,
+      entries: [
+        { id: "e.a", name: "A", costs: [], categories: [], constraints: [], children: [structuredClone(shared)] },
+        { id: "e.b", name: "B", costs: [], categories: [], constraints: [], children: [structuredClone(shared)] },
+      ],
+    };
+    const table = buildSymbolTable(nested);
+    expect(table.size).toBe(3); // e.a, e.b, e.bolter (once)
+    expect(table.get("e.bolter")?.name).toBe("Bolter");
   });
 });
