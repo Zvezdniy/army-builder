@@ -22,10 +22,13 @@ impl Budget {
     }
 }
 
-/// Inline every entryLink into a resolved copy of its target, recursively,
-/// clearing entry_links. A path visited-set makes a reference CYCLE a typed
-/// error; a node budget and depth cap make acyclic fan-out/long chains typed
-/// errors too (both are DoS vectors past the parse-time limits).
+// Resolution inlines every entryLink into a resolved copy of its target,
+// recursively, clearing entry_links. A path visited-set makes a reference CYCLE
+// a typed error; a node budget and depth cap make acyclic fan-out/long chains
+// typed errors too (both are DoS vectors past the parse-time limits). An
+// unresolvable target (defined in another file) is a diagnostic + drop, never
+// an error and never an invented subtree.
+
 /// Resolve, discarding diagnostics. Kept for callers that don't need them.
 pub fn resolve(cat: RawCatalogue) -> Result<RawCatalogue, ParseError> {
     let mut diags = Vec::new();
@@ -60,9 +63,9 @@ pub(crate) fn resolve_with_caps(mut cat: RawCatalogue, max_nodes: u64, max_depth
             Some(t) => t,
             None => { diags.push(unresolved_link_diag(&link.target_id)); continue; }
         };
-        if path.contains(&link.target_id) {
-            return Err(ParseError::ReferenceCycle(link.target_id.clone()));
-        }
+        // Seed the path with this root's target so a descendant that links back
+        // to it is caught as a cycle inside resolve_entry. Roots are processed
+        // sequentially with an empty path each iteration, so no pre-check here.
         path.insert(link.target_id.clone());
         let root = resolve_entry(target, &symbols, &mut path, &mut budget, diags, 1)?;
         path.remove(&link.target_id);
