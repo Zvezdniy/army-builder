@@ -80,5 +80,6 @@ export const IrCatalogue = z.object({
   revision: z.number().finite(),
   entries: z.array(IrEntry),
   forceConstraints: z.array(IrConstraint).default([]),
+  categoryNames: z.record(z.string()).default({}),
 });
 export type IrCatalogue = z.infer<typeof IrCatalogue>;

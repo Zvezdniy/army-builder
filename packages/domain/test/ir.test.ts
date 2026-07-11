@@ -2,6 +2,16 @@ import { describe, it, expect } from "vitest";
 import { IrCatalogue, IrConstraint, IrGroup, IrGroupConstraint, IrEntry } from "@muster/domain";
 
 describe("IR schemas", () => {
+  it("parses a catalogue with category names, defaulting to empty", () => {
+    const withNames = IrCatalogue.parse({
+      id: "c", name: "C", gameSystemId: "gs", revision: 1, entries: [],
+      categoryNames: { "cat.hq": "HQ", "cat.troops": "Battleline" },
+    });
+    expect(withNames.categoryNames["cat.hq"]).toBe("HQ");
+    const bare = IrCatalogue.parse({ id: "c", name: "C", gameSystemId: "gs", revision: 1, entries: [] });
+    expect(bare.categoryNames).toEqual({});
+  });
+
   it("defaults includeChildSelections to false", () => {
     const c = IrConstraint.parse({
       id: "c1",
