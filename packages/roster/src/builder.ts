@@ -201,6 +201,45 @@ export function toggleGroupMember(
   return roster;
 }
 
+/** A battlefield-role bucket of root units, for the roster list. */
+export interface RoleGroup {
+  role: string;
+  units: RosterSelection[];
+}
+
+/** Group the roster's root units by their entry's first category, resolved to a
+ *  human name via `catalogue.categoryNames` (fallback: the id, then "Other"). */
+export function unitsByRole(roster: Roster, catalogue: IrCatalogue): RoleGroup[] {
+  const groups: RoleGroup[] = [];
+  const byRole = new Map<string, RoleGroup>();
+  for (const sel of roster.selections) {
+    const entry = catalogueEntry(catalogue, sel.entryId);
+    const catId = entry?.categories[0];
+    const role = catId === undefined ? "Other" : (catalogue.categoryNames?.[catId] ?? catId);
+    let group = byRole.get(role);
+    if (!group) {
+      group = { role, units: [] };
+      byRole.set(role, group);
+      groups.push(group);
+    }
+    group.units.push(sel);
+  }
+  return groups;
+}
+
+/** Number of models in a unit: sum of counts over selected nodes whose entry
+ *  carries a Unit statline profile (IR has no explicit model type). */
+export function modelCount(catalogue: IrCatalogue, selection: RosterSelection): number {
+  let count = 0;
+  const visit = (sel: RosterSelection): void => {
+    const entry = catalogueEntry(catalogue, sel.entryId);
+    if ((entry?.profiles ?? []).some((p) => p.typeName === "Unit")) count += sel.count;
+    for (const child of sel.selections) visit(child);
+  };
+  visit(selection);
+  return count;
+}
+
 function freshSelection(entryId: string): RosterSelection {
   return { id: crypto.randomUUID(), entryId, count: 1, selections: [] };
 }
