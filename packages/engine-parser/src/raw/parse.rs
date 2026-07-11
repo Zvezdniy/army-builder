@@ -55,6 +55,7 @@ pub fn parse_raw(bytes: &[u8]) -> Result<RawCatalogue, ParseError> {
                 b"selectionEntries" => read_entries_into(&mut cat.entries, &mut r, b"selectionEntries")?,
                 b"forceEntries" => read_forces_into(&mut cat.force_entries, &mut r, b"forceEntries")?,
                 b"catalogueLinks" => skip_element(&mut r, b"catalogueLinks")?,
+                b"entryLinks" => read_entrylinks_into(&mut cat.entry_links, &mut r)?,
                 other => {
                     let name = other.to_vec();
                     skip_element(&mut r, &name)?;

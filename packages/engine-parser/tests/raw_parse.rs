@@ -69,3 +69,21 @@ fn reads_modifiers_and_conditions() {
     assert_eq!(m.condition_groups[0].kind, "or");
     assert_eq!(m.condition_groups[0].conditions[0].comparator, "atMost");
 }
+
+#[test]
+fn reads_catalogue_level_entry_links() {
+    let xml = br#"<?xml version="1.0"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <sharedSelectionEntries>
+    <selectionEntry id="e.unit" name="Unit" type="unit"/>
+  </sharedSelectionEntries>
+  <entryLinks>
+    <entryLink id="l1" name="Unit" type="selectionEntry" targetId="e.unit"/>
+    <entryLink id="l2" name="Missing" type="selectionEntry" targetId="e.missing"/>
+  </entryLinks>
+</catalogue>"#;
+    let raw = parse_raw(xml).unwrap();
+    let targets: Vec<&str> = raw.entry_links.iter().map(|l| l.target_id.as_str()).collect();
+    assert_eq!(targets, vec!["e.unit", "e.missing"]);
+}

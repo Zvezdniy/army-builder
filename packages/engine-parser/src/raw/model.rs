@@ -13,6 +13,7 @@ pub struct RawCatalogue {
     pub entries: Vec<RawEntry>,                // filled in Task 6
     pub force_entries: Vec<RawForce>,          // filled in Task 6/11
     pub catalogue_links: Vec<RawCatalogueLink>,// filled in Task 9
+    pub entry_links: Vec<RawEntryLink>,   // catalogue-level <entryLinks> (roster roots)
 }
 
 #[derive(Debug, Default, Clone)]
