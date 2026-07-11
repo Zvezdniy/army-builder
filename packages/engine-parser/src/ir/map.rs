@@ -153,6 +153,15 @@ fn map_group_constraint(c: &RawConstraint, g: &RawGroup, diags: &mut Vec<Diagnos
         diags.push(drop(format!("is not on selections (field {})", c.field)));
         return None;
     }
+    // A group choose-N is a per-owner local count over the group's direct
+    // members. Only group-local scopes align with that: "self"/"parent", or a
+    // foreign-id scope naming the group itself. Broader scopes (force, roster)
+    // or any other foreign id aggregate over a different set than the engine
+    // counts, so mapping them would silently miscount — drop loudly instead.
+    if c.scope != "self" && c.scope != "parent" && c.scope != g.id {
+        diags.push(drop(format!("has non-group-local scope {}", c.scope)));
+        return None;
+    }
     if g.modifiers.iter().any(|m| m.field == c.id) {
         diags.push(drop("has a modifier on its limit".to_string()));
         return None;

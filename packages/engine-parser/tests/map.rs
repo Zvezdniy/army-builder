@@ -212,3 +212,41 @@ fn min_and_max_group_constraints_both_map() {
     assert!(g.constraints.iter().any(|c| c.type_ == "min" && c.value == 1.0));
     assert!(g.constraints.iter().any(|c| c.type_ == "max" && c.value == 2.0));
 }
+
+#[test]
+fn drops_group_constraint_with_non_group_local_scope() {
+    // A group choose-N is a per-owner local count; a force/roster-scoped limit
+    // (an army-wide "0-1 across the whole roster" cap placed at group level)
+    // aggregates over a different set than the engine counts, so mapping it as a
+    // per-owner group limit would silently miscount. It must be dropped loudly.
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <selectionEntries>
+    <selectionEntry id="e.u" name="Unit" type="unit">
+      <selectionEntryGroups>
+        <selectionEntryGroup id="g" name="Army-wide 0-1">
+          <constraints>
+            <constraint id="g.max" type="max" value="1" field="selections" scope="roster"/>
+          </constraints>
+          <selectionEntries>
+            <selectionEntry id="e.x" name="X" type="upgrade"/>
+          </selectionEntries>
+        </selectionEntryGroup>
+      </selectionEntryGroups>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let (ir, diags) = to_ir(&resolve(parse_raw(xml).unwrap()).unwrap());
+    let u = ir.entries.iter().find(|e| e.id == "e.u").unwrap();
+    // roster-scope group limit isn't a per-owner count → no IrGroup emitted
+    assert!(u.groups.is_empty(), "roster-scope group limit must not map: {:?}", u.groups);
+    assert_eq!(
+        diags.iter().filter(|d| d.code == "group.constraint_dropped").count(),
+        1,
+        "{:?}",
+        diags
+    );
+    // member is still flattened into children
+    assert!(u.children.iter().any(|c| c.id == "e.x"));
+}
