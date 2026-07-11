@@ -15,7 +15,13 @@ function SelectionNode({
   onRemove: (id: string) => void;
   onSetCount: (id: string, count: number) => void;
 }) {
-  const name = catalogueEntry(catalogue, selection.entryId)?.name ?? selection.entryId;
+  const entry = catalogueEntry(catalogue, selection.entryId);
+  const name = entry?.name ?? selection.entryId;
+  // Group members are controlled by their group's radio/toggle in UnitConfig, so
+  // they must NOT also appear as their own nested node — only free (non-group)
+  // children get a node (their stepper/remove lives nowhere else).
+  const groupMemberIds = new Set((entry?.groups ?? []).flatMap((g) => g.memberEntryIds));
+  const freeChildren = selection.selections.filter((c) => !groupMemberIds.has(c.entryId));
   return (
     <li style={{
       borderTop: depth === 0 ? "1px solid var(--line)" : "none",
@@ -25,9 +31,9 @@ function SelectionNode({
       <UnitConfig roster={roster} selection={selection} catalogue={catalogue}
         onAddOption={onAddOption} onToggleGroupMember={onToggleGroupMember}
         onRemove={onRemove} onSetCount={onSetCount} />
-      {selection.selections.length > 0 && (
+      {freeChildren.length > 0 && (
         <ul style={{ listStyle: "none", padding: 0 }}>
-          {selection.selections.map((child) => (
+          {freeChildren.map((child) => (
             <SelectionNode key={child.id} roster={roster} selection={child} catalogue={catalogue}
               depth={depth + 1} onAddOption={onAddOption} onToggleGroupMember={onToggleGroupMember}
               onRemove={onRemove} onSetCount={onSetCount} />
