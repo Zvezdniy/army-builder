@@ -2,8 +2,8 @@ use quick_xml::events::{BytesStart, Event};
 use crate::error::ParseError;
 use crate::xml::SafeXmlReader;
 use super::model::{
-    RawCatalogue, RawCategoryLink, RawCondition, RawConditionGroup, RawConstraint, RawCost,
-    RawEntry, RawEntryLink, RawForce, RawGroup, RawModifier,
+    RawCatalogue, RawCategoryLink, RawCharacteristic, RawCondition, RawConditionGroup,
+    RawConstraint, RawCost, RawEntry, RawEntryLink, RawForce, RawGroup, RawModifier, RawProfile,
 };
 
 fn attr(e: &BytesStart, key: &[u8]) -> Option<String> {
@@ -166,6 +166,7 @@ fn read_entry(start: &BytesStart, r: &mut SafeXmlReader) -> Result<RawEntry, Par
                     }
                     b"entryLinks" => read_entrylinks_into(&mut entry.entry_links, r)?,
                     b"modifiers" => read_modifiers_into(&mut entry.modifiers, r)?,
+                    b"profiles" => read_profiles_into(&mut entry.profiles, r)?,
                     other => {
                         let name = other.to_vec();
                         skip_element(r, &name)?;
@@ -241,6 +242,7 @@ fn read_group(start: &BytesStart, r: &mut SafeXmlReader) -> Result<RawGroup, Par
                     }
                     b"entryLinks" => read_entrylinks_into(&mut group.entry_links, r)?,
                     b"modifiers" => read_modifiers_into(&mut group.modifiers, r)?,
+                    b"profiles" => read_profiles_into(&mut group.profiles, r)?,
                     other => {
                         let name = other.to_vec();
                         skip_element(r, &name)?;
@@ -341,6 +343,146 @@ fn read_costs_into(dst: &mut Vec<RawCost>, r: &mut SafeXmlReader) -> Result<(), 
                 _ => {}
             },
             None => return Err(ParseError::MalformedXml("unexpected EOF in costs".to_string())),
+        }
+    }
+}
+
+fn read_profiles_into(dst: &mut Vec<RawProfile>, r: &mut SafeXmlReader) -> Result<(), ParseError> {
+    loop {
+        match r.read_event()? {
+            Some(ev) => match ev.event {
+                Event::Start(e) if e.local_name().as_ref() == b"profile" => {
+                    dst.push(read_profile(&e, r)?);
+                }
+                Event::Empty(e) if e.local_name().as_ref() == b"profile" => {
+                    dst.push(RawProfile {
+                        id: attr(&e, b"id").unwrap_or_default(),
+                        name: attr(&e, b"name").unwrap_or_default(),
+                        type_name: attr(&e, b"typeName").unwrap_or_default(),
+                        ..Default::default()
+                    });
+                }
+                Event::End(end) if end.local_name().as_ref() == b"profiles" => return Ok(()),
+                Event::Start(e) => {
+                    skip_element(r, e.local_name().as_ref())?;
+                }
+                _ => {}
+            },
+            None => {
+                return Err(ParseError::MalformedXml("unexpected EOF in profiles".to_string()))
+            }
+        }
+    }
+}
+
+fn read_profile(start: &BytesStart, r: &mut SafeXmlReader) -> Result<RawProfile, ParseError> {
+    let mut p = RawProfile {
+        id: attr(start, b"id").unwrap_or_default(),
+        name: attr(start, b"name").unwrap_or_default(),
+        type_name: attr(start, b"typeName").unwrap_or_default(),
+        ..Default::default()
+    };
+    loop {
+        match r.read_event()? {
+            Some(ev) => match ev.event {
+                Event::Start(e) => match e.local_name().as_ref() {
+                    b"characteristics" => read_characteristics_into(&mut p.characteristics, r)?,
+                    other => {
+                        let name = other.to_vec();
+                        skip_element(r, &name)?;
+                    }
+                },
+                Event::Empty(_) => {}
+                Event::End(end) if end.local_name().as_ref() == b"profile" => return Ok(p),
+                _ => {}
+            },
+            None => {
+                return Err(ParseError::MalformedXml("unexpected EOF in profile".to_string()))
+            }
+        }
+    }
+}
+
+fn read_characteristics_into(
+    dst: &mut Vec<RawCharacteristic>,
+    r: &mut SafeXmlReader,
+) -> Result<(), ParseError> {
+    loop {
+        match r.read_event()? {
+            Some(ev) => match ev.event {
+                Event::Start(e) if e.local_name().as_ref() == b"characteristic" => {
+                    let name = attr(&e, b"name").unwrap_or_default();
+                    let value = read_text_until(r, b"characteristic")?;
+                    dst.push(RawCharacteristic { name, value });
+                }
+                Event::Empty(e) if e.local_name().as_ref() == b"characteristic" => {
+                    dst.push(RawCharacteristic {
+                        name: attr(&e, b"name").unwrap_or_default(),
+                        value: String::new(),
+                    });
+                }
+                Event::End(end) if end.local_name().as_ref() == b"characteristics" => {
+                    return Ok(())
+                }
+                Event::Start(e) => {
+                    skip_element(r, e.local_name().as_ref())?;
+                }
+                _ => {}
+            },
+            None => {
+                return Err(ParseError::MalformedXml(
+                    "unexpected EOF in characteristics".to_string(),
+                ))
+            }
+        }
+    }
+}
+
+/// Collect text content until the matching end tag, unescaping XML entities.
+fn read_text_until(r: &mut SafeXmlReader, end: &[u8]) -> Result<String, ParseError> {
+    let mut out = String::new();
+    loop {
+        match r.read_event()? {
+            Some(ev) => match ev.event {
+                Event::Text(t) => {
+                    let s = t
+                        .decode()
+                        .map_err(|e| ParseError::MalformedXml(e.to_string()))?;
+                    out.push_str(&s);
+                }
+                // quick-xml 0.41 splits `&entity;` references out of `Text` into their
+                // own `GeneralRef` event rather than pre-unescaping them inline.
+                Event::GeneralRef(bref) => {
+                    match bref
+                        .resolve_char_ref()
+                        .map_err(|e| ParseError::MalformedXml(e.to_string()))?
+                    {
+                        Some(ch) => out.push(ch),
+                        None => {
+                            let name = bref
+                                .decode()
+                                .map_err(|e| ParseError::MalformedXml(e.to_string()))?;
+                            match quick_xml::escape::resolve_xml_entity(&name) {
+                                Some(resolved) => out.push_str(resolved),
+                                None => {
+                                    return Err(ParseError::MalformedXml(format!(
+                                        "unknown XML entity &{};",
+                                        name
+                                    )))
+                                }
+                            }
+                        }
+                    }
+                }
+                Event::End(e) if e.local_name().as_ref() == end => return Ok(out.trim().to_string()),
+                Event::Start(e) => {
+                    skip_element(r, e.local_name().as_ref())?;
+                }
+                _ => {}
+            },
+            None => {
+                return Err(ParseError::MalformedXml("unexpected EOF in text element".to_string()))
+            }
         }
     }
 }
