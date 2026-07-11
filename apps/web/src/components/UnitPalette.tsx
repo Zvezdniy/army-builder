@@ -6,7 +6,7 @@ function points(e: IrEntry): number {
 
 export function UnitPalette({ units, onAdd }: { units: IrEntry[]; onAdd: (entryId: string) => void }) {
   return (
-    <section>
+    <section className="palette">
       <h2>Units</h2>
       <ul style={{ listStyle: "none", padding: 0, display: "grid", gap: 6 }}>
         {units.map((u) => (

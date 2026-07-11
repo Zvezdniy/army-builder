@@ -26,7 +26,7 @@ function SelectionNode({
   const name = entryName(catalogue.entries, selection.entryId) ?? selection.entryId;
   return (
     <li style={{
-      borderTop: depth === 0 ? "1px solid #ccc" : "none",
+      borderTop: depth === 0 ? "1px solid var(--line)" : "none",
       paddingTop: 6, marginTop: 6, marginLeft: depth * 16,
     }}>
       <strong>{name}</strong>
@@ -72,7 +72,7 @@ export function RosterPanel({
       ) : (
         <ul>
           {result.issues.map((i, idx) => (
-            <li key={idx} style={{ color: i.severity === "error" ? "#b00" : "#a60" }}>
+            <li key={idx} style={{ color: i.severity === "error" ? "var(--error)" : "var(--warn)" }}>
               {i.severity}: {i.message}
             </li>
           ))}

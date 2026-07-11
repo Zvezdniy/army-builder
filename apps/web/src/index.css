@@ -1,0 +1,65 @@
+:root {
+  --bg: #f7f7f8;
+  --panel: #ffffff;
+  --ink: #1a1a1e;
+  --muted: #5a5a66;
+  --line: #d9d9e0;
+  --accent: #2f6db3;
+  --accent-ink: #ffffff;
+  --error: #b00020;
+  --warn: #9a6a00;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #16161a;
+    --panel: #202028;
+    --ink: #ececf1;
+    --muted: #a2a2b0;
+    --line: #34343f;
+    --accent: #5a9be0;
+    --accent-ink: #0d0d10;
+    --error: #ff6b6b;
+    --warn: #e0a94a;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+h1, h2, h3 { color: var(--ink); }
+h2 { font-size: 15px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+h3 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 6px; }
+
+button {
+  font: inherit;
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+button:hover { border-color: var(--accent); }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* Unit-palette add buttons read as the primary call-to-action. */
+.palette button { background: var(--accent); color: var(--accent-ink); border-color: transparent; font-weight: 600; }
+
+input[type="number"] {
+  font: inherit;
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 2px 4px;
+}
+
+section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
