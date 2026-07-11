@@ -134,4 +134,18 @@ mod tests {
         };
         assert!(matches!(SymbolTable::build(&cat), Err(ParseError::MalformedXml(_))));
     }
+
+    #[test]
+    fn empty_id_groups_do_not_collide() {
+        // The raw parser defaults a missing group id to "" (unwrap_or_default), so
+        // real files can carry several id-less groups. They are not link-addressable
+        // and must not spuriously trip the duplicate-id hard error.
+        let cat = RawCatalogue {
+            id: "c".into(),
+            shared_groups: vec![group(""), group("")],
+            ..Default::default()
+        };
+        let st = SymbolTable::build(&cat).unwrap();
+        assert!(st.group("").is_none(), "empty-id groups are not indexed");
+    }
 }
