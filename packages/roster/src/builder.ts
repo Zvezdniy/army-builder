@@ -166,14 +166,13 @@ function initialChildren(entry: IrEntry): RosterSelection[] {
   const grouped = new Set((entry.groups ?? []).flatMap((g) => g.memberEntryIds));
 
   for (const g of entry.groups ?? []) {
-    const min = g.constraints.find((c) => c.type === "min")?.value ?? 0;
+    const min = groupBound(g, "min", 0);
     const pick = g.defaultMemberEntryId ?? (min >= 1 ? g.memberEntryIds[0] : undefined);
     if (pick !== undefined) kids.push(seedChild(entry, pick));
   }
   for (const child of entry.children) {
     if (grouped.has(child.id)) continue; // group members handled above
-    const min = ownMin(child);
-    if (min >= 1) kids.push(seedChild(entry, child.id));
+    if (ownBound(child, "min", 0) >= 1) kids.push(seedChild(entry, child.id));
   }
   return kids;
 }
@@ -181,16 +180,9 @@ function initialChildren(entry: IrEntry): RosterSelection[] {
 /** A fresh child selection for `entryId`, counted to that option's own min (>=1). */
 function seedChild(parent: IrEntry, entryId: string): RosterSelection {
   const child = parent.children.find((c) => c.id === entryId);
-  const count = child ? Math.max(1, ownMin(child)) : 1;
+  const count = child ? Math.max(1, ownBound(child, "min", 0)) : 1;
   const grandkids = child ? initialChildren(child) : [];
   return { id: crypto.randomUUID(), entryId, count, selections: grandkids };
-}
-
-/** An entry's own min selections-count bound (scope self/parent), else 0. */
-function ownMin(entry: IrEntry): number {
-  return entry.constraints.find(
-    (c) => c.field === "selections" && (c.scope === "self" || c.scope === "parent") && c.type === "min",
-  )?.value ?? 0;
 }
 
 function mapTree(
