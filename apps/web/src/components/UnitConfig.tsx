@@ -16,8 +16,11 @@ export function UnitConfig({
   const { options, groups } = optionsFor(roster, selection.id, catalogue);
   const nameById = new Map(options.map((o) => [o.id, o.name] as const));
   const memberIds = new Set(groups.flatMap((g) => g.memberEntryIds));
-  // Options that belong to no group stay freely addable.
-  const freeOptions = options.filter((o) => !memberIds.has(o.id));
+  const presentEntryIds = new Set(selection.selections.map((s) => s.entryId));
+  // An option that is not in a group and not already present is freely addable.
+  // Once added it lives as a single row edited by its own count/remove — we do
+  // not re-offer it, so an entry can't be spawned as duplicate rows.
+  const freeOptions = options.filter((o) => !memberIds.has(o.id) && !presentEntryIds.has(o.id));
 
   // How THIS selection's own count is edited, from its entry's constraints.
   const entry = catalogueEntry(catalogue, selection.entryId);

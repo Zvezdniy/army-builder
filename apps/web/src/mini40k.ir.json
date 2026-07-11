@@ -171,108 +171,97 @@
     {
       "id": "e.squad",
       "name": "Battle Squad",
-      "categories": [
-        "cat.troops"
-      ],
-      "children": [
+      "costs": [
         {
-          "id": "squad-body",
-          "name": "Battle Squad",
-          "costs": [
+          "name": "points",
+          "value": 100.0,
+          "modifiers": [
             {
-              "name": "points",
-              "value": 100.0,
-              "modifiers": [
+              "id": "mod.squad.0",
+              "type": "decrement",
+              "value": 10.0,
+              "conditions": [
                 {
-                  "id": "mod.squad-body.0",
-                  "type": "decrement",
-                  "value": 10.0,
+                  "id": "cond.atLeast.cat.troops",
+                  "comparator": "atLeast",
+                  "value": 3.0,
+                  "field": "selections",
+                  "scope": "roster",
+                  "targetType": "category",
+                  "targetId": "cat.troops",
+                  "includeChildSelections": false
+                }
+              ],
+              "conditionGroups": [
+                {
+                  "type": "or",
                   "conditions": [
                     {
-                      "id": "cond.atLeast.cat.troops",
-                      "comparator": "atLeast",
-                      "value": 3.0,
+                      "id": "cond.atMost.cat.troops",
+                      "comparator": "atMost",
+                      "value": 10.0,
                       "field": "selections",
                       "scope": "roster",
                       "targetType": "category",
                       "targetId": "cat.troops",
                       "includeChildSelections": false
                     }
-                  ],
-                  "conditionGroups": [
-                    {
-                      "type": "or",
-                      "conditions": [
-                        {
-                          "id": "cond.atMost.cat.troops",
-                          "comparator": "atMost",
-                          "value": 10.0,
-                          "field": "selections",
-                          "scope": "roster",
-                          "targetType": "category",
-                          "targetId": "cat.troops",
-                          "includeChildSelections": false
-                        }
-                      ]
-                    }
                   ]
                 }
               ]
             }
+          ]
+        }
+      ],
+      "categories": [
+        "cat.troops"
+      ],
+      "profiles": [
+        { "name": "Bolt rifle", "typeName": "Ranged Weapons", "keywords": ["Assault", "Heavy"], "characteristics": [
+          { "name": "Range", "value": "24\"" }, { "name": "A", "value": "2" }, { "name": "BS", "value": "3+" },
+          { "name": "S", "value": "4" }, { "name": "AP", "value": "-1" }, { "name": "D", "value": "1" } ] },
+        { "name": "Combat Squads", "typeName": "Abilities", "characteristics": [
+          { "name": "Description", "value": "Before deployment you can split this unit into two." } ] }
+      ],
+      "children": [
+        {
+          "id": "e.squad.trooper",
+          "name": "Trooper",
+          "costs": [
+            {
+              "name": "points",
+              "value": 20.0
+            }
           ],
           "categories": [
-            "cat.troops"
+            "cat.model"
           ],
           "constraints": [
             {
-              "id": "sq.models.min",
+              "id": "tr.min",
               "type": "min",
               "value": 5.0,
               "field": "selections",
               "scope": "self",
               "targetType": "entry",
-              "targetId": "squad-body",
-              "includeChildSelections": true
+              "targetId": "e.squad.trooper",
+              "includeChildSelections": false
+            },
+            {
+              "id": "tr.max",
+              "type": "max",
+              "value": 10.0,
+              "field": "selections",
+              "scope": "self",
+              "targetType": "entry",
+              "targetId": "e.squad.trooper",
+              "includeChildSelections": false
             }
           ],
           "profiles": [
-            { "name": "Battle Squad", "typeName": "Unit", "characteristics": [
+            { "name": "Trooper", "typeName": "Unit", "characteristics": [
               { "name": "M", "value": "6\"" }, { "name": "T", "value": "4" }, { "name": "SV", "value": "3+" },
-              { "name": "W", "value": "2" }, { "name": "LD", "value": "6+" }, { "name": "OC", "value": "2" } ] },
-            { "name": "Bolt rifle", "typeName": "Ranged Weapons", "keywords": ["Assault", "Heavy"], "characteristics": [
-              { "name": "Range", "value": "24\"" }, { "name": "A", "value": "2" }, { "name": "BS", "value": "3+" },
-              { "name": "S", "value": "4" }, { "name": "AP", "value": "-1" }, { "name": "D", "value": "1" } ] },
-            { "name": "Combat Squads", "typeName": "Abilities", "characteristics": [
-              { "name": "Description", "value": "Before deployment you can split this unit into two." } ] }
-          ],
-          "children": [
-            {
-              "id": "squad-body.model",
-              "name": "Trooper",
-              "costs": [
-                {
-                  "name": "points",
-                  "value": 20.0
-                }
-              ],
-              "categories": [
-                "cat.model"
-              ],
-              "profiles": [
-                {
-                  "name": "Trooper",
-                  "typeName": "Unit",
-                  "characteristics": [
-                    { "name": "M", "value": "6\"" },
-                    { "name": "T", "value": "4" },
-                    { "name": "SV", "value": "3+" },
-                    { "name": "W", "value": "2" },
-                    { "name": "LD", "value": "6+" },
-                    { "name": "OC", "value": "2" }
-                  ]
-                }
-              ]
-            }
+              { "name": "W", "value": "2" }, { "name": "LD", "value": "6+" }, { "name": "OC", "value": "2" } ] }
           ]
         }
       ]
