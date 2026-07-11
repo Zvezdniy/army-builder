@@ -481,6 +481,75 @@ fn omits_empty_category_and_rule_maps() {
 }
 
 #[test]
+fn maps_hidden_modifier_with_instance_of_roster_scope() {
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <selectionEntries>
+    <selectionEntry id="e.enh" name="Enh" type="upgrade" hidden="false">
+      <modifiers>
+        <modifier type="set" value="true" field="hidden">
+          <conditions>
+            <condition type="notInstanceOf" value="1" field="selections" scope="roster" childId="cat.det"/>
+          </conditions>
+        </modifier>
+      </modifiers>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let (ir, diags) = to_ir(&resolve(parse_raw(xml).unwrap()).unwrap());
+    let e = ir.entries.iter().find(|e| e.id == "e.enh").unwrap();
+    assert!(!e.hidden);
+    assert_eq!(e.visibility_modifiers.len(), 1);
+    let vm = &e.visibility_modifiers[0];
+    assert!(vm.set);
+    let c = &vm.conditions.as_ref().unwrap()[0];
+    assert_eq!((c.comparator.as_str(), c.value), ("lessThan", 1.0)); // notInstanceOf -> lessThan 1
+    assert_eq!(c.scope, "roster");
+    // hidden modifiers are NOT reported as target_unmapped
+    assert!(!diags.iter().any(|d| d.code == "modifier.target_unmapped"));
+}
+
+#[test]
+fn drops_hidden_modifier_with_unsupported_scope() {
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <selectionEntries>
+    <selectionEntry id="e.u" name="U" type="upgrade">
+      <modifiers>
+        <modifier type="set" value="true" field="hidden">
+          <conditionGroups><conditionGroup type="or"><conditions>
+            <condition type="instanceOf" value="1" field="selections" scope="root-entry" childId="cat.x"/>
+          </conditions></conditionGroup></conditionGroups>
+        </modifier>
+      </modifiers>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let (ir, diags) = to_ir(&resolve(parse_raw(xml).unwrap()).unwrap());
+    let e = ir.entries.iter().find(|e| e.id == "e.u").unwrap();
+    // unsupported scope -> whole modifier dropped, entry stays visible
+    assert!(e.visibility_modifiers.is_empty());
+    assert!(!e.hidden);
+    assert!(diags.iter().any(|d| d.code == "modifier.hidden_condition_unmapped"));
+}
+
+#[test]
+fn reads_static_hidden_attribute() {
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <selectionEntries>
+    <selectionEntry id="e.h" name="H" type="upgrade" hidden="true"/>
+  </selectionEntries>
+</catalogue>"#;
+    let (ir, _d) = to_ir(&resolve(parse_raw(xml).unwrap()).unwrap());
+    let e = ir.entries.iter().find(|e| e.id == "e.h").unwrap();
+    assert!(e.hidden);
+}
+
+#[test]
 fn root_entrylink_into_cycle_is_typed_error() {
     let xml = br#"<?xml version="1.0"?>
 <catalogue id="c" name="C" revision="1" gameSystemId="gs"

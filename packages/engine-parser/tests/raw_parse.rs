@@ -183,6 +183,21 @@ fn reads_nested_rule_by_name_and_alias() {
 }
 
 #[test]
+fn reads_hidden_attr_and_modifier_value_raw() {
+    let xml = br#"<catalogue id="c" name="C" gameSystemId="g" revision="1">
+      <selectionEntries>
+        <selectionEntry id="e" name="E" type="upgrade" hidden="true">
+          <modifiers><modifier type="set" value="true" field="hidden"/></modifiers>
+        </selectionEntry>
+      </selectionEntries>
+    </catalogue>"#;
+    let cat = parse_raw(xml).unwrap();
+    let e = cat.entries.iter().find(|e| e.id == "e").unwrap();
+    assert!(e.hidden);
+    assert_eq!(e.modifiers[0].value_raw, "true");
+}
+
+#[test]
 fn rule_without_description_is_skipped() {
     let xml = br#"<catalogue id="c" name="C" gameSystemId="g" revision="1">
       <sharedRules>
