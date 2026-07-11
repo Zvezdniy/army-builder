@@ -1,18 +1,24 @@
 import type { IrCatalogue, Roster } from "@muster/domain";
-import { unitsByRole, modelCount, availableUnits, catalogueEntry } from "@muster/roster";
+import { unitsByRole, modelCount, catalogueEntry } from "@muster/roster";
 
+/** The roster window: added units grouped by role, plus the add-unit trigger. */
 export function RosterList({
-  roster, catalogue, selectedUnitId, onSelect, onAddUnit,
+  roster, catalogue, selectedUnitId, onSelect, onOpenPicker,
 }: {
   roster: Roster;
   catalogue: IrCatalogue;
   selectedUnitId: string | undefined;
   onSelect: (id: string) => void;
-  onAddUnit: (entryId: string) => void;
+  onOpenPicker: () => void;
 }) {
   const groups = unitsByRole(roster, catalogue);
   return (
     <section data-testid="roster-list" className="rl">
+      <div className="rl-head">
+        <h2 className="rl-title">Ростер</h2>
+        <button className="rl-add-open" onClick={onOpenPicker}>+ добавить юнит</button>
+      </div>
+      {groups.length === 0 && <div className="rl-empty">Ростер пуст — добавь юнит</div>}
       {groups.map((g) => (
         <div key={g.role} className="rl-group">
           <h3 className="rl-role">{g.role}</h3>
@@ -23,7 +29,7 @@ export function RosterList({
               return (
                 <li key={u.id}>
                   <button
-                    className={u.id === selectedUnitId ? "rl-unit chosen" : "rl-unit"}
+                    className={u.id === selectedUnitId ? "rl-unit selected" : "rl-unit"}
                     aria-label={`open ${name}`} onClick={() => onSelect(u.id)}>
                     <span>{name}</span>
                     <span className="rl-models">{models} models</span>
@@ -34,15 +40,6 @@ export function RosterList({
           </ul>
         </div>
       ))}
-      <div className="rl-add">
-        <div className="rl-add-label">+ добавить юнит</div>
-        {availableUnits(catalogue).map((u) => (
-          <button key={u.id} className="rl-add-btn" aria-label={`add ${u.name}`}
-            onClick={() => onAddUnit(u.id)}>
-            {u.name}
-          </button>
-        ))}
-      </div>
     </section>
   );
 }

@@ -18,15 +18,22 @@ const roster = {
 describe("RosterList", () => {
   it("shows units under their role heading and reports model count", () => {
     render(<RosterList roster={roster} catalogue={cat} selectedUnitId={undefined}
-      onSelect={() => {}} onAddUnit={() => {}} />);
+      onSelect={() => {}} onOpenPicker={() => {}} />);
     expect(screen.getByText("HQ")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /open Captain/i })).toHaveTextContent("1 models");
   });
   it("selects a unit on click", async () => {
     const onSelect = vi.fn();
     render(<RosterList roster={roster} catalogue={cat} selectedUnitId={undefined}
-      onSelect={onSelect} onAddUnit={() => {}} />);
+      onSelect={onSelect} onOpenPicker={() => {}} />);
     await userEvent.click(screen.getByRole("button", { name: /open Captain/i }));
     expect(onSelect).toHaveBeenCalledWith("s1");
+  });
+  it("opens the picker from the add-unit button", async () => {
+    const onOpenPicker = vi.fn();
+    render(<RosterList roster={roster} catalogue={cat} selectedUnitId={undefined}
+      onSelect={() => {}} onOpenPicker={onOpenPicker} />);
+    await userEvent.click(screen.getByRole("button", { name: /добавить юнит/i }));
+    expect(onOpenPicker).toHaveBeenCalled();
   });
 });

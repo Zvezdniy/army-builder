@@ -8,7 +8,8 @@ describe("builder interactions", () => {
     const user = userEvent.setup();
     render(<App />);
     expect(screen.getByTestId("points")).toHaveTextContent(/^0 \/ 2000/);
-    // Captain (90 pts) in the palette
+    // Captain (90 pts) — added via the unit picker
+    await user.click(screen.getByRole("button", { name: /добавить юнит/i }));
     await user.click(screen.getByRole("button", { name: /add Captain/i }));
     expect(screen.getByTestId("points")).toHaveTextContent(/^90 \/ 2000/);
     // it now appears in the roster panel
@@ -18,6 +19,7 @@ describe("builder interactions", () => {
   it("selecting a weapon in a choose-1 group swaps rather than stacking", async () => {
     const user = userEvent.setup();
     render(<App />);
+    await user.click(screen.getByRole("button", { name: /добавить юнит/i }));
     await user.click(screen.getByRole("button", { name: /add Captain/i }));
     // Wargear is a max-1 group: Power Sword (5) / Power Axe (10) are toggles, not "+".
     await user.click(screen.getByRole("button", { name: /select Power Sword/i }));
@@ -36,6 +38,7 @@ describe("builder interactions", () => {
   it("derives controls from constraints: required radio, and a bounded stepper", async () => {
     const user = userEvent.setup();
     render(<App />);
+    await user.click(screen.getByRole("button", { name: /добавить юнит/i }));
     await user.click(screen.getByRole("button", { name: /add Assault Squad/i }));
     // prepopulated on add: Chainsword (group default, +5) and Marine (min 1, +18) → 80+5+18 = 103
     expect(screen.getByTestId("points")).toHaveTextContent(/^103 \/ 2000/);

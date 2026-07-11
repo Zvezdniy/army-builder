@@ -5,12 +5,14 @@ import { createRoster, addUnit, addOption, toggleGroupMember, setCount, remove }
 import { evaluate } from "@muster/engine-eval";
 import { RosterList } from "./components/RosterList";
 import { UnitDetail } from "./components/UnitDetail";
+import { AddUnitPicker } from "./components/AddUnitPicker";
 import mini40k from "./mini40k.ir.json";
 
 export function App() {
   const [catalogue, setCatalogue] = useState<IrCatalogue>(() => IrCatalogueSchema.parse(mini40k));
   const [roster, setRoster] = useState(() => createRoster(catalogue, 2000));
   const [selectedUnitId, setSelectedUnitId] = useState<string | undefined>(undefined);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const result = useMemo(() => evaluate(roster, catalogue), [roster, catalogue]);
 
   const loadIr = async (file: File) => {
@@ -18,6 +20,7 @@ export function App() {
     setCatalogue(parsed);
     setRoster(createRoster(parsed, 2000));
     setSelectedUnitId(undefined);
+    setPickerOpen(false);
   };
 
   // Add a unit and focus it, so its config/datasheet render immediately.
@@ -27,6 +30,7 @@ export function App() {
     const next = addUnit(roster, entryId, catalogue);
     setRoster(next);
     setSelectedUnitId(next.selections[next.selections.length - 1]?.id);
+    setPickerOpen(false);
   };
 
   const handleRemove = (id: string) => {
@@ -61,7 +65,7 @@ export function App() {
       )}
       <div className="builder" data-view={selectedUnitId ? "detail" : "list"}>
         <RosterList roster={roster} catalogue={catalogue} selectedUnitId={selectedUnitId}
-          onSelect={setSelectedUnitId} onAddUnit={addAndSelect} />
+          onSelect={setSelectedUnitId} onOpenPicker={() => setPickerOpen(true)} />
         <UnitDetail roster={roster} catalogue={catalogue} selectedUnitId={selectedUnitId}
           onBack={() => setSelectedUnitId(undefined)}
           onAddOption={(pid, eid) => setRoster((r) => addOption(r, pid, eid))}
@@ -69,6 +73,9 @@ export function App() {
           onRemove={handleRemove}
           onSetCount={(id, c) => setRoster((r) => setCount(r, id, c))} />
       </div>
+      {pickerOpen && (
+        <AddUnitPicker catalogue={catalogue} onAdd={addAndSelect} onClose={() => setPickerOpen(false)} />
+      )}
     </main>
   );
 }
