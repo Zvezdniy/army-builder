@@ -89,6 +89,10 @@ fn unresolved_link_diag(target_id: &str) -> Diagnostic {
 /// target (absent from the index its type names) is diagnosed and dropped — never
 /// cross-resolved against the other index. A link into a node already on the path
 /// is a reference cycle. The node budget/depth cap are shared with entry resolution.
+// The parameter list mirrors resolve_entry/resolve_group's threaded state (symbols,
+// path, budget, diags, depth) plus the two output sinks; a context struct would
+// diverge from that established threading style for no real gain.
+#[allow(clippy::too_many_arguments)]
 fn resolve_link(
     link: &RawEntryLink, symbols: &SymbolTable, path: &mut HashSet<String>,
     budget: &mut Budget, diags: &mut Vec<Diagnostic>, depth: usize,
@@ -169,7 +173,6 @@ fn resolve_group(group: &RawGroup, symbols: &SymbolTable, path: &mut HashSet<Str
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::raw::RawEntryLink;
 
     fn link(target: &str) -> RawEntryLink {
         RawEntryLink { target_id: target.to_string(), link_type: String::new() }
@@ -233,6 +236,27 @@ mod tests {
             id: "c".into(), entries: vec![owner], shared_groups: vec![g0], ..Default::default()
         };
         assert!(matches!(resolve(cat), Err(ParseError::ReferenceCycle(_))));
+    }
+
+    #[test]
+    fn group_typed_link_does_not_fall_back_to_entry_index() {
+        // An id present ONLY in the entry index; a selectionEntryGroup-typed link
+        // to it must diagnose+drop, never cross-resolve against the entry index.
+        let owner = RawEntry {
+            id: "owner".into(), entry_type: "unit".into(),
+            entry_links: vec![group_link("x")], ..Default::default()
+        };
+        let cat = RawCatalogue {
+            id: "c".into(),
+            entries: vec![owner],
+            shared_entries: vec![entry("x", vec![])],
+            ..Default::default()
+        };
+        let mut diags = Vec::new();
+        let resolved = resolve_with_diags(cat, &mut diags).unwrap();
+        let owner = resolved.entries.iter().find(|e| e.id == "owner").unwrap();
+        assert!(owner.groups.is_empty() && owner.entries.is_empty(), "no cross-fallback into entries");
+        assert!(diags.iter().any(|d| d.code == "entryLink.unresolved" && d.message.contains("x")));
     }
 
     #[test]
