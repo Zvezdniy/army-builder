@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use quick_xml::events::{BytesStart, Event};
 use crate::error::ParseError;
 use crate::xml::SafeXmlReader;
@@ -80,6 +81,11 @@ pub fn parse_raw(bytes: &[u8]) -> Result<RawCatalogue, ParseError> {
             _ => {}
         }
     }
+    // Rule definitions live both in top-level <sharedRules>/<rules> (game system)
+    // and nested inside selectionEntries/forceEntries (faction rules). The main
+    // structural loop above skips nested <rules>; a flat second pass captures every
+    // <rule> definition regardless of nesting.
+    cat.rules = read_all_rules(bytes)?;
     Ok(cat)
 }
 
@@ -432,6 +438,64 @@ fn read_characteristics_into(
             None => {
                 return Err(ParseError::MalformedXml(
                     "unexpected EOF in characteristics".to_string(),
+                ))
+            }
+        }
+    }
+}
+
+/// Second flat pass collecting every rule definition's text, keyed by the rule's
+/// `name` and (when present) its `<alias>`. <rule> elements are definitions that
+/// carry a <description>; <infoLink> references have no description and are ignored
+/// because they are not <rule> elements. Self-closing <rule/> has no body and is
+/// skipped. Keyed into a BTreeMap for deterministic serialization downstream.
+fn read_all_rules(bytes: &[u8]) -> Result<BTreeMap<String, String>, ParseError> {
+    let mut r = SafeXmlReader::from_bytes(bytes);
+    let mut out: BTreeMap<String, String> = BTreeMap::new();
+    while let Some(ev) = r.read_event()? {
+        if let Event::Start(e) = ev.event {
+            if e.local_name().as_ref() == b"rule" {
+                let name = attr(&e, b"name");
+                let (desc, alias) = read_rule_body(&mut r)?;
+                if let Some(desc) = desc.filter(|d| !d.is_empty()) {
+                    if let Some(name) = name.filter(|n| !n.is_empty()) {
+                        out.insert(name, desc.clone());
+                    }
+                    if let Some(alias) = alias.filter(|a| !a.is_empty()) {
+                        out.insert(alias, desc);
+                    }
+                }
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// Read a <rule>'s children until </rule>, returning (description, alias) text.
+fn read_rule_body(r: &mut SafeXmlReader) -> Result<(Option<String>, Option<String>), ParseError> {
+    let mut desc: Option<String> = None;
+    let mut alias: Option<String> = None;
+    loop {
+        match r.read_event()? {
+            Some(ev) => match ev.event {
+                Event::Start(e) => match e.local_name().as_ref() {
+                    b"description" => desc = Some(read_text_until(r, b"description")?),
+                    b"alias" => alias = Some(read_text_until(r, b"alias")?),
+                    other => {
+                        let name = other.to_vec();
+                        skip_element(r, &name)?;
+                    }
+                },
+                // Self-closing children (e.g. <alias/>) carry no text.
+                Event::Empty(_) => {}
+                Event::End(end) if end.local_name().as_ref() == b"rule" => {
+                    return Ok((desc, alias))
+                }
+                _ => {}
+            },
+            None => {
+                return Err(ParseError::MalformedXml(
+                    "unexpected EOF in rule".to_string(),
                 ))
             }
         }

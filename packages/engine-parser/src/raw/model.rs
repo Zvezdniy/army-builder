@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 #[derive(Debug, Default)]
 pub struct RawCatalogue {
@@ -8,6 +8,7 @@ pub struct RawCatalogue {
     pub game_system_id: Option<String>,
     pub cost_types: HashMap<String, String>,   // id -> name
     pub categories: HashMap<String, String>,   // id -> name
+    pub rules: BTreeMap<String, String>,       // rule name / alias -> description text
     pub shared_entries: Vec<RawEntry>,         // filled in Task 6
     pub shared_groups: Vec<RawGroup>,          // filled in Task 6
     pub entries: Vec<RawEntry>,                // filled in Task 6

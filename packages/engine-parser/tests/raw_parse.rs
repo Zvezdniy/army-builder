@@ -162,3 +162,35 @@ fn reads_profiles_with_characteristics() {
     assert_eq!(mp.characteristics[0].value, "Melee");
     assert_eq!(mp.characteristics[1].value, "-2");
 }
+
+#[test]
+fn reads_nested_rule_by_name_and_alias() {
+    let xml = br#"<catalogue id="c" name="C" gameSystemId="g" revision="1">
+      <selectionEntries>
+        <selectionEntry id="u" name="Unit" type="unit">
+          <rules>
+            <rule id="r1" name="Pistol">
+              <description>Can shoot in Engagement.</description>
+              <alias>PISTOL</alias>
+            </rule>
+          </rules>
+        </selectionEntry>
+      </selectionEntries>
+    </catalogue>"#;
+    let cat = parse_raw(xml).unwrap();
+    assert_eq!(cat.rules.get("Pistol").map(String::as_str), Some("Can shoot in Engagement."));
+    assert_eq!(cat.rules.get("PISTOL").map(String::as_str), Some("Can shoot in Engagement."));
+}
+
+#[test]
+fn rule_without_description_is_skipped() {
+    let xml = br#"<catalogue id="c" name="C" gameSystemId="g" revision="1">
+      <sharedRules>
+        <rule id="r2" name="Empty"/>
+        <rule id="r3" name="HasText"><description>&quot;quoted&quot; text</description></rule>
+      </sharedRules>
+    </catalogue>"#;
+    let cat = parse_raw(xml).unwrap();
+    assert!(cat.rules.get("Empty").is_none());
+    assert_eq!(cat.rules.get("HasText").map(String::as_str), Some("\"quoted\" text"));
+}
