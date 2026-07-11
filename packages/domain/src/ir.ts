@@ -44,6 +44,10 @@ export const IrProfile = z.object({
   name: z.string(),
   typeName: z.string(),
   characteristics: z.array(IrCharacteristic).default([]),
+  keywords: z.array(z.string()).optional(),
+  // Ability grouping ("Core", "Faction", …): collapsed abilities render as one
+  // compact line per group; ungrouped abilities render as name + description.
+  group: z.string().optional(),
 });
 export type IrProfile = z.infer<typeof IrProfile>;
 
@@ -80,5 +84,7 @@ export const IrCatalogue = z.object({
   revision: z.number().finite(),
   entries: z.array(IrEntry),
   forceConstraints: z.array(IrConstraint).default([]),
+  categoryNames: z.record(z.string()).default({}),
+  ruleTexts: z.record(z.string()).optional(),
 });
 export type IrCatalogue = z.infer<typeof IrCatalogue>;

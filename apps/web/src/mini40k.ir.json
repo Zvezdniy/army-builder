@@ -3,6 +3,14 @@
   "name": "Mini 40k",
   "gameSystemId": "gs.40k",
   "revision": 1,
+  "categoryNames": { "cat.hq": "HQ", "cat.troops": "Battleline", "cat.model": "Model" },
+  "ruleTexts": {
+    "Precision": "Each time an attack made with this weapon targets a unit containing a Character, the attacking player can allocate that attack to a Character model in that unit.",
+    "Anti-Infantry 4+": "An unmodified Wound roll of 4+ scores a Critical Wound against a target with the Infantry keyword.",
+    "Assault": "This weapon can be shot even if the bearer's unit Advanced this turn.",
+    "Heavy": "Each time an attack is made with this weapon, if the bearer's unit Remained Stationary this turn, add 1 to that attack's Hit roll.",
+    "Pistol": "This weapon can be shot even while the bearer's unit is within Engagement Range of enemy units."
+  },
   "entries": [
     {
       "id": "e.captain",
@@ -30,10 +38,63 @@
           ]
         },
         {
+          "name": "Invulnerable Save",
+          "typeName": "Invulnerable Save",
+          "characteristics": [ { "name": "SV", "value": "4+" } ]
+        },
+        {
+          "name": "Bolt Pistol",
+          "typeName": "Ranged Weapons",
+          "keywords": ["Pistol"],
+          "characteristics": [
+            { "name": "Range", "value": "12\"" }, { "name": "A", "value": "1" }, { "name": "BS", "value": "2+" },
+            { "name": "S", "value": "4" }, { "name": "AP", "value": "0" }, { "name": "D", "value": "1" }
+          ]
+        },
+        {
+          "name": "Leader",
+          "typeName": "Abilities",
+          "group": "Core",
+          "characteristics": []
+        },
+        {
+          "name": "Scouts 6\"",
+          "typeName": "Abilities",
+          "group": "Core",
+          "characteristics": []
+        },
+        {
+          "name": "Oath of Moment",
+          "typeName": "Abilities",
+          "group": "Faction",
+          "characteristics": []
+        },
+        {
           "name": "Rites of Battle",
           "typeName": "Abilities",
           "characteristics": [
-            { "name": "Description", "value": "Once per battle round, re-roll one Hit roll." }
+            { "name": "Description", "value": "Once per battle round, re-roll one Hit roll for a unit within 6\"." }
+          ]
+        },
+        {
+          "name": "Finest Hour",
+          "typeName": "Abilities",
+          "characteristics": [
+            { "name": "Description", "value": "Once per battle, this model's melee attacks gain +1 to Wound." }
+          ]
+        },
+        {
+          "name": "Supreme Commander",
+          "typeName": "Supreme Commander",
+          "characteristics": [
+            { "name": "Description", "value": "If this model is in your army, it must be your Warlord." }
+          ]
+        },
+        {
+          "name": "Damaged: 1-2 Wounds Remaining",
+          "typeName": "Damaged",
+          "characteristics": [
+            { "name": "Description", "value": "While this model has 1-2 wounds remaining, subtract 1 from its Hit rolls." }
           ]
         }
       ],
@@ -58,7 +119,8 @@
                 { "name": "S", "value": "5" },
                 { "name": "AP", "value": "-2" },
                 { "name": "D", "value": "1" }
-              ]
+              ],
+              "keywords": ["Precision"]
             }
           ]
         },
@@ -82,7 +144,8 @@
                 { "name": "S", "value": "6" },
                 { "name": "AP", "value": "-2" },
                 { "name": "D", "value": "2" }
-              ]
+              ],
+              "keywords": ["Anti-Infantry 4+"]
             }
           ]
         }
@@ -108,98 +171,97 @@
     {
       "id": "e.squad",
       "name": "Battle Squad",
-      "categories": [
-        "cat.troops"
-      ],
-      "children": [
+      "costs": [
         {
-          "id": "squad-body",
-          "name": "Battle Squad",
-          "costs": [
+          "name": "points",
+          "value": 100.0,
+          "modifiers": [
             {
-              "name": "points",
-              "value": 100.0,
-              "modifiers": [
+              "id": "mod.squad.0",
+              "type": "decrement",
+              "value": 10.0,
+              "conditions": [
                 {
-                  "id": "mod.squad-body.0",
-                  "type": "decrement",
-                  "value": 10.0,
+                  "id": "cond.atLeast.cat.troops",
+                  "comparator": "atLeast",
+                  "value": 3.0,
+                  "field": "selections",
+                  "scope": "roster",
+                  "targetType": "category",
+                  "targetId": "cat.troops",
+                  "includeChildSelections": false
+                }
+              ],
+              "conditionGroups": [
+                {
+                  "type": "or",
                   "conditions": [
                     {
-                      "id": "cond.atLeast.cat.troops",
-                      "comparator": "atLeast",
-                      "value": 3.0,
+                      "id": "cond.atMost.cat.troops",
+                      "comparator": "atMost",
+                      "value": 10.0,
                       "field": "selections",
                       "scope": "roster",
                       "targetType": "category",
                       "targetId": "cat.troops",
                       "includeChildSelections": false
                     }
-                  ],
-                  "conditionGroups": [
-                    {
-                      "type": "or",
-                      "conditions": [
-                        {
-                          "id": "cond.atMost.cat.troops",
-                          "comparator": "atMost",
-                          "value": 10.0,
-                          "field": "selections",
-                          "scope": "roster",
-                          "targetType": "category",
-                          "targetId": "cat.troops",
-                          "includeChildSelections": false
-                        }
-                      ]
-                    }
                   ]
                 }
               ]
             }
+          ]
+        }
+      ],
+      "categories": [
+        "cat.troops"
+      ],
+      "profiles": [
+        { "name": "Bolt rifle", "typeName": "Ranged Weapons", "keywords": ["Assault", "Heavy"], "characteristics": [
+          { "name": "Range", "value": "24\"" }, { "name": "A", "value": "2" }, { "name": "BS", "value": "3+" },
+          { "name": "S", "value": "4" }, { "name": "AP", "value": "-1" }, { "name": "D", "value": "1" } ] },
+        { "name": "Combat Squads", "typeName": "Abilities", "characteristics": [
+          { "name": "Description", "value": "Before deployment you can split this unit into two." } ] }
+      ],
+      "children": [
+        {
+          "id": "e.squad.trooper",
+          "name": "Trooper",
+          "costs": [
+            {
+              "name": "points",
+              "value": 20.0
+            }
           ],
           "categories": [
-            "cat.troops"
+            "cat.model"
           ],
           "constraints": [
             {
-              "id": "sq.models.min",
+              "id": "tr.min",
               "type": "min",
               "value": 5.0,
               "field": "selections",
               "scope": "self",
               "targetType": "entry",
-              "targetId": "squad-body",
-              "includeChildSelections": true
+              "targetId": "e.squad.trooper",
+              "includeChildSelections": false
+            },
+            {
+              "id": "tr.max",
+              "type": "max",
+              "value": 10.0,
+              "field": "selections",
+              "scope": "self",
+              "targetType": "entry",
+              "targetId": "e.squad.trooper",
+              "includeChildSelections": false
             }
           ],
-          "children": [
-            {
-              "id": "squad-body.model",
-              "name": "Trooper",
-              "costs": [
-                {
-                  "name": "points",
-                  "value": 20.0
-                }
-              ],
-              "categories": [
-                "cat.model"
-              ],
-              "profiles": [
-                {
-                  "name": "Trooper",
-                  "typeName": "Unit",
-                  "characteristics": [
-                    { "name": "M", "value": "6\"" },
-                    { "name": "T", "value": "4" },
-                    { "name": "SV", "value": "3+" },
-                    { "name": "W", "value": "2" },
-                    { "name": "LD", "value": "6+" },
-                    { "name": "OC", "value": "2" }
-                  ]
-                }
-              ]
-            }
+          "profiles": [
+            { "name": "Trooper", "typeName": "Unit", "characteristics": [
+              { "name": "M", "value": "6\"" }, { "name": "T", "value": "4" }, { "name": "SV", "value": "3+" },
+              { "name": "W", "value": "2" }, { "name": "LD", "value": "6+" }, { "name": "OC", "value": "2" } ] }
           ]
         }
       ]
@@ -287,6 +349,13 @@
               "targetId": "e.assault.marine",
               "includeChildSelections": false
             }
+          ],
+          "profiles": [
+            { "name": "Assault Marine", "typeName": "Unit", "characteristics": [
+              { "name": "M", "value": "12\"" }, { "name": "T", "value": "4" }, { "name": "SV", "value": "3+" },
+              { "name": "W", "value": "2" }, { "name": "LD", "value": "6+" }, { "name": "OC", "value": "2" } ] },
+            { "name": "Jump Pack", "typeName": "Abilities", "characteristics": [
+              { "name": "Description", "value": "This unit can FLY and gains Assault on its move." } ] }
           ]
         }
       ],

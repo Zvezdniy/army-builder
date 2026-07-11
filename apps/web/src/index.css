@@ -8,6 +8,8 @@
   --accent-ink: #ffffff;
   --error: #b00020;
   --warn: #9a6a00;
+  --head-bg: #33333d;
+  --head-ink: #f2f2f5;
   color-scheme: light dark;
 }
 
@@ -22,6 +24,8 @@
     --accent-ink: #0d0d10;
     --error: #ff6b6b;
     --warn: #e0a94a;
+    --head-bg: #3a3a46;
+    --head-ink: #f2f2f5;
   }
 }
 
@@ -50,9 +54,6 @@ button {
 button:hover { border-color: var(--accent); }
 button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
-/* Unit-palette add buttons read as the primary call-to-action. */
-.palette button { background: var(--accent); color: var(--accent-ink); border-color: transparent; font-weight: 600; }
-
 /* A chosen member of a choose-N group is filled to read as selected. */
 button.chosen { background: var(--accent); color: var(--accent-ink); border-color: transparent; font-weight: 600; }
 
@@ -68,14 +69,150 @@ input[type="number"] {
 section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
 
 .ds { margin-top: 8px; display: flex; flex-direction: column; gap: 10px; }
-.ds-statline { display: flex; flex-wrap: wrap; gap: 6px; }
-.ds-chip { display: flex; flex-direction: column; align-items: center; min-width: 42px;
-  border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; }
-.ds-chip-label { font-size: 11px; opacity: 0.7; text-transform: uppercase; letter-spacing: 0.04em; }
-.ds-chip-value { font-weight: 700; font-variant-numeric: tabular-nums; }
+.ud-name { font-size: 22px; font-weight: 800; letter-spacing: -0.01em; line-height: 1.15; text-transform: none;
+  color: var(--fg, inherit); margin: 0 0 8px; padding-bottom: 6px; border-bottom: 2px solid var(--accent); }
+/* Statline reads as one solid stat bar directly under the name. */
+.ds-statline { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 0;
+  margin: 0; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--panel); }
+.ds-chip { display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 8px 4px; border: none; border-right: 1px solid var(--line); border-radius: 0; }
+.ds-chip:last-child { border-right: none; }
+.ds-chip-label { font-size: 10px; opacity: 0.65; text-transform: uppercase; letter-spacing: 0.04em; }
+.ds-chip-value { font-size: 20px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+@media (max-width: 640px) {
+  .ds-statline { grid-auto-flow: row; grid-template-columns: repeat(3, 1fr); }
+  .ds-chip:nth-child(3n) { border-right: none; }
+}
+/* Invulnerable-save chip, hanging under the Toughness column of the statline. */
+.ds-statwrap { margin: 10px 0 14px; }
+.ds-invuln-row { display: grid; }
+.ds-invuln { justify-self: start; margin-top: -1px; display: inline-flex; align-items: stretch; white-space: nowrap;
+  border: 1px solid var(--line); border-top: none; border-radius: 0 0 8px 8px; overflow: hidden; }
+.ds-invuln-value { padding: 5px 10px; font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums;
+  background: var(--head-bg); color: var(--head-ink); }
+.ds-invuln-label { display: flex; align-items: center; padding: 5px 10px; font-size: 11px;
+  text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+
+/* Two-column datasheet body: weapons left, description right (stacks on mobile). */
+.ds-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; }
+.ds-col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+@media (max-width: 900px) { .ds-cols { grid-template-columns: 1fr; } }
+
+/* Dark section bar shared by weapon table heads and description sections (War Organ look). */
+.ds-section-head { background: var(--head-bg); color: var(--head-ink); font-size: 12px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.05em; padding: 6px 10px; border-radius: 6px; }
+.ds-section { display: flex; flex-direction: column; gap: 4px; }
+.ds-loadout { margin: 4px 2px; font-size: 13px; }
+.ds-ability-line { margin: 2px 2px; font-size: 13px; }
+.ds-ability-line strong { color: var(--accent); }
+.ds-ability { margin: 4px 2px; font-size: 13px; line-height: 1.4; }
+
 .ds-table-wrap { overflow-x: auto; }
 .ds-table { border-collapse: collapse; width: 100%; font-size: 13px; }
 .ds-table th, .ds-table td { border: 1px solid var(--line); padding: 3px 8px; text-align: left;
   font-variant-numeric: tabular-nums; }
-.ds-table th { opacity: 0.8; font-weight: 600; }
+.ds-table thead th { background: var(--head-bg); color: var(--head-ink); border-color: var(--head-bg);
+  text-transform: uppercase; letter-spacing: 0.03em; font-weight: 700; }
 .ds-abilities p { margin: 2px 0; font-size: 13px; }
+.ds-kw-row td { padding: 4px 8px; }
+.ds-kw-chip { font-size: 11px; padding: 2px 8px; margin: 0 4px 2px 0; border: 1px solid var(--line);
+  border-radius: 20px; background: transparent; color: var(--accent); cursor: pointer; letter-spacing: 0.02em; }
+.ds-kw-chip:hover { border-color: var(--accent); }
+/* Weapon-rule tooltip: anchored below the keyword; hover (desktop) / tap (mobile). */
+.rule-tip { max-width: 280px; background: var(--panel); border: 1px solid var(--accent); border-radius: 8px;
+  padding: 8px 10px; font-size: 12px; line-height: 1.45; z-index: 30; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+  display: flex; flex-direction: column; gap: 4px; pointer-events: none; }
+.rule-tip-name { text-transform: uppercase; letter-spacing: 0.03em; font-size: 12px; }
+
+.builder { display: grid; grid-template-columns: minmax(220px, 320px) 1fr; gap: 16px; margin-top: 8px; }
+.rl-group { margin-bottom: 10px; }
+.rl-role { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted, #888); margin: 8px 0 4px; }
+.rl-unit { width: 100%; display: flex; justify-content: space-between; gap: 8px; text-align: left;
+  padding: 8px 10px; margin-bottom: 4px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; background: transparent; }
+.rl-unit.selected { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.rl-models { color: var(--muted, #888); font-variant-numeric: tabular-nums; }
+.rl-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.rl-title { margin: 0; }
+.rl-add-open { padding: 6px 12px; border: 1px solid var(--accent); border-radius: 8px; background: transparent; color: var(--accent); cursor: pointer; font-weight: 600; }
+.rl-empty { color: var(--muted, #888); padding: 12px 4px; }
+/* Add-unit picker (modal) */
+.picker-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.5); display: flex; align-items: flex-start; justify-content: center; padding: 8vh 16px; z-index: 10; }
+.picker { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; width: 100%; max-width: 460px; max-height: 80vh; display: flex; flex-direction: column; overflow: hidden; }
+.picker-head { display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+.picker-close { border: none; background: transparent; cursor: pointer; font-size: 16px; color: var(--muted, #888); }
+.picker-search { margin: 12px 14px 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: inherit; }
+.picker-list { overflow-y: auto; padding: 0 8px 12px; }
+.picker-section { margin-bottom: 4px; }
+.picker-role-head { width: 100%; display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 8px; margin: 4px 0; border: none; background: transparent; cursor: pointer;
+  font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted, #888); font-weight: 600; }
+.picker-chevron { color: var(--muted, #888); }
+.picker-item { width: 100%; display: flex; align-items: center; gap: 8px; padding: 8px 10px; margin-bottom: 4px;
+  border: 1px solid var(--line); border-radius: 8px; background: transparent; text-align: left; cursor: pointer; }
+.picker-item:hover { border-color: var(--accent); }
+.picker-item-name { flex: 1; min-width: 0; }
+.picker-pts { color: var(--muted, #888); font-variant-numeric: tabular-nums; }
+.picker-empty { color: var(--muted, #888); padding: 12px; }
+.ud { position: relative; min-width: 0; }
+.ud-remove { position: absolute; top: 12px; right: 12px; z-index: 2; padding: 4px 9px; font-size: 16px; line-height: 1;
+  border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--muted); cursor: pointer; }
+.ud-remove:hover { border-color: var(--error); color: var(--error); }
+.ud-empty { color: var(--muted, #888); padding: 16px; }
+.ud-kw { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px; }
+.ud-kw .kw { font-size: 11px; padding: 2px 8px; border-radius: 20px; border: 1px solid var(--line); color: var(--muted, #888); }
+.ud-back { display: none; margin-bottom: 8px; padding: 4px 10px; border: 1px solid var(--line); border-radius: 8px; background: transparent; cursor: pointer; }
+@media (max-width: 640px) {
+  .builder { grid-template-columns: 1fr; }
+  .builder[data-view="detail"] .rl { display: none; }
+  .builder[data-view="list"] .ud { display: none; }
+  .ud-back { display: inline-block; }
+}
+
+/* ── Unit configuration controls (wargear choosers, count, adders) ────────────
+   Reads as a datasheet section: a dark bar (reuses .ds-section-head), then pill
+   toggles that share the keyword-chip / .chosen vocabulary used above. */
+.uc { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+/* Nested option controls tuck under their name with a quiet rule instead of a bar. */
+.uc-nested { margin-top: 6px; gap: 8px; padding-left: 10px; border-left: 2px solid var(--line); }
+
+/* Self-controls row: stepper / fixed badge / remove. */
+.uc-selfrow { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+
+/* Unified stepper: one bordered segment, − value + fused with no gaps. */
+.uc-stepper { display: inline-flex; align-items: stretch; background: var(--panel);
+  border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.uc-stepper button { border: none; border-radius: 0; background: transparent; color: var(--ink);
+  padding: 4px 12px; font-size: 15px; line-height: 1; }
+.uc-stepper button:hover { background: var(--head-bg); color: var(--head-ink); border-color: transparent; }
+.uc-step-val { display: inline-flex; align-items: center; justify-content: center; min-width: 34px;
+  padding: 4px; font-weight: 700; font-variant-numeric: tabular-nums;
+  border-left: 1px solid var(--line); border-right: 1px solid var(--line); }
+
+/* "×N fixed" reads as a quiet count badge, not a control. */
+.uc-fixed { display: inline-flex; align-items: center; padding: 3px 10px; font-size: 12px;
+  color: var(--muted); border: 1px solid var(--line); border-radius: 20px;
+  font-variant-numeric: tabular-nums; }
+
+/* Ghost "remove": quiet at rest, destructive on hover. */
+.uc-remove { padding: 4px 10px; font-size: 12px; color: var(--muted); border-radius: 8px; }
+.uc-remove:hover { border-color: var(--error); color: var(--error); }
+
+/* One wargear group: a labelled header line + its toggle options. */
+.uc-group { display: flex; flex-direction: column; gap: 5px; }
+.uc-group-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.uc-group-name { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+.uc-hint { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
+.uc-hint.is-required { color: var(--warn); }
+
+/* Toggle options: tap-sized pills matching the chip system.
+   Selected members reuse the global button.chosen (accent fill + ✓). */
+.uc-options { display: flex; flex-wrap: wrap; gap: 6px; }
+.uc-opt { font-size: 12px; padding: 5px 12px; border-radius: 20px; letter-spacing: 0.01em;
+  border: 1px solid var(--line); background: var(--panel); color: var(--ink); }
+.uc-opt:hover { border-color: var(--accent); }
+
+/* Free (non-group) adders read as dashed "+" chips — clearly additive, not a toggle. */
+.uc-adds { display: flex; flex-wrap: wrap; gap: 6px; }
+.uc-add { font-size: 12px; padding: 5px 12px; border-radius: 20px; letter-spacing: 0.01em;
+  border: 1px dashed var(--line); background: transparent; color: var(--accent); }
+.uc-add:hover { border-color: var(--accent); border-style: solid; }

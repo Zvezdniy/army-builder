@@ -1,7 +1,14 @@
+import { Fragment, useState } from "react";
 import type { IrCatalogue, RosterSelection } from "@muster/domain";
-import { datasheet, type DatasheetSection } from "@muster/roster";
+import { datasheet, unitLoadout, type DatasheetSection } from "@muster/roster";
 
-/** Statline profiles (Unit) render as a row of labelled chips. */
+/** Devices that can hover (desktop) show rule popups on hover; touch shows on tap. */
+const canHover =
+  typeof window !== "undefined" && !!window.matchMedia && window.matchMedia("(hover: hover)").matches;
+
+const WEAPON_TYPES = new Set(["Ranged Weapons", "Melee Weapons"]);
+
+/** The Unit statline as a prominent, evenly-divided stat bar. */
 function Statline({ section }: { section: DatasheetSection }) {
   const profile = section.profiles[0];
   if (!profile) return null;
@@ -17,9 +24,41 @@ function Statline({ section }: { section: DatasheetSection }) {
   );
 }
 
-/** Weapons and other multi-column profiles render as a table. */
-function ProfileTable({ section }: { section: DatasheetSection }) {
+/** The unit's statline bar with the invulnerable-save chip hanging under the
+ *  Toughness column, the way a datasheet shows it. */
+export function UnitStatline({ catalogue, selection }: { catalogue: IrCatalogue; selection: RosterSelection }) {
+  const sections = datasheet(catalogue, selection);
+  const unit = sections.find((s) => s.typeName === "Unit");
+  const invulnValue = sections.find((s) => s.typeName === "Invulnerable Save")?.profiles[0]?.characteristics[0]?.value;
+  if (!unit) return null;
+  const chars = unit.profiles[0]?.characteristics ?? [];
+  const tIndex = chars.findIndex((c) => c.name === "T");
+  return (
+    <div className="ds-statwrap">
+      <Statline section={unit} />
+      {invulnValue && chars.length > 0 && (
+        <div className="ds-invuln-row" style={{ gridTemplateColumns: `repeat(${chars.length}, 1fr)` }}>
+          <div className="ds-invuln" style={{ gridColumn: (tIndex >= 0 ? tIndex : 1) + 1 }}>
+            <span className="ds-invuln-value">{invulnValue}</span>
+            <span className="ds-invuln-label">Invulnerable Save</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+type RuleHandlers = {
+  onShow: (keyword: string, el: HTMLElement) => void;
+  onHide: () => void;
+  onToggle: (keyword: string, el: HTMLElement) => void;
+};
+
+/** Weapons render as a table; keyword abilities become chips that reveal their
+ *  rule on hover (desktop) or tap. The table head reads as the section bar. */
+function WeaponTable({ section, rules }: { section: DatasheetSection; rules: RuleHandlers }) {
   const columns = section.profiles[0]?.characteristics.map((c) => c.name) ?? [];
+  const span = columns.length + 1;
   return (
     <div className="ds-table-wrap">
       <table className="ds-table">
@@ -30,24 +69,71 @@ function ProfileTable({ section }: { section: DatasheetSection }) {
           </tr>
         </thead>
         <tbody>
-          {section.profiles.map((p) => (
-            <tr key={p.name}>
-              <td>{p.name}</td>
-              {p.characteristics.map((c) => <td key={c.name}>{c.value}</td>)}
-            </tr>
-          ))}
+          {section.profiles.map((p) => {
+            const keywords = p.keywords ?? [];
+            return (
+              <Fragment key={p.name}>
+                <tr>
+                  <td>{p.name}</td>
+                  {p.characteristics.map((c) => <td key={c.name}>{c.value}</td>)}
+                </tr>
+                {keywords.length > 0 && (
+                  <tr className="ds-kw-row">
+                    <td colSpan={span}>
+                      {keywords.map((k) => (
+                        <button key={k} className="ds-kw-chip" aria-label={`${k} rule`}
+                          onMouseEnter={canHover ? (e) => rules.onShow(k, e.currentTarget) : undefined}
+                          onMouseLeave={canHover ? rules.onHide : undefined}
+                          onClick={(e) => rules.onToggle(k, e.currentTarget)}>
+                          {k}
+                        </button>
+                      ))}
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
+            );
+          })}
         </tbody>
       </table>
     </div>
   );
 }
 
-/** Abilities render as name + description blocks. */
-function Abilities({ section }: { section: DatasheetSection }) {
+/** Read-only loadout readout ("X equipped with: a, b"), the way War Organ summarizes wargear. */
+function Composition({ loadout }: { loadout: { unit: string; wargear: string[] } }) {
   return (
-    <div className="ds-abilities">
-      {section.profiles.map((p) => (
-        <p key={p.name}>
+    <div className="ds-section">
+      <div className="ds-section-head">Unit Composition &amp; Wargear</div>
+      <p className="ds-loadout">{loadout.unit} equipped with: {loadout.wargear.join(", ")}.</p>
+    </div>
+  );
+}
+
+/** Abilities: grouped ones (Core/Faction) collapse to one compact line per group;
+ *  ungrouped ones render as name + description. */
+function Abilities({ section }: { section: DatasheetSection }) {
+  const groups = new Map<string, string[]>();
+  const named: DatasheetSection["profiles"] = [];
+  for (const p of section.profiles) {
+    if (p.group) {
+      const list = groups.get(p.group) ?? [];
+      list.push(p.name);
+      groups.set(p.group, list);
+    } else {
+      named.push(p);
+    }
+  }
+  return (
+    <div className="ds-section">
+      <div className="ds-section-head">Abilities</div>
+      {[...groups].map(([group, names]) => (
+        <p key={group} className="ds-ability-line">
+          <strong>{group.toUpperCase()}:</strong> {names.join(", ")}
+        </p>
+      ))}
+      {named.map((p) => (
+        <p key={p.name} className="ds-ability">
           <strong>{p.name}.</strong>{" "}
           {p.characteristics.find((c) => c.name === "Description")?.value ?? ""}
         </p>
@@ -56,21 +142,74 @@ function Abilities({ section }: { section: DatasheetSection }) {
   );
 }
 
+/** A special rule block (Supreme Commander, Damaged, …): a titled section of
+ *  descriptive paragraphs, keyed off the profile's typeName. */
+function SpecialSection({ section }: { section: DatasheetSection }) {
+  return (
+    <div className="ds-section">
+      <div className="ds-section-head">{section.typeName}</div>
+      {section.profiles.map((p) => {
+        const desc = p.characteristics.find((c) => c.name === "Description")?.value ?? "";
+        return (
+          <p key={p.name} className="ds-ability">
+            {p.name !== section.typeName && <><strong>{p.name}.</strong>{" "}</>}
+            {desc}
+          </p>
+        );
+      })}
+    </div>
+  );
+}
+
+const RESERVED = new Set(["Unit", "Invulnerable Save", "Abilities"]);
+
+/** The two-column datasheet body: weapons on the left; composition, abilities and
+ *  special rules on the right. The statline/invuln sit above it (UnitStatline). */
 export function Datasheet({
   catalogue, selection,
 }: {
   catalogue: IrCatalogue;
   selection: RosterSelection;
 }) {
-  const sections = datasheet(catalogue, selection);
-  if (sections.length === 0) return null;
+  const all = datasheet(catalogue, selection);
+  const weapons = all.filter((s) => WEAPON_TYPES.has(s.typeName));
+  const abilities = all.find((s) => s.typeName === "Abilities");
+  const specials = all.filter((s) => !WEAPON_TYPES.has(s.typeName) && !RESERVED.has(s.typeName));
+  const loadout = unitLoadout(catalogue, selection);
+  const [tip, setTip] = useState<{ kw: string; x: number; y: number } | null>(null);
+
+  const hasRight = loadout.wargear.length > 0 || !!abilities || specials.length > 0;
+  if (weapons.length === 0 && !hasRight) return null;
+
+  const at = (el: HTMLElement) => {
+    const r = el.getBoundingClientRect();
+    return { x: r.left, y: r.bottom + 6 };
+  };
+  const rules: RuleHandlers = {
+    onShow: (kw, el) => setTip({ kw, ...at(el) }),
+    onHide: () => setTip(null),
+    onToggle: (kw, el) => setTip((prev) => (prev?.kw === kw ? null : { kw, ...at(el) })),
+  };
+  const ruleText = tip ? (catalogue.ruleTexts?.[tip.kw] ?? "No rule description.") : "";
+
   return (
     <div className="ds" data-testid="datasheet">
-      {sections.map((section) => {
-        if (section.typeName === "Unit") return <Statline key={section.typeName} section={section} />;
-        if (section.typeName === "Abilities") return <Abilities key={section.typeName} section={section} />;
-        return <ProfileTable key={section.typeName} section={section} />;
-      })}
+      <div className="ds-cols">
+        <div className="ds-col">
+          {weapons.map((section) => <WeaponTable key={section.typeName} section={section} rules={rules} />)}
+        </div>
+        <div className="ds-col">
+          {loadout.wargear.length > 0 && <Composition loadout={loadout} />}
+          {abilities && <Abilities section={abilities} />}
+          {specials.map((section) => <SpecialSection key={section.typeName} section={section} />)}
+        </div>
+      </div>
+      {tip && (
+        <div className="rule-tip" role="tooltip" style={{ position: "fixed", left: tip.x, top: tip.y }}>
+          <strong className="rule-tip-name">{tip.kw}</strong>
+          <span>{ruleText}</span>
+        </div>
+      )}
     </div>
   );
 }
