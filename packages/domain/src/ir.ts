@@ -37,6 +37,16 @@ export const IrGroup = z.object({
 });
 export type IrGroup = z.infer<typeof IrGroup>;
 
+export const IrCharacteristic = z.object({ name: z.string(), value: z.string() });
+export type IrCharacteristic = z.infer<typeof IrCharacteristic>;
+
+export const IrProfile = z.object({
+  name: z.string(),
+  typeName: z.string(),
+  characteristics: z.array(IrCharacteristic).default([]),
+});
+export type IrProfile = z.infer<typeof IrProfile>;
+
 // Recursive type declared explicitly so the Zod lazy schema can annotate itself.
 export interface IrEntry {
   id: string;
@@ -46,6 +56,7 @@ export interface IrEntry {
   constraints: IrConstraint[];
   children: IrEntry[];
   groups?: IrGroup[];
+  profiles?: IrProfile[];
 }
 // Use `unknown` for the input generic because `.default([])` makes those fields optional in input,
 // not matching the strict required-field interface. Output type stays `IrEntry`.
@@ -58,6 +69,7 @@ export const IrEntry: z.ZodType<IrEntry, z.ZodTypeDef, unknown> = z.lazy(() =>
     constraints: z.array(IrConstraint).default([]),
     children: z.array(IrEntry).default([]),
     groups: z.array(IrGroup).default([]),
+    profiles: z.array(IrProfile).default([]),
   }),
 );
 

@@ -1,4 +1,4 @@
-import type { IrCatalogue, IrEntry, IrGroup, Roster, RosterSelection } from "@muster/domain";
+import type { IrCatalogue, IrEntry, IrGroup, IrProfile, Roster, RosterSelection } from "@muster/domain";
 
 /** Create an empty roster bound to a catalogue. */
 export function createRoster(catalogue: IrCatalogue, pointsLimit: number, name = "New Roster"): Roster {
@@ -50,6 +50,51 @@ export function remove(roster: Roster, selectionId: string): Roster {
 /** Find an entry anywhere in the catalogue tree by id (roots and nested children). */
 export function catalogueEntry(catalogue: IrCatalogue, entryId: string): IrEntry | undefined {
   return findEntry(catalogue, entryId);
+}
+
+/** A datasheet section: all profiles of one typeName across the selected subtree. */
+export interface DatasheetSection {
+  typeName: string;
+  profiles: IrProfile[];
+}
+
+/**
+ * The live datasheet for a unit selection: every profile found on the unit's own
+ * entry and on the entries of its selected descendants, grouped by `typeName` in
+ * first-seen order. Profiles identical in name+typeName+characteristics collapse to
+ * one (two identical weapons from two models show a single row).
+ */
+export function datasheet(catalogue: IrCatalogue, selection: RosterSelection): DatasheetSection[] {
+  const sections: DatasheetSection[] = [];
+  const byType = new Map<string, DatasheetSection>();
+  const seen = new Set<string>();
+
+  const visit = (sel: RosterSelection): void => {
+    // A selection's entryId always resolves within its own catalogue (the same
+    // invariant mapTree/removeTree rely on), so no defensive fallback here.
+    const entry = catalogueEntry(catalogue, sel.entryId)!;
+    for (const profile of entry.profiles ?? []) {
+      const key = profileKey(profile);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      let section = byType.get(profile.typeName);
+      if (!section) {
+        section = { typeName: profile.typeName, profiles: [] };
+        byType.set(profile.typeName, section);
+        sections.push(section);
+      }
+      section.profiles.push(profile);
+    }
+    for (const child of sel.selections) visit(child);
+  };
+
+  visit(selection);
+  return sections;
+}
+
+function profileKey(p: IrProfile): string {
+  const chars = p.characteristics.map((c) => `${c.name}=${c.value}`).join("|");
+  return `${p.typeName}|${p.name}|${chars}`;
 }
 
 /** What can be added under a selection: the entry's child options and its choose-N groups. */

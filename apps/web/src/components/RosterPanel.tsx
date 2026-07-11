@@ -1,5 +1,6 @@
 import type { IrCatalogue, IrGroup, Roster, RosterSelection, ValidationResult } from "@muster/domain";
 import { catalogueEntry } from "@muster/roster";
+import { Datasheet } from "./Datasheet";
 import { UnitConfig } from "./UnitConfig";
 
 /** One selection in the roster tree: its controls plus its nested options, rendered recursively. */
@@ -31,6 +32,7 @@ function SelectionNode({
       <UnitConfig roster={roster} selection={selection} catalogue={catalogue}
         onAddOption={onAddOption} onToggleGroupMember={onToggleGroupMember}
         onRemove={onRemove} onSetCount={onSetCount} />
+      {depth === 0 && <Datasheet catalogue={catalogue} selection={selection} />}
       {freeChildren.length > 0 && (
         <ul style={{ listStyle: "none", padding: 0 }}>
           {freeChildren.map((child) => (

@@ -111,3 +111,54 @@ fn reads_catalogue_level_entry_links() {
     let targets: Vec<&str> = raw.entry_links.iter().map(|l| l.target_id.as_str()).collect();
     assert_eq!(targets, vec!["e.unit", "e.missing"]);
 }
+
+#[test]
+fn reads_profiles_with_characteristics() {
+    let xml = br#"<?xml version="1.0"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <selectionEntries>
+    <selectionEntry id="e.hero" name="Hero" type="model">
+      <profiles>
+        <profile id="p.u" name="Hero" typeName="Unit">
+          <characteristics>
+            <characteristic name="M">6&quot;</characteristic>
+            <characteristic name="T">4</characteristic>
+          </characteristics>
+        </profile>
+      </profiles>
+      <selectionEntryGroups>
+        <selectionEntryGroup id="g.w" name="Wargear">
+          <selectionEntries>
+            <selectionEntry id="e.sword" name="Sword" type="upgrade">
+              <profiles>
+                <profile id="p.s" name="Sword" typeName="Melee Weapons">
+                  <characteristics>
+                    <characteristic name="Range">Melee</characteristic>
+                    <characteristic name="AP">-2</characteristic>
+                  </characteristics>
+                </profile>
+              </profiles>
+            </selectionEntry>
+          </selectionEntries>
+        </selectionEntryGroup>
+      </selectionEntryGroups>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let raw = parse_raw(xml).unwrap();
+    let hero = raw.entries.iter().find(|e| e.id == "e.hero").unwrap();
+    let unit = hero.profiles.iter().find(|p| p.type_name == "Unit").unwrap();
+    assert_eq!(unit.name, "Hero");
+    assert_eq!(unit.characteristics[0].name, "M");
+    assert_eq!(unit.characteristics[0].value, "6\"", "XML entity unescaped");
+    assert_eq!(unit.characteristics[1].value, "4");
+
+    // profile nested inside a selectionEntryGroup is read on the group's entry
+    let group = hero.groups.iter().find(|g| g.id == "g.w").unwrap();
+    let sword = group.entries.iter().find(|e| e.id == "e.sword").unwrap();
+    let mp = &sword.profiles[0];
+    assert_eq!(mp.type_name, "Melee Weapons");
+    assert_eq!(mp.characteristics[0].value, "Melee");
+    assert_eq!(mp.characteristics[1].value, "-2");
+}

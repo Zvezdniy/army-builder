@@ -34,6 +34,18 @@
         <selectionEntry id="squad-body.model" name="Trooper" type="model">
           <costs><cost name="Points" typeId="pts" value="20"/></costs>
           <categoryLinks><categoryLink id="cl.m" targetId="cat.model" primary="true"/></categoryLinks>
+          <profiles>
+            <profile id="p.trooper.unit" name="Trooper" typeName="Unit">
+              <characteristics>
+                <characteristic name="M">6&quot;</characteristic>
+                <characteristic name="T">4</characteristic>
+                <characteristic name="SV">3+</characteristic>
+                <characteristic name="W">2</characteristic>
+                <characteristic name="LD">6+</characteristic>
+                <characteristic name="OC">2</characteristic>
+              </characteristics>
+            </profile>
+          </profiles>
         </selectionEntry>
       </selectionEntries>
     </selectionEntry>
@@ -42,6 +54,23 @@
     <selectionEntry id="e.captain" name="Captain" type="model">
       <costs><cost name="Points" typeId="pts" value="90"/></costs>
       <categoryLinks><categoryLink id="cl1" targetId="cat.hq" primary="true"/></categoryLinks>
+      <profiles>
+        <profile id="p.captain.unit" name="Captain" typeName="Unit">
+          <characteristics>
+            <characteristic name="M">6&quot;</characteristic>
+            <characteristic name="T">4</characteristic>
+            <characteristic name="SV">3+</characteristic>
+            <characteristic name="W">5</characteristic>
+            <characteristic name="LD">6+</characteristic>
+            <characteristic name="OC">1</characteristic>
+          </characteristics>
+        </profile>
+        <profile id="p.captain.ability" name="Rites of Battle" typeName="Abilities">
+          <characteristics>
+            <characteristic name="Description">Once per battle round, re-roll one Hit roll.</characteristic>
+          </characteristics>
+        </profile>
+      </profiles>
       <selectionEntryGroups>
         <selectionEntryGroup id="g.wargear" name="Wargear">
           <constraints>
@@ -50,9 +79,33 @@
           <selectionEntries>
             <selectionEntry id="e.captain.sword" name="Power Sword" type="upgrade">
               <costs><cost name="Points" typeId="pts" value="5"/></costs>
+              <profiles>
+                <profile id="p.sword" name="Power Sword" typeName="Melee Weapons">
+                  <characteristics>
+                    <characteristic name="Range">Melee</characteristic>
+                    <characteristic name="A">5</characteristic>
+                    <characteristic name="WS">2+</characteristic>
+                    <characteristic name="S">5</characteristic>
+                    <characteristic name="AP">-2</characteristic>
+                    <characteristic name="D">1</characteristic>
+                  </characteristics>
+                </profile>
+              </profiles>
             </selectionEntry>
             <selectionEntry id="e.captain.axe" name="Power Axe" type="upgrade">
               <costs><cost name="Points" typeId="pts" value="10"/></costs>
+              <profiles>
+                <profile id="p.axe" name="Power Axe" typeName="Melee Weapons">
+                  <characteristics>
+                    <characteristic name="Range">Melee</characteristic>
+                    <characteristic name="A">4</characteristic>
+                    <characteristic name="WS">3+</characteristic>
+                    <characteristic name="S">6</characteristic>
+                    <characteristic name="AP">-2</characteristic>
+                    <characteristic name="D">2</characteristic>
+                  </characteristics>
+                </profile>
+              </profiles>
             </selectionEntry>
           </selectionEntries>
         </selectionEntryGroup>

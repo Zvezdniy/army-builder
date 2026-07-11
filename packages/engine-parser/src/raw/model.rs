@@ -28,6 +28,7 @@ pub struct RawEntry {
     pub entries: Vec<RawEntry>,        // nested selectionEntries
     pub groups: Vec<RawGroup>,         // nested selectionEntryGroups
     pub entry_links: Vec<RawEntryLink>,
+    pub profiles: Vec<RawProfile>,
 }
 
 #[derive(Debug, Default, Clone)] pub struct RawGroup {
@@ -36,6 +37,7 @@ pub struct RawEntry {
     pub entries: Vec<RawEntry>, pub groups: Vec<RawGroup>,
     pub entry_links: Vec<RawEntryLink>, pub constraints: Vec<RawConstraint>,
     pub modifiers: Vec<RawModifier>,
+    pub profiles: Vec<RawProfile>,
 }
 #[derive(Debug, Default, Clone)] pub struct RawCost { pub type_id: String, pub value: f64 }
 #[derive(Debug, Default, Clone)] pub struct RawCategoryLink { pub target_id: String, pub primary: bool, pub constraints: Vec<RawConstraint> }
@@ -65,3 +67,16 @@ pub struct RawCondition {
 }
 #[derive(Debug, Default, Clone)]
 pub struct RawConditionGroup { pub kind: String, pub conditions: Vec<RawCondition>, pub groups: Vec<RawConditionGroup> }
+
+#[derive(Debug, Default, Clone)]
+pub struct RawProfile {
+    pub id: String,
+    pub name: String,
+    pub type_name: String,
+    pub characteristics: Vec<RawCharacteristic>,
+}
+#[derive(Debug, Default, Clone)]
+pub struct RawCharacteristic {
+    pub name: String,
+    pub value: String,
+}
