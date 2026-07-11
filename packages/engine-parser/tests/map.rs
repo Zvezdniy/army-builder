@@ -1,4 +1,5 @@
 use engine_parser::{raw::parse_raw, resolve::{resolve, resolve_with_diags}, ir::to_ir};
+use engine_parser::ParseError;
 
 #[test]
 fn nested_unresolved_entrylink_is_tolerated() {
@@ -274,4 +275,59 @@ fn drops_group_constraint_with_non_group_local_scope() {
     );
     // member is still flattened into children
     assert!(u.children.iter().any(|c| c.id == "e.x"));
+}
+
+#[test]
+fn surfaces_catalogue_root_entrylinks() {
+    let xml = br#"<?xml version="1.0"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <sharedSelectionEntries>
+    <selectionEntry id="e.captain" name="Captain" type="unit">
+      <costs><cost name="Points" typeId="pts" value="90"/></costs>
+      <selectionEntries>
+        <selectionEntry id="e.captain.sword" name="Sword" type="upgrade"/>
+      </selectionEntries>
+    </selectionEntry>
+    <selectionEntry id="e.squad" name="Squad" type="unit"/>
+    <selectionEntry id="e.orphan" name="Orphan" type="unit"/>
+  </sharedSelectionEntries>
+  <entryLinks>
+    <entryLink id="l1" name="Captain" type="selectionEntry" targetId="e.captain"/>
+    <entryLink id="l2" name="Squad" type="selectionEntry" targetId="e.squad"/>
+    <entryLink id="l3" name="Missing" type="selectionEntry" targetId="e.missing"/>
+  </entryLinks>
+</catalogue>"#;
+    let mut diags = Vec::new();
+    let raw = resolve_with_diags(parse_raw(xml).unwrap(), &mut diags).unwrap();
+    let (ir, map_diags) = to_ir(&raw);
+    diags.extend(map_diags);
+    // linked roots surface
+    assert!(ir.entries.iter().any(|e| e.id == "e.captain"));
+    assert!(ir.entries.iter().any(|e| e.id == "e.squad"));
+    // the linked root's own subtree is inlined
+    let cap = ir.entries.iter().find(|e| e.id == "e.captain").unwrap();
+    assert!(cap.children.iter().any(|c| c.id == "e.captain.sword"));
+    // an un-linked shared entry does NOT surface (only linked roots do)
+    assert!(!ir.entries.iter().any(|e| e.id == "e.orphan"), "orphan must not surface");
+    // dangling root link diagnosed
+    assert!(diags.iter().any(|d| d.code == "entryLink.unresolved" && d.message.contains("e.missing")),
+        "dangling root diagnosed: {:?}", diags);
+}
+
+#[test]
+fn root_entrylink_into_cycle_is_typed_error() {
+    let xml = br#"<?xml version="1.0"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <sharedSelectionEntries>
+    <selectionEntry id="e.a" name="A" type="unit">
+      <entryLinks><entryLink id="la" name="A" type="selectionEntry" targetId="e.a"/></entryLinks>
+    </selectionEntry>
+  </sharedSelectionEntries>
+  <entryLinks><entryLink id="root" name="A" type="selectionEntry" targetId="e.a"/></entryLinks>
+</catalogue>"#;
+    let mut diags = Vec::new();
+    let res = resolve_with_diags(parse_raw(xml).unwrap(), &mut diags);
+    assert!(matches!(res, Err(ParseError::ReferenceCycle(_))), "expected cycle error, got {:?}", res);
 }

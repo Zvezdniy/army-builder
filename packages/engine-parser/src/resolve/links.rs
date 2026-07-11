@@ -49,6 +49,25 @@ pub(crate) fn resolve_with_caps(mut cat: RawCatalogue, max_nodes: u64, max_depth
         resolved.push(resolve_entry(e, &symbols, &mut path, &mut budget, diags, 1)?);
     }
     cat.entries = resolved;
+
+    // Surface catalogue-level entryLinks (roster roots) as resolved root
+    // entries, reusing the same inlining, cycle-guard and shared node/depth
+    // budget. Danglers (target in another file) are diagnosed and dropped —
+    // never invented.
+    let root_links = std::mem::take(&mut cat.entry_links);
+    for link in &root_links {
+        let target = match symbols.entry(&link.target_id) {
+            Some(t) => t,
+            None => { diags.push(unresolved_link_diag(&link.target_id)); continue; }
+        };
+        if path.contains(&link.target_id) {
+            return Err(ParseError::ReferenceCycle(link.target_id.clone()));
+        }
+        path.insert(link.target_id.clone());
+        let root = resolve_entry(target, &symbols, &mut path, &mut budget, diags, 1)?;
+        path.remove(&link.target_id);
+        cat.entries.push(root);
+    }
     Ok(cat)
 }
 
