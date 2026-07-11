@@ -1,15 +1,6 @@
-import type { IrCatalogue, IrEntry, IrGroup, Roster, RosterSelection, ValidationResult } from "@muster/domain";
+import type { IrCatalogue, IrGroup, Roster, RosterSelection, ValidationResult } from "@muster/domain";
+import { catalogueEntry } from "@muster/roster";
 import { UnitConfig } from "./UnitConfig";
-
-/** Resolve a selection's display name from the catalogue, searching nested options too. */
-function entryName(entries: IrEntry[], entryId: string): string | undefined {
-  for (const e of entries) {
-    if (e.id === entryId) return e.name;
-    const nested = entryName(e.children, entryId);
-    if (nested) return nested;
-  }
-  return undefined;
-}
 
 /** One selection in the roster tree: its controls plus its nested options, rendered recursively. */
 function SelectionNode({
@@ -24,7 +15,7 @@ function SelectionNode({
   onRemove: (id: string) => void;
   onSetCount: (id: string, count: number) => void;
 }) {
-  const name = entryName(catalogue.entries, selection.entryId) ?? selection.entryId;
+  const name = catalogueEntry(catalogue, selection.entryId)?.name ?? selection.entryId;
   return (
     <li style={{
       borderTop: depth === 0 ? "1px solid var(--line)" : "none",

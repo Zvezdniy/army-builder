@@ -140,6 +140,130 @@
           ]
         }
       ]
+    },
+    {
+      "id": "e.assault",
+      "name": "Assault Squad",
+      "costs": [
+        {
+          "name": "points",
+          "value": 80.0
+        }
+      ],
+      "categories": [
+        "cat.troops"
+      ],
+      "children": [
+        {
+          "id": "e.assault.chainsword",
+          "name": "Chainsword",
+          "costs": [
+            {
+              "name": "points",
+              "value": 5.0
+            }
+          ]
+        },
+        {
+          "id": "e.assault.plasma",
+          "name": "Plasma Pistol",
+          "costs": [
+            {
+              "name": "points",
+              "value": 15.0
+            }
+          ]
+        },
+        {
+          "id": "e.assault.jump",
+          "name": "Jump Pack",
+          "costs": [
+            {
+              "name": "points",
+              "value": 10.0
+            }
+          ]
+        },
+        {
+          "id": "e.assault.melta",
+          "name": "Melta Bomb",
+          "costs": [
+            {
+              "name": "points",
+              "value": 10.0
+            }
+          ]
+        },
+        {
+          "id": "e.assault.marine",
+          "name": "Marine",
+          "costs": [
+            {
+              "name": "points",
+              "value": 18.0
+            }
+          ],
+          "constraints": [
+            {
+              "id": "am.min",
+              "type": "min",
+              "value": 1.0,
+              "field": "selections",
+              "scope": "self",
+              "targetType": "entry",
+              "targetId": "e.assault.marine",
+              "includeChildSelections": false
+            },
+            {
+              "id": "am.max",
+              "type": "max",
+              "value": 5.0,
+              "field": "selections",
+              "scope": "self",
+              "targetType": "entry",
+              "targetId": "e.assault.marine",
+              "includeChildSelections": false
+            }
+          ]
+        }
+      ],
+      "groups": [
+        {
+          "id": "g.assault.weapon",
+          "name": "Special Weapon",
+          "memberEntryIds": [
+            "e.assault.chainsword",
+            "e.assault.plasma"
+          ],
+          "constraints": [
+            {
+              "id": "gw.min",
+              "type": "min",
+              "value": 1.0
+            },
+            {
+              "id": "gw.max",
+              "type": "max",
+              "value": 1.0
+            }
+          ]
+        },
+        {
+          "id": "g.assault.gear",
+          "name": "Extra Gear",
+          "memberEntryIds": [
+            "e.assault.jump",
+            "e.assault.melta"
+          ],
+          "constraints": [
+            {
+              "id": "gg.max",
+              "type": "max",
+              "value": 2.0
+            }
+          ]
+        }
+      ]
     }
   ],
   "forceConstraints": [

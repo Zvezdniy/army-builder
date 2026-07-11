@@ -44,6 +44,11 @@ export function remove(roster: Roster, selectionId: string): Roster {
   return { ...roster, selections: removeTree(roster.selections, selectionId) };
 }
 
+/** Find an entry anywhere in the catalogue tree by id (roots and nested children). */
+export function catalogueEntry(catalogue: IrCatalogue, entryId: string): IrEntry | undefined {
+  return findEntry(catalogue, entryId);
+}
+
 /** What can be added under a selection: the entry's child options and its choose-N groups. */
 export function optionsFor(
   roster: Roster,
@@ -55,6 +60,52 @@ export function optionsFor(
   const entry = findEntry(catalogue, sel.entryId);
   if (!entry) return { options: [], groups: [] };
   return { options: entry.children, groups: entry.groups ?? [] };
+}
+
+/** How a choose-N group should be edited, derived from its selection constraints. */
+export type GroupControl =
+  | { kind: "single"; required: boolean } // max 1 — a radio (required when min >= 1)
+  | { kind: "multi"; max: number };       // max > 1 — up to `max` toggles (Infinity if unbounded)
+
+/** How a single option should be edited, derived from its own selection constraints. */
+export type OptionControl =
+  | { kind: "toggle" }                        // max 1 — on/off
+  | { kind: "stepper"; min: number; max: number } // max > 1 — a bounded count (max may be Infinity)
+  | { kind: "fixed"; count: number };         // min === max — always present, not editable
+
+/** Read a selections-count bound from a group's constraints (missing → fallback). */
+function groupBound(group: IrGroup, type: "min" | "max", fallback: number): number {
+  return group.constraints.find((c) => c.type === type)?.value ?? fallback;
+}
+
+/** Read an entry's OWN selections-count bound (scope self/parent), missing → fallback. */
+function ownBound(entry: IrEntry, type: "min" | "max", fallback: number): number {
+  const c = entry.constraints.find(
+    (x) => x.field === "selections" && (x.scope === "self" || x.scope === "parent") && x.type === type,
+  );
+  return c?.value ?? fallback;
+}
+
+/** Classify how a group is edited: single-choice radio (max 1) vs up-to-N (max > 1). */
+export function groupControl(group: IrGroup): GroupControl {
+  const max = groupBound(group, "max", Infinity);
+  const min = groupBound(group, "min", 0);
+  if (max === 1) return { kind: "single", required: min >= 1 };
+  return { kind: "multi", max };
+}
+
+/**
+ * Classify how an option is edited from its own count bounds:
+ * - fixed when min === max (a fixed multiplicity),
+ * - stepper when there is an explicit multiplicity signal (max > 1, or min > 1),
+ * - toggle otherwise (on/off — the common no-constraint / max-1 case).
+ */
+export function optionControl(entry: IrEntry): OptionControl {
+  const max = ownBound(entry, "max", Infinity);
+  const min = ownBound(entry, "min", 0);
+  if (max !== Infinity && min === max) return { kind: "fixed", count: max };
+  if ((max !== Infinity && max > 1) || min > 1) return { kind: "stepper", min, max };
+  return { kind: "toggle" };
 }
 
 /** Member entry ids of `group` currently selected directly under `selectionId`. */
@@ -89,9 +140,14 @@ export function toggleGroupMember(
 
   const members = parent.selections.filter((c) => group.memberEntryIds.includes(c.entryId));
   const already = members.find((c) => c.entryId === entryId);
-  if (already) return remove(roster, already.id);
+  if (already) {
+    // Deselect only if it keeps the group at or above its min (a required radio
+    // group cannot be emptied — you swap to another member instead).
+    const min = groupBound(group, "min", 0);
+    return members.length - 1 >= min ? remove(roster, already.id) : roster;
+  }
 
-  const max = group.constraints.find((c) => c.type === "max")?.value ?? Infinity;
+  const max = groupBound(group, "max", Infinity);
   if (members.length < max) return addOption(roster, parentSelectionId, entryId);
   if (max === 1) return addOption(remove(roster, members[0]!.id), parentSelectionId, entryId);
   return roster;

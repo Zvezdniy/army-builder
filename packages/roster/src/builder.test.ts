@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import type { IrCatalogue, IrGroup } from "@muster/domain";
 import {
   createRoster, availableUnits, addUnit, addOption, setCount, remove, optionsFor,
-  selectedGroupMembers, toggleGroupMember,
+  selectedGroupMembers, toggleGroupMember, groupControl, optionControl, catalogueEntry,
 } from "./index";
 
 const catalogue: IrCatalogue = {
@@ -220,5 +220,101 @@ describe("group single/limited choice", () => {
   it("toggleGroupMember is a no-op when the parent selection is unknown", () => {
     const { r } = addHero();
     expect(toggleGroupMember(r, "nope", weaponGroup, "e.sword")).toBe(r);
+  });
+
+  it("a required (min 1) single group cannot be emptied but can be swapped", () => {
+    const requiredWeapon: IrGroup = {
+      id: "g.req", name: "Weapon", memberEntryIds: ["e.sword", "e.axe"],
+      constraints: [{ id: "r.min", type: "min", value: 1 }, { id: "r.max", type: "max", value: 1 }],
+    };
+    const { r, heroId } = addHero();
+    const r1 = toggleGroupMember(r, heroId, requiredWeapon, "e.sword");
+    // clicking the only chosen member would drop below min 1 → no-op (stays chosen)
+    const r2 = toggleGroupMember(r1, heroId, requiredWeapon, "e.sword");
+    expect(r2).toBe(r1);
+    expect(selectedGroupMembers(r2, heroId, requiredWeapon)).toEqual(["e.sword"]);
+    // choosing another member swaps (never empties)
+    const r3 = toggleGroupMember(r2, heroId, requiredWeapon, "e.axe");
+    expect(selectedGroupMembers(r3, heroId, requiredWeapon)).toEqual(["e.axe"]);
+  });
+});
+
+// Build an entry carrying only the given own-count constraints, for control classification.
+function makeConstraint(
+  id: string, type: "min" | "max", value: number,
+  field: "selections" | "points" = "selections",
+  scope: "self" | "parent" | "force" | "roster" = "self",
+) {
+  return { id, type, value, field, scope, targetType: "entry" as const, targetId: "", includeChildSelections: false };
+}
+function entryWith(constraints: ReturnType<typeof makeConstraint>[]) {
+  return { id: "e", name: "E", costs: [], categories: [], constraints, children: [] };
+}
+
+describe("groupControl", () => {
+  it("max 1 with min >= 1 is a required single choice", () => {
+    expect(groupControl({ id: "g", name: "G", memberEntryIds: [], constraints: [
+      { id: "a", type: "min", value: 1 }, { id: "b", type: "max", value: 1 },
+    ] })).toEqual({ kind: "single", required: true });
+  });
+
+  it("max 1 without a min is an optional single choice", () => {
+    expect(groupControl({ id: "g", name: "G", memberEntryIds: [], constraints: [
+      { id: "b", type: "max", value: 1 },
+    ] })).toEqual({ kind: "single", required: false });
+  });
+
+  it("max > 1 is an up-to-N multi choice", () => {
+    expect(groupControl({ id: "g", name: "G", memberEntryIds: [], constraints: [
+      { id: "b", type: "max", value: 3 },
+    ] })).toEqual({ kind: "multi", max: 3 });
+  });
+
+  it("no max at all is an unbounded multi choice", () => {
+    expect(groupControl({ id: "g", name: "G", memberEntryIds: [], constraints: [] }))
+      .toEqual({ kind: "multi", max: Infinity });
+  });
+});
+
+describe("optionControl", () => {
+  it("max 1 is a toggle", () => {
+    expect(optionControl(entryWith([makeConstraint("a", "max", 1)]))).toEqual({ kind: "toggle" });
+  });
+
+  it("min === max is a fixed count", () => {
+    expect(optionControl(entryWith([
+      makeConstraint("a", "min", 2), makeConstraint("b", "max", 2),
+    ]))).toEqual({ kind: "fixed", count: 2 });
+  });
+
+  it("max > 1 is a bounded stepper", () => {
+    expect(optionControl(entryWith([
+      makeConstraint("a", "min", 0), makeConstraint("b", "max", 3),
+    ]))).toEqual({ kind: "stepper", min: 0, max: 3 });
+  });
+
+  it("a min with no max is an unbounded stepper", () => {
+    expect(optionControl(entryWith([makeConstraint("a", "min", 5)])))
+      .toEqual({ kind: "stepper", min: 5, max: Infinity });
+  });
+
+  it("no own count bounds is a toggle", () => {
+    expect(optionControl(entryWith([]))).toEqual({ kind: "toggle" });
+  });
+
+  it("ignores constraints that are not own selections-count bounds", () => {
+    // points-field and roster-scope constraints must not drive the control → toggle
+    expect(optionControl(entryWith([
+      makeConstraint("a", "max", 3, "points"),
+      makeConstraint("b", "max", 3, "selections", "roster"),
+    ]))).toEqual({ kind: "toggle" });
+  });
+});
+
+describe("catalogueEntry", () => {
+  it("finds a root entry and a nested child, and returns undefined when absent", () => {
+    expect(catalogueEntry(swapCat, "e.hero")?.name).toBe("Hero");
+    expect(catalogueEntry(swapCat, "e.sword")?.name).toBe("Sword");
+    expect(catalogueEntry(swapCat, "ghost")).toBeUndefined();
   });
 });
