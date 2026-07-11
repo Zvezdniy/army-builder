@@ -301,5 +301,10 @@
       "targetId": "cat.hq",
       "includeChildSelections": false
     }
-  ]
+  ],
+  "categoryNames": {
+    "cat.hq": "HQ",
+    "cat.model": "Model",
+    "cat.troops": "Troops"
+  }
 }

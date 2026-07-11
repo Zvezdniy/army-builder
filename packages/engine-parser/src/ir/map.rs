@@ -17,6 +17,8 @@ pub fn to_ir(cat: &RawCatalogue) -> (IrCatalogue, Vec<Diagnostic>) {
         revision: cat.revision,
         entries,
         force_constraints,
+        category_names: cat.categories.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
+        rule_texts: cat.rules.clone(),
     };
     (ir, diags)
 }

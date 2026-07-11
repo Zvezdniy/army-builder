@@ -1,4 +1,5 @@
 use serde::Serialize;
+use std::collections::BTreeMap;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -10,6 +11,10 @@ pub struct IrCatalogue {
     pub entries: Vec<IrEntry>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub force_constraints: Vec<IrConstraint>,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub category_names: BTreeMap<String, String>,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub rule_texts: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Serialize)]

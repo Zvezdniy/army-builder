@@ -391,6 +391,32 @@ fn maps_profiles_onto_ir_entries() {
 }
 
 #[test]
+fn emits_category_names_and_rule_texts() {
+    let cat = engine_parser::raw::RawCatalogue {
+        id: "c".into(), name: "C".into(), game_system_id: Some("g".into()), revision: 1,
+        categories: std::collections::HashMap::from([("cat.hq".to_string(), "HQ".to_string())]),
+        rules: std::collections::BTreeMap::from([("Pistol".to_string(), "text".to_string())]),
+        ..Default::default()
+    };
+    let (ir, _diags) = engine_parser::ir::to_ir(&cat);
+    let v = serde_json::to_value(&ir).unwrap();
+    assert_eq!(v["categoryNames"]["cat.hq"], "HQ");
+    assert_eq!(v["ruleTexts"]["Pistol"], "text");
+}
+
+#[test]
+fn omits_empty_category_and_rule_maps() {
+    let cat = engine_parser::raw::RawCatalogue {
+        id: "c".into(), name: "C".into(), game_system_id: Some("g".into()), revision: 1,
+        ..Default::default()
+    };
+    let (ir, _diags) = engine_parser::ir::to_ir(&cat);
+    let v = serde_json::to_value(&ir).unwrap();
+    assert!(v.get("categoryNames").is_none());
+    assert!(v.get("ruleTexts").is_none());
+}
+
+#[test]
 fn root_entrylink_into_cycle_is_typed_error() {
     let xml = br#"<?xml version="1.0"?>
 <catalogue id="c" name="C" revision="1" gameSystemId="gs"
