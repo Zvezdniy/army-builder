@@ -91,9 +91,7 @@ fn map_entry(e: &RawEntry, cat: &RawCatalogue, diags: &mut Vec<Diagnostic>) -> I
     let mut groups: Vec<IrGroup> = Vec::new();
     for g in &e.groups {
         flatten_group_members(g, cat, diags, &mut children);
-        if let Some(ir_group) = map_group(g, diags) {
-            groups.push(ir_group);
-        }
+        collect_groups(g, diags, &mut groups);
     }
     let profiles: Vec<IrProfile> = e.profiles.iter().map(map_profile).collect();
 
@@ -132,14 +130,12 @@ fn flatten_group_members(g: &RawGroup, cat: &RawCatalogue, diags: &mut Vec<Diagn
     }
 }
 
-/// Map a group's own choose-N (selections min/max) into an IrGroup. Nested
-/// sub-group constraints are out of scope and diagnostic-dropped. Returns None
-/// when the group has no mappable min/max selections limit (behaviour then
-/// matches the pre-feature drop: members flattened, no IrGroup emitted).
+/// Map a group's own choose-N (selections min/max) into an IrGroup. Its
+/// members are the group's DIRECT entries only; nested sub-groups are mapped
+/// separately by `collect_groups`, not dropped. Returns None when the group
+/// has no mappable min/max selections limit (members are still flattened,
+/// just no IrGroup emitted for this group).
 fn map_group(g: &RawGroup, diags: &mut Vec<Diagnostic>) -> Option<IrGroup> {
-    for sub in &g.groups {
-        drop_group_constraints(sub, diags);
-    }
     let member_entry_ids: Vec<String> = g.entries.iter().map(|e| e.id.clone()).collect();
     let mut constraints: Vec<IrGroupConstraint> = Vec::new();
     for c in &g.constraints {
@@ -159,6 +155,25 @@ fn map_group(g: &RawGroup, diags: &mut Vec<Diagnostic>) -> Option<IrGroup> {
         member_entry_ids,
         constraints,
     })
+}
+
+/// Emit an IrGroup for `g` and every nested sub-group that carries a mappable
+/// choose-N limit. Members of all levels are flattened into the owning entry's
+/// children (see flatten_group_members), and each group's memberEntryIds are its
+/// DIRECT entry members, so engine-eval's flat per-owner count enforces each
+/// group's local choose-N independently. Nested sub-group limits used to be
+/// dropped wholesale (`drop_group_constraints`); they are now mapped like any
+/// other group. A parent group still counts only its direct entry members, not
+/// selections made inside its sub-groups — an intentional, pre-existing modeling
+/// limitation, never a miscompile (the parent's own limit is still enforced over
+/// its direct members).
+fn collect_groups(g: &RawGroup, diags: &mut Vec<Diagnostic>, out: &mut Vec<IrGroup>) {
+    if let Some(ir_group) = map_group(g, diags) {
+        out.push(ir_group);
+    }
+    for sub in &g.groups {
+        collect_groups(sub, diags, out);
+    }
 }
 
 /// A group choose-N limit maps only when it is a selections min/max with no
@@ -191,20 +206,6 @@ fn map_group_constraint(c: &RawConstraint, g: &RawGroup, diags: &mut Vec<Diagnos
         return None;
     }
     Some(IrGroupConstraint { id: c.id.clone(), type_: c.kind.clone(), value: c.value })
-}
-
-/// Loudly drop every constraint of a nested sub-group (choose-N on nested groups
-/// is out of scope), recursing so no nested limit is silently lost.
-fn drop_group_constraints(g: &RawGroup, diags: &mut Vec<Diagnostic>) {
-    for gc in &g.constraints {
-        diags.push(Diagnostic {
-            code: "group.constraint_dropped".to_string(),
-            message: format!("nested selectionEntryGroup {} constraint {} has no IR representation (dropped)", g.id, gc.id),
-        });
-    }
-    for sub in &g.groups {
-        drop_group_constraints(sub, diags);
-    }
 }
 
 /// Map a single raw constraint into its IR form. `target_type`/`target_id` are
