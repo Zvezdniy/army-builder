@@ -9,16 +9,19 @@ function points(e: IrEntry): number {
 /** Modal picker: the full faction unit list in collapsible role sections,
  *  searchable, each unit quick-added via its "+" button. */
 export function AddUnitPicker({
-  catalogue, onAdd, onClose,
+  catalogue, hiddenIds, onAdd, onClose,
 }: {
   catalogue: IrCatalogue;
+  hiddenIds: Set<string>;
   onAdd: (entryId: string) => void;
   onClose: () => void;
 }) {
   const [query, setQuery] = useState("");
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const q = query.trim().toLowerCase();
-  const units = availableUnits(catalogue).filter((u) => u.name.toLowerCase().includes(q));
+  const units = availableUnits(catalogue)
+    .filter((u) => !hiddenIds.has(u.id))
+    .filter((u) => u.name.toLowerCase().includes(q));
 
   const groups: { role: string; units: IrEntry[] }[] = [];
   const byRole = new Map<string, { role: string; units: IrEntry[] }>();
