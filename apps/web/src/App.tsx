@@ -28,7 +28,7 @@ export function App() {
             onChange={(e) => { const f = e.target.files?.[0]; if (f) void loadIr(f); }} />
         </label>
       </div>
-      <UnitPalette units={availableUnits(catalogue)} onAdd={(id) => setRoster((r) => addUnit(r, id))} />
+      <UnitPalette units={availableUnits(catalogue)} onAdd={(id) => setRoster((r) => addUnit(r, id, catalogue))} />
       <RosterPanel roster={roster} catalogue={catalogue} result={result}
         onAddOption={(pid, eid) => setRoster((r) => addOption(r, pid, eid))}
         onToggleGroupMember={(pid, group, eid) => setRoster((r) => toggleGroupMember(r, pid, group, eid))}

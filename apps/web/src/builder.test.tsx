@@ -37,21 +37,19 @@ describe("builder interactions", () => {
     const user = userEvent.setup();
     render(<App />);
     await user.click(screen.getByRole("button", { name: /add Assault Squad/i }));
-    expect(screen.getByTestId("points")).toHaveTextContent(/^80 \/ 2000/);
+    // prepopulated on add: Chainsword (group default, +5) and Marine (min 1, +18) → 80+5+18 = 103
+    expect(screen.getByTestId("points")).toHaveTextContent(/^103 \/ 2000/);
 
-    // Special Weapon is a required (min 1) choose-1 group.
-    await user.click(screen.getByRole("button", { name: /select Chainsword/i }));
-    expect(screen.getByTestId("points")).toHaveTextContent(/^85 \/ 2000/);
-    // required → clicking the sole chosen member does NOT empty it (stays 85, still chosen)
+    // Special Weapon is a required (min 1) choose-1 group; Chainsword is already chosen by default.
+    expect(screen.getByRole("button", { name: /deselect Chainsword/i })).toBeInTheDocument();
+    // required → clicking the sole chosen member does NOT empty it (stays 103, still chosen)
     await user.click(screen.getByRole("button", { name: /deselect Chainsword/i }));
-    expect(screen.getByTestId("points")).toHaveTextContent(/^85 \/ 2000/);
-    // but swapping to the other member works: 80 + 15 = 95
+    expect(screen.getByTestId("points")).toHaveTextContent(/^103 \/ 2000/);
+    // but swapping to the other member works: 80 + 15 + 18 = 113
     await user.click(screen.getByRole("button", { name: /select Plasma Pistol/i }));
-    expect(screen.getByTestId("points")).toHaveTextContent(/^95 \/ 2000/);
+    expect(screen.getByTestId("points")).toHaveTextContent(/^113 \/ 2000/);
 
-    // Marine is a countable option (min 1, max 5) → a −/+ stepper once added.
-    await user.click(screen.getByRole("button", { name: /add option Marine/i }));
-    expect(screen.getByTestId("points")).toHaveTextContent(/^113 \/ 2000/); // 95 + 18
+    // Marine is a countable option (min 1, max 5) → a −/+ stepper; one is already seeded.
     await user.click(screen.getByRole("button", { name: /increase e\.assault\.marine/i }));
     expect(screen.getByTestId("points")).toHaveTextContent(/^131 \/ 2000/); // 113 + 18
   });

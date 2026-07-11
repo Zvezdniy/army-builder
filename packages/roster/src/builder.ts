@@ -18,9 +18,12 @@ export function availableUnits(catalogue: IrCatalogue): IrEntry[] {
   return catalogue.entries;
 }
 
-/** Append a root unit selection. */
-export function addUnit(roster: Roster, entryId: string): Roster {
-  return { ...roster, selections: [...roster.selections, freshSelection(entryId)] };
+/** Append a root unit selection, prepopulated with its default/required loadout. */
+export function addUnit(roster: Roster, entryId: string, catalogue?: IrCatalogue): Roster {
+  const seed = freshSelection(entryId);
+  const entry = catalogue ? catalogueEntry(catalogue, entryId) : undefined;
+  const selection = entry ? { ...seed, selections: initialChildren(entry) } : seed;
+  return { ...roster, selections: [...roster.selections, selection] };
 }
 
 /** Nest an option (child selection) under the selection with `parentSelectionId`. */
@@ -155,6 +158,39 @@ export function toggleGroupMember(
 
 function freshSelection(entryId: string): RosterSelection {
   return { id: crypto.randomUUID(), entryId, count: 1, selections: [] };
+}
+
+/** Build the initial child selections for an entry: group defaults + min-required options. */
+function initialChildren(entry: IrEntry): RosterSelection[] {
+  const kids: RosterSelection[] = [];
+  const grouped = new Set((entry.groups ?? []).flatMap((g) => g.memberEntryIds));
+
+  for (const g of entry.groups ?? []) {
+    const min = g.constraints.find((c) => c.type === "min")?.value ?? 0;
+    const pick = g.defaultMemberEntryId ?? (min >= 1 ? g.memberEntryIds[0] : undefined);
+    if (pick !== undefined) kids.push(seedChild(entry, pick));
+  }
+  for (const child of entry.children) {
+    if (grouped.has(child.id)) continue; // group members handled above
+    const min = ownMin(child);
+    if (min >= 1) kids.push(seedChild(entry, child.id));
+  }
+  return kids;
+}
+
+/** A fresh child selection for `entryId`, counted to that option's own min (>=1). */
+function seedChild(parent: IrEntry, entryId: string): RosterSelection {
+  const child = parent.children.find((c) => c.id === entryId);
+  const count = child ? Math.max(1, ownMin(child)) : 1;
+  const grandkids = child ? initialChildren(child) : [];
+  return { id: crypto.randomUUID(), entryId, count, selections: grandkids };
+}
+
+/** An entry's own min selections-count bound (scope self/parent), else 0. */
+function ownMin(entry: IrEntry): number {
+  return entry.constraints.find(
+    (c) => c.field === "selections" && (c.scope === "self" || c.scope === "parent") && c.type === "min",
+  )?.value ?? 0;
 }
 
 function mapTree(

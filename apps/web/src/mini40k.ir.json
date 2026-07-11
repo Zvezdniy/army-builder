@@ -231,6 +231,7 @@
         {
           "id": "g.assault.weapon",
           "name": "Special Weapon",
+          "defaultMemberEntryId": "e.assault.chainsword",
           "memberEntryIds": [
             "e.assault.chainsword",
             "e.assault.plasma"

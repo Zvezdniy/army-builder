@@ -318,3 +318,132 @@ describe("catalogueEntry", () => {
     expect(catalogueEntry(swapCat, "ghost")).toBeUndefined();
   });
 });
+
+const defCat: IrCatalogue = {
+  id: "c", name: "C", gameSystemId: "g", revision: 1, forceConstraints: [],
+  entries: [{
+    id: "u", name: "U", costs: [], categories: [], constraints: [],
+    children: [
+      { id: "w.sword", name: "Sword", costs: [], categories: [], constraints: [], children: [] },
+      { id: "w.axe", name: "Axe", costs: [], categories: [], constraints: [], children: [] },
+      { id: "m", name: "Model", costs: [], categories: [],
+        constraints: [{ id: "m.min", type: "min", value: 3, field: "selections", scope: "self", targetType: "entry", targetId: "m", includeChildSelections: false }],
+        children: [] },
+    ],
+    groups: [
+      { id: "gw", name: "Weapon", memberEntryIds: ["w.sword", "w.axe"], defaultMemberEntryId: "w.sword",
+        constraints: [{ id: "gw.min", type: "min", value: 1 }, { id: "gw.max", type: "max", value: 1 }] },
+    ],
+  }],
+};
+
+describe("addUnit prepopulates from defaults and mins", () => {
+  it("selects a group's default member on add", () => {
+    const r = addUnit(createRoster(defCat, 2000), "u");
+    // no catalogue passed → behaves exactly as before (no prepopulation)
+    expect(r.selections[0]!.selections).toEqual([]);
+  });
+
+  it("selects a group's default member on add when a catalogue is passed", () => {
+    const r = addUnit(createRoster(defCat, 2000), "u", defCat);
+    const kids = r.selections[0]!.selections.map((s) => s.entryId);
+    expect(kids).toContain("w.sword");
+    expect(kids).not.toContain("w.axe");
+  });
+
+  it("fills a min>=1 option to its minimum count", () => {
+    const r = addUnit(createRoster(defCat, 2000), "u", defCat);
+    const model = r.selections[0]!.selections.find((s) => s.entryId === "m");
+    expect(model?.count).toBe(3);
+  });
+
+  it("falls back to the first member when a min>=1 group has no default", () => {
+    const noDefaultCat: IrCatalogue = {
+      ...defCat,
+      entries: [{ ...defCat.entries[0]!, groups: [
+        { id: "gw", name: "Weapon", memberEntryIds: ["w.sword", "w.axe"],
+          constraints: [{ id: "gw.min", type: "min", value: 1 }, { id: "gw.max", type: "max", value: 1 }] },
+      ] }],
+    };
+    const r = addUnit(createRoster(noDefaultCat, 2000), "u", noDefaultCat);
+    const kids = r.selections[0]!.selections.map((s) => s.entryId);
+    expect(kids).toContain("w.sword");
+    expect(kids).not.toContain("w.axe");
+  });
+
+  it("adds nothing for optional groups without a default", () => {
+    const optCat: IrCatalogue = {
+      ...defCat,
+      entries: [{ ...defCat.entries[0]!, groups: [
+        { id: "gw", name: "Weapon", memberEntryIds: ["w.sword", "w.axe"],
+          constraints: [{ id: "gw.max", type: "max", value: 1 }] },
+      ], children: [defCat.entries[0]!.children[0]!, defCat.entries[0]!.children[1]!] }],
+    };
+    const r = addUnit(createRoster(optCat, 2000), "u", optCat);
+    expect(r.selections[0]!.selections).toEqual([]);
+  });
+
+  it("seeds a nested subtree: a seeded child that itself has group defaults/mins", () => {
+    const nestedCat: IrCatalogue = {
+      id: "c", name: "C", gameSystemId: "g", revision: 1, forceConstraints: [],
+      entries: [{
+        id: "u", name: "U", costs: [], categories: [], constraints: [],
+        children: [
+          {
+            id: "sub", name: "Sub", costs: [], categories: [],
+            constraints: [{ id: "sub.min", type: "min", value: 1, field: "selections", scope: "self", targetType: "entry", targetId: "sub", includeChildSelections: false }],
+            children: [
+              { id: "sub.sword", name: "SubSword", costs: [], categories: [], constraints: [], children: [] },
+              { id: "sub.axe", name: "SubAxe", costs: [], categories: [], constraints: [], children: [] },
+            ],
+            groups: [
+              { id: "sub.gw", name: "SubWeapon", memberEntryIds: ["sub.sword", "sub.axe"], defaultMemberEntryId: "sub.sword",
+                constraints: [{ id: "sub.gw.min", type: "min", value: 1 }, { id: "sub.gw.max", type: "max", value: 1 }] },
+            ],
+          },
+        ],
+        groups: [],
+      }],
+    };
+    const r = addUnit(createRoster(nestedCat, 2000), "u", nestedCat);
+    const sub = r.selections[0]!.selections.find((s) => s.entryId === "sub");
+    expect(sub?.count).toBe(1);
+    const subKids = sub?.selections.map((s) => s.entryId);
+    expect(subKids).toEqual(["sub.sword"]);
+  });
+
+  it("treats a parent-scoped min constraint the same as a self-scoped one", () => {
+    const parentScopedCat: IrCatalogue = {
+      id: "c", name: "C", gameSystemId: "g", revision: 1, forceConstraints: [],
+      entries: [{
+        id: "u", name: "U", costs: [], categories: [], constraints: [],
+        children: [
+          { id: "m2", name: "Model2", costs: [], categories: [],
+            constraints: [{ id: "m2.min", type: "min", value: 2, field: "selections", scope: "parent", targetType: "entry", targetId: "m2", includeChildSelections: false }],
+            children: [] },
+        ],
+        groups: [],
+      }],
+    };
+    const r = addUnit(createRoster(parentScopedCat, 2000), "u", parentScopedCat);
+    const model = r.selections[0]!.selections.find((s) => s.entryId === "m2");
+    expect(model?.count).toBe(2);
+  });
+
+  it("seedChild falls back to count 1 with no grandkids when the picked default id is not in children", () => {
+    const ghostCat: IrCatalogue = {
+      ...defCat,
+      entries: [{
+        ...defCat.entries[0]!,
+        groups: [
+          { id: "gw", name: "Weapon", memberEntryIds: ["w.sword", "w.axe"], defaultMemberEntryId: "ghost.id",
+            constraints: [{ id: "gw.min", type: "min", value: 1 }, { id: "gw.max", type: "max", value: 1 }] },
+        ],
+      }],
+    };
+    const r = addUnit(createRoster(ghostCat, 2000), "u", ghostCat);
+    const seeded = r.selections[0]!.selections.find((s) => s.entryId === "ghost.id");
+    expect(seeded?.count).toBe(1);
+    expect(seeded?.selections).toEqual([]);
+  });
+});
