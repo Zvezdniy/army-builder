@@ -80,6 +80,38 @@ pub fn merge_supporting(
 
     // Append the supporting file's force-org.
     primary.force_entries.extend(supporting.force_entries);
+
+    // Diagnose dropped top-level roots that we don't surface.
+    if !supporting.entries.is_empty() {
+        diags.push(Diagnostic {
+            code: "gameSystem.entries_dropped".to_string(),
+            message: format!(
+                "supporting file {}: {} top-level entries dropped (only shared entries are merged)",
+                supporting.id,
+                supporting.entries.len()
+            ),
+        });
+    }
+    if !supporting.entry_links.is_empty() {
+        diags.push(Diagnostic {
+            code: "gameSystem.entry_links_dropped".to_string(),
+            message: format!(
+                "supporting file {}: {} top-level entryLinks dropped (system-level roots not surfaced)",
+                supporting.id,
+                supporting.entry_links.len()
+            ),
+        });
+    }
+    if !supporting.catalogue_links.is_empty() {
+        diags.push(Diagnostic {
+            code: "gameSystem.catalogue_links_dropped".to_string(),
+            message: format!(
+                "supporting file {}: {} catalogueLinks dropped (sibling libraries are out of scope)",
+                supporting.id,
+                supporting.catalogue_links.len()
+            ),
+        });
+    }
 }
 
 fn duplicate_cross_file_diag(id: &str) -> Diagnostic {
@@ -95,7 +127,7 @@ fn duplicate_cross_file_diag(id: &str) -> Diagnostic {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::raw::{RawEntry, RawForce};
+    use crate::raw::{RawEntry, RawEntryLink, RawForce};
     use std::collections::HashMap;
 
     fn shared_entry(id: &str) -> RawEntry {
@@ -187,5 +219,30 @@ mod tests {
         let mut diags = Vec::new();
         merge_supporting(&mut primary, supporting, &mut diags);
         assert!(diags.iter().any(|d| d.code == "gameSystem.unverified"));
+    }
+
+    #[test]
+    fn supporting_top_level_roots_are_diagnosed_when_dropped() {
+        let mut primary = RawCatalogue {
+            id: "cat".into(),
+            game_system_id: Some("sys".into()),
+            ..Default::default()
+        };
+        let supporting = RawCatalogue {
+            id: "sys".into(),
+            entry_links: vec![RawEntryLink {
+                target_id: "root1".into(),
+                link_type: "profile".into(),
+            }],
+            ..Default::default()
+        };
+        let mut diags = Vec::new();
+        merge_supporting(&mut primary, supporting, &mut diags);
+        assert!(
+            diags.iter().any(|d| d.code == "gameSystem.entry_links_dropped"
+                && d.message.contains("1 top-level entryLinks dropped")),
+            "expected diagnostic for dropped entry_links, got: {:?}",
+            diags
+        );
     }
 }
