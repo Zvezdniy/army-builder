@@ -50,4 +50,11 @@ describe("IrConditionGroup", () => {
     const g = IrConditionGroup.parse({ type: "and" });
     expect(g.conditions).toBeUndefined();
   });
+
+  it("accepts root-entry and ancestor scopes", () => {
+    for (const scope of ["root-entry", "ancestor"] as const) {
+      const c = IrCondition.parse({ id: "c", comparator: "atLeast", value: 1, field: "selections", scope, targetType: "category", targetId: "cat.x" });
+      expect(c.scope).toBe(scope);
+    }
+  });
 });
