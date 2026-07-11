@@ -77,6 +77,9 @@ pub fn merge_supporting(
     for (k, v) in supporting.categories {
         primary.categories.entry(k).or_insert(v);
     }
+    for (k, v) in supporting.rules {
+        primary.rules.entry(k).or_insert(v);
+    }
 
     // Append the supporting file's force-org.
     primary.force_entries.extend(supporting.force_entries);
@@ -219,6 +222,27 @@ mod tests {
         let mut diags = Vec::new();
         merge_supporting(&mut primary, supporting, &mut diags);
         assert!(diags.iter().any(|d| d.code == "gameSystem.unverified"));
+    }
+
+    #[test]
+    fn unions_rules_primary_wins() {
+        let mut primary = RawCatalogue {
+            id: "cat".into(), game_system_id: Some("sys".into()),
+            rules: std::collections::BTreeMap::from([("Pistol".to_string(), "primary".to_string())]),
+            ..Default::default()
+        };
+        let supporting = RawCatalogue {
+            id: "sup".into(), game_system_id: Some("sys".into()),
+            rules: std::collections::BTreeMap::from([
+                ("Pistol".to_string(), "supporting".to_string()),
+                ("Leader".to_string(), "gst text".to_string()),
+            ]),
+            ..Default::default()
+        };
+        let mut diags = Vec::new();
+        merge_supporting(&mut primary, supporting, &mut diags);
+        assert_eq!(primary.rules.get("Pistol").unwrap(), "primary"); // primary wins
+        assert_eq!(primary.rules.get("Leader").unwrap(), "gst text"); // gst rule folded in
     }
 
     #[test]
