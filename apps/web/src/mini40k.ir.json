@@ -184,6 +184,20 @@
               ],
               "categories": [
                 "cat.model"
+              ],
+              "profiles": [
+                {
+                  "name": "Trooper",
+                  "typeName": "Unit",
+                  "characteristics": [
+                    { "name": "M", "value": "6\"" },
+                    { "name": "T", "value": "4" },
+                    { "name": "SV", "value": "3+" },
+                    { "name": "W", "value": "2" },
+                    { "name": "LD", "value": "6+" },
+                    { "name": "OC", "value": "2" }
+                  ]
+                }
               ]
             }
           ]
