@@ -25,7 +25,7 @@ fn check_size(input: &[u8]) -> Result<(), ParseError> {
 }
 
 /// Get the XML bytes for one input, extracting the single zip member if needed.
-fn to_xml(input: &[u8], is_zip: bool) -> Result<std::borrow::Cow<[u8]>, ParseError> {
+fn to_xml(input: &[u8], is_zip: bool) -> Result<std::borrow::Cow<'_, [u8]>, ParseError> {
     if is_zip {
         Ok(std::borrow::Cow::Owned(crate::zip::extract_single_xml(input)?))
     } else {
