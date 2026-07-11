@@ -15,18 +15,42 @@ describe("builder interactions", () => {
     expect(screen.getByTestId("roster-list")).toHaveTextContent("Captain");
   });
 
-  it("an added option renders nested under its unit and can be removed", async () => {
+  it("selecting a weapon in a choose-1 group swaps rather than stacking", async () => {
     const user = userEvent.setup();
     render(<App />);
     await user.click(screen.getByRole("button", { name: /add Captain/i }));
-    // Captain exposes wargear options; adding one renders a nested node with its
-    // OWN controls — a per-option "remove" button (only real selections produce it,
-    // never the palette/add-option buttons).
-    await user.click(screen.getByRole("button", { name: /add option Power Sword/i }));
-    expect(screen.getByRole("button", { name: /remove e\.captain\.sword/i })).toBeInTheDocument();
-    // that per-option remove drops just the option; the Captain (and its remove) stays.
-    await user.click(screen.getByRole("button", { name: /remove e\.captain\.sword/i }));
-    expect(screen.queryByRole("button", { name: /remove e\.captain\.sword/i })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /remove e\.captain$/i })).toBeInTheDocument();
+    // Wargear is a max-1 group: Power Sword (5) / Power Axe (10) are toggles, not "+".
+    await user.click(screen.getByRole("button", { name: /select Power Sword/i }));
+    expect(screen.getByTestId("points")).toHaveTextContent(/^95 \/ 2000/);
+    // picking the axe REPLACES the sword — points reflect the swap, not a sum (would be 105).
+    await user.click(screen.getByRole("button", { name: /select Power Axe/i }));
+    expect(screen.getByTestId("points")).toHaveTextContent(/^100 \/ 2000/);
+    // the sword is now deselectable-again (offered), the axe is chosen (deselect offered)
+    expect(screen.getByRole("button", { name: /select Power Sword/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /deselect Power Axe/i })).toBeInTheDocument();
+    // clicking the chosen axe again clears it back to no weapon
+    await user.click(screen.getByRole("button", { name: /deselect Power Axe/i }));
+    expect(screen.getByTestId("points")).toHaveTextContent(/^90 \/ 2000/);
+  });
+
+  it("derives controls from constraints: required radio, and a bounded stepper", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(screen.getByRole("button", { name: /add Assault Squad/i }));
+    // prepopulated on add: Chainsword (group default, +5) and Marine (min 1, +18) → 80+5+18 = 103
+    expect(screen.getByTestId("points")).toHaveTextContent(/^103 \/ 2000/);
+
+    // Special Weapon is a required (min 1) choose-1 group; Chainsword is already chosen by default.
+    expect(screen.getByRole("button", { name: /deselect Chainsword/i })).toBeInTheDocument();
+    // required → clicking the sole chosen member does NOT empty it (stays 103, still chosen)
+    await user.click(screen.getByRole("button", { name: /deselect Chainsword/i }));
+    expect(screen.getByTestId("points")).toHaveTextContent(/^103 \/ 2000/);
+    // but swapping to the other member works: 80 + 15 + 18 = 113
+    await user.click(screen.getByRole("button", { name: /select Plasma Pistol/i }));
+    expect(screen.getByTestId("points")).toHaveTextContent(/^113 \/ 2000/);
+
+    // Marine is a countable option (min 1, max 5) → a −/+ stepper; one is already seeded.
+    await user.click(screen.getByRole("button", { name: /increase e\.assault\.marine/i }));
+    expect(screen.getByTestId("points")).toHaveTextContent(/^131 \/ 2000/); // 113 + 18
   });
 });

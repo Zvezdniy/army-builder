@@ -58,6 +58,16 @@ describe("IrGroup / IrGroupConstraint", () => {
     expect(g.constraints).toEqual([]);
   });
 
+  it("IrGroup accepts an optional defaultMemberEntryId", () => {
+    const g = IrGroup.parse({ id: "g", name: "G", memberEntryIds: ["a"], constraints: [], defaultMemberEntryId: "a" });
+    expect(g.defaultMemberEntryId).toBe("a");
+  });
+
+  it("IrGroup defaultMemberEntryId is optional", () => {
+    const g = IrGroup.parse({ id: "g", name: "G", memberEntryIds: [], constraints: [] });
+    expect(g.defaultMemberEntryId).toBeUndefined();
+  });
+
   it("defaults IrEntry.groups to empty array when absent", () => {
     const e = IrEntry.parse({ id: "e", name: "E" });
     expect(e.groups).toEqual([]);

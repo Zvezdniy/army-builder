@@ -134,7 +134,15 @@ fn map_group(g: &RawGroup, diags: &mut Vec<Diagnostic>) -> Option<IrGroup> {
     if constraints.is_empty() {
         return None;
     }
-    Some(IrGroup { id: g.id.clone(), name: g.name.clone(), member_entry_ids, constraints })
+    let default_member_entry_id = (!g.default_selection_entry_id.is_empty())
+        .then(|| g.default_selection_entry_id.clone());
+    Some(IrGroup {
+        id: g.id.clone(),
+        name: g.name.clone(),
+        default_member_entry_id,
+        member_entry_ids,
+        constraints,
+    })
 }
 
 /// A group choose-N limit maps only when it is a selections min/max with no

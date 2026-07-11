@@ -31,6 +31,7 @@ export type IrGroupConstraint = z.infer<typeof IrGroupConstraint>;
 export const IrGroup = z.object({
   id: z.string(),
   name: z.string(),
+  defaultMemberEntryId: z.string().optional(),
   memberEntryIds: z.array(z.string()).default([]),
   constraints: z.array(IrGroupConstraint).default([]),
 });

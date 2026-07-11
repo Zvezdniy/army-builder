@@ -71,6 +71,30 @@ fn reads_modifiers_and_conditions() {
 }
 
 #[test]
+fn reads_group_default_selection_entry_id() {
+    let xml = br#"<catalogue id="c" name="C" gameSystemId="g" revision="1">
+ <sharedSelectionEntries>
+  <selectionEntry id="u" name="U" type="unit">
+   <selectionEntryGroups>
+    <selectionEntryGroup id="g" name="G" defaultSelectionEntryId="e.def">
+     <selectionEntries>
+      <selectionEntry id="e.def" name="Def" type="upgrade"/>
+     </selectionEntries>
+     <constraints>
+      <constraint type="max" value="1" field="selections" scope="parent" id="c1"/>
+     </constraints>
+    </selectionEntryGroup>
+   </selectionEntryGroups>
+  </selectionEntry>
+ </sharedSelectionEntries>
+</catalogue>"#;
+    let raw = parse_raw(xml).unwrap();
+    let unit = raw.shared_entries.iter().find(|e| e.id == "u").unwrap();
+    let group = unit.groups.iter().find(|g| g.id == "g").unwrap();
+    assert_eq!(group.default_selection_entry_id, "e.def");
+}
+
+#[test]
 fn reads_catalogue_level_entry_links() {
     let xml = br#"<?xml version="1.0"?>
 <catalogue id="c" name="C" revision="1" gameSystemId="gs"

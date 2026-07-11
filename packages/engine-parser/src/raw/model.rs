@@ -32,6 +32,7 @@ pub struct RawEntry {
 
 #[derive(Debug, Default, Clone)] pub struct RawGroup {
     pub id: String, pub name: String,
+    pub default_selection_entry_id: String,
     pub entries: Vec<RawEntry>, pub groups: Vec<RawGroup>,
     pub entry_links: Vec<RawEntryLink>, pub constraints: Vec<RawConstraint>,
     pub modifiers: Vec<RawModifier>,
