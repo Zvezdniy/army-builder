@@ -576,6 +576,33 @@ fn hidden_modifier_instance_of_maps_to_at_least_one() {
 }
 
 #[test]
+fn drops_hidden_modifier_with_parent_scope() {
+    // parent scope maps for cost/constraint conditions, but NOT for visibility:
+    // hidden is evaluated on a parentless synthetic node where parent collapses to
+    // self and would over-hide. It must drop the whole modifier → entry visible.
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <selectionEntries>
+    <selectionEntry id="e.u" name="U" type="upgrade">
+      <modifiers>
+        <modifier type="set" value="true" field="hidden">
+          <conditions>
+            <condition type="notInstanceOf" value="1" field="selections" scope="parent" childId="cat.x"/>
+          </conditions>
+        </modifier>
+      </modifiers>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let (ir, diags) = to_ir(&resolve(parse_raw(xml).unwrap()).unwrap());
+    let e = ir.entries.iter().find(|e| e.id == "e.u").unwrap();
+    assert!(e.visibility_modifiers.is_empty(), "parent-scoped hidden gate must be dropped");
+    assert!(!e.hidden);
+    assert!(diags.iter().any(|d| d.code == "modifier.hidden_condition_unmapped"));
+}
+
+#[test]
 fn hidden_modifier_partial_or_group_drops_whole_modifier() {
     // Never over-hide: an `or` group with one mappable + one unmappable (root-entry
     // scope) condition must drop the ENTIRE modifier, not keep the mappable sibling.

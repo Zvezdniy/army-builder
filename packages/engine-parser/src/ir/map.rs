@@ -401,6 +401,21 @@ fn map_condition_group(g: &RawConditionGroup, cat: &RawCatalogue, diags: &mut Ve
     })
 }
 
+/// Map a condition for a VISIBILITY gate. Identical to `map_condition` except
+/// that scope `parent` is ALSO treated as unmappable. Visibility is evaluated on
+/// a parentless synthetic self-node (see engine-eval `hiddenEntryIds`), where a
+/// `parent` scope would silently collapse to `self` and mis-fire — over-hiding a
+/// valid option. Deferring it (whole modifier dropped → entry stays visible)
+/// upholds the never-over-hide invariant. self/force/roster pass through.
+fn map_hidden_condition(c: &RawCondition, cat: &RawCatalogue) -> Option<IrCondition> {
+    let mut sink = Vec::new();
+    let ic = map_condition(c, cat, &mut sink)?;
+    if ic.scope == "parent" {
+        return None;
+    }
+    Some(ic)
+}
+
 /// Strict all-or-nothing condition-group mapping for visibility gates: if any
 /// nested condition or sub-group is unmappable, the whole group fails (`?`
 /// propagates None) so the caller can drop the entire hidden modifier rather
@@ -411,10 +426,9 @@ fn map_condition_group_strict(g: &RawConditionGroup, cat: &RawCatalogue) -> Opti
         "and" | "or" => g.kind.clone(),
         _ => return None,
     };
-    let mut sink = Vec::new();
     let mut conditions = Vec::new();
     for c in &g.conditions {
-        conditions.push(map_condition(c, cat, &mut sink)?);
+        conditions.push(map_hidden_condition(c, cat)?);
     }
     let mut condition_groups = Vec::new();
     for sub in &g.groups {
@@ -431,10 +445,9 @@ fn map_condition_group_strict(g: &RawConditionGroup, cat: &RawCatalogue) -> Opti
 /// ANY condition/group is unmappable — the caller then drops the whole modifier
 /// (never over-hide). `set` is the boolean the modifier writes to `hidden`.
 fn map_visibility_modifier(m: &RawModifier, cat: &RawCatalogue) -> Option<IrVisibilityModifier> {
-    let mut sink = Vec::new();
     let mut conditions = Vec::new();
     for c in &m.conditions {
-        conditions.push(map_condition(c, cat, &mut sink)?);
+        conditions.push(map_hidden_condition(c, cat)?);
     }
     let mut condition_groups = Vec::new();
     for g in &m.condition_groups {

@@ -78,7 +78,7 @@ export function UnitConfig({
               <span className={required ? "uc-hint is-required" : "uc-hint"}>{hint}</span>
             </div>
             <div className="uc-options">
-              {g.memberEntryIds.filter((id) => !hiddenIds.has(id)).map((id) => {
+              {g.memberEntryIds.filter((id) => !hiddenIds.has(id) || chosen.has(id)).map((id) => {
                 const on = chosen.has(id);
                 return (
                   <button key={id} aria-pressed={on}
