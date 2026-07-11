@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use crate::error::{Diagnostic, ParseError};
 use crate::limits::{MAX_RESOLVED_NODES, MAX_RESOLVE_DEPTH};
-use crate::raw::{RawCatalogue, RawEntry, RawGroup};
+use crate::raw::{RawCatalogue, RawEntry, RawEntryLink, RawGroup};
 use super::symbols::SymbolTable;
 
 struct Budget { nodes: u64, max_nodes: u64, max_depth: usize }
@@ -82,6 +82,46 @@ fn unresolved_link_diag(target_id: &str) -> Diagnostic {
     }
 }
 
+/// Resolve one entryLink into either a child entry or an inlined group,
+/// dispatching on the link's declared target type. A `selectionEntryGroup` target
+/// is looked up in the group index and pushed to `groups`; anything else is an
+/// entry, looked up in the entry index and pushed to `children`. An unresolvable
+/// target (absent from the index its type names) is diagnosed and dropped — never
+/// cross-resolved against the other index. A link into a node already on the path
+/// is a reference cycle. The node budget/depth cap are shared with entry resolution.
+fn resolve_link(
+    link: &RawEntryLink, symbols: &SymbolTable, path: &mut HashSet<String>,
+    budget: &mut Budget, diags: &mut Vec<Diagnostic>, depth: usize,
+    children: &mut Vec<RawEntry>, groups: &mut Vec<RawGroup>,
+) -> Result<(), ParseError> {
+    if link.link_type == "selectionEntryGroup" {
+        let target = match symbols.group(&link.target_id) {
+            Some(t) => t,
+            None => { diags.push(unresolved_link_diag(&link.target_id)); return Ok(()); }
+        };
+        if path.contains(&link.target_id) {
+            return Err(ParseError::ReferenceCycle(link.target_id.clone()));
+        }
+        path.insert(link.target_id.clone());
+        let resolved = resolve_group(target, symbols, path, budget, diags, depth + 1)?;
+        path.remove(&link.target_id);
+        groups.push(resolved);
+    } else {
+        let target = match symbols.entry(&link.target_id) {
+            Some(t) => t,
+            None => { diags.push(unresolved_link_diag(&link.target_id)); return Ok(()); }
+        };
+        if path.contains(&link.target_id) {
+            return Err(ParseError::ReferenceCycle(link.target_id.clone()));
+        }
+        path.insert(link.target_id.clone());
+        let resolved = resolve_entry(target, symbols, path, budget, diags, depth + 1)?;
+        path.remove(&link.target_id);
+        children.push(resolved);
+    }
+    Ok(())
+}
+
 fn resolve_entry(entry: &RawEntry, symbols: &SymbolTable, path: &mut HashSet<String>,
     budget: &mut Budget, diags: &mut Vec<Diagnostic>, depth: usize) -> Result<RawEntry, ParseError> {
     budget.check_depth(depth)?;
@@ -96,17 +136,7 @@ fn resolve_entry(entry: &RawEntry, symbols: &SymbolTable, path: &mut HashSet<Str
         groups.push(resolve_group(g, symbols, path, budget, diags, depth + 1)?);
     }
     for link in &entry.entry_links {
-        let target = match symbols.entry(&link.target_id) {
-            Some(t) => t,
-            None => { diags.push(unresolved_link_diag(&link.target_id)); continue; }
-        };
-        if path.contains(&link.target_id) {
-            return Err(ParseError::ReferenceCycle(link.target_id.clone()));
-        }
-        path.insert(link.target_id.clone());
-        let resolved_target = resolve_entry(target, symbols, path, budget, diags, depth + 1)?;
-        path.remove(&link.target_id);
-        children.push(resolved_target);
+        resolve_link(link, symbols, path, budget, diags, depth, &mut children, &mut groups)?;
     }
     out.entries = children;
     out.groups = groups;
@@ -128,16 +158,7 @@ fn resolve_group(group: &RawGroup, symbols: &SymbolTable, path: &mut HashSet<Str
         groups.push(resolve_group(g, symbols, path, budget, diags, depth + 1)?);
     }
     for link in &group.entry_links {
-        let target = match symbols.entry(&link.target_id) {
-            Some(t) => t,
-            None => { diags.push(unresolved_link_diag(&link.target_id)); continue; }
-        };
-        if path.contains(&link.target_id) {
-            return Err(ParseError::ReferenceCycle(link.target_id.clone()));
-        }
-        path.insert(link.target_id.clone());
-        children.push(resolve_entry(target, symbols, path, budget, diags, depth + 1)?);
-        path.remove(&link.target_id);
+        resolve_link(link, symbols, path, budget, diags, depth, &mut children, &mut groups)?;
     }
     out.entries = children;
     out.groups = groups;
@@ -155,6 +176,63 @@ mod tests {
     }
     fn entry(id: &str, links: Vec<RawEntryLink>) -> RawEntry {
         RawEntry { id: id.to_string(), entry_type: "upgrade".into(), entry_links: links, ..Default::default() }
+    }
+    fn group_link(target: &str) -> RawEntryLink {
+        RawEntryLink { target_id: target.to_string(), link_type: "selectionEntryGroup".to_string() }
+    }
+
+    #[test]
+    fn group_targeted_link_inlines_a_group() {
+        // A shared group g0 with one member; an entry links it as a group.
+        let mut g0 = RawGroup { id: "g0".into(), name: "Opt".into(), ..Default::default() };
+        g0.entries.push(entry("m0", vec![]));
+        let owner = RawEntry {
+            id: "owner".into(), entry_type: "unit".into(),
+            entry_links: vec![group_link("g0")], ..Default::default()
+        };
+        let cat = RawCatalogue {
+            id: "c".into(),
+            entries: vec![owner],
+            shared_groups: vec![g0],
+            ..Default::default()
+        };
+        let resolved = resolve(cat).unwrap();
+        let owner = resolved.entries.iter().find(|e| e.id == "owner").unwrap();
+        assert_eq!(owner.groups.len(), 1, "group inlined into .groups, not children");
+        assert_eq!(owner.groups[0].id, "g0");
+        assert!(owner.groups[0].entries.iter().any(|m| m.id == "m0"));
+        assert!(owner.entries.is_empty(), "group did not leak into children");
+    }
+
+    #[test]
+    fn group_targeted_link_missing_is_diagnosed() {
+        let owner = RawEntry {
+            id: "owner".into(), entry_type: "unit".into(),
+            entry_links: vec![group_link("g.absent")], ..Default::default()
+        };
+        let cat = RawCatalogue { id: "c".into(), entries: vec![owner], ..Default::default() };
+        let mut diags = Vec::new();
+        let resolved = resolve_with_diags(cat, &mut diags).unwrap();
+        assert!(resolved.entries[0].groups.is_empty());
+        assert!(diags.iter().any(|d| d.code == "entryLink.unresolved" && d.message.contains("g.absent")));
+    }
+
+    #[test]
+    fn group_targeted_link_into_cycle_is_typed_error() {
+        // Group g0 contains an entry that links back to g0 as a group → cycle.
+        let mut g0 = RawGroup { id: "g0".into(), ..Default::default() };
+        g0.entries.push(RawEntry {
+            id: "inner".into(), entry_type: "upgrade".into(),
+            entry_links: vec![group_link("g0")], ..Default::default()
+        });
+        let owner = RawEntry {
+            id: "owner".into(), entry_type: "unit".into(),
+            entry_links: vec![group_link("g0")], ..Default::default()
+        };
+        let cat = RawCatalogue {
+            id: "c".into(), entries: vec![owner], shared_groups: vec![g0], ..Default::default()
+        };
+        assert!(matches!(resolve(cat), Err(ParseError::ReferenceCycle(_))));
     }
 
     #[test]
