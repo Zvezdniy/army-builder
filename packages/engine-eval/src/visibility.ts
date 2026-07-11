@@ -51,6 +51,11 @@ export function hiddenEntryIds(
     };
     let isHidden = entry.hidden ?? false;
     for (const m of mods) {
+      // Skip is symmetric on `set`: a context-scoped modifier is skipped without an
+      // owner whether it hides (set:true) or reveals (set:false). Skipping a reveal
+      // leaves the entry as-is (never hides more), so this stays never-over-hide; and
+      // the only ownerless UI path (the top-level unit picker) never carries an
+      // ancestor-scoped gate in real data.
       if (owner === null && usesContextScope(m)) continue;
       if (passesGate(m.conditions, m.conditionGroups, synth, state)) isHidden = m.set;
     }
