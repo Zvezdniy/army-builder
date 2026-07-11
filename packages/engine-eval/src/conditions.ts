@@ -54,17 +54,23 @@ function evaluateGroupAtDepth(
   return group.type === "and" ? members.every(Boolean) : members.some(Boolean);
 }
 
+export function passesGate(
+  conditions: IrCondition[] | undefined,
+  conditionGroups: IrConditionGroup[] | undefined,
+  node: EvalNode | null,
+  state: EvalState,
+  costOf: CostFn = nodePoints,
+): boolean {
+  const conditionsOk = (conditions ?? []).every((c) => evaluateCondition(c, node, state, costOf));
+  const groupsOk = (conditionGroups ?? []).every((g) => evaluateConditionGroup(g, node, state, costOf));
+  return conditionsOk && groupsOk;
+}
+
 export function gatePasses(
   modifier: IrModifier,
   node: EvalNode | null,
   state: EvalState,
   costOf: CostFn = nodePoints,
 ): boolean {
-  const conditionsOk = (modifier.conditions ?? []).every((c) =>
-    evaluateCondition(c, node, state, costOf),
-  );
-  const groupsOk = (modifier.conditionGroups ?? []).every((g) =>
-    evaluateConditionGroup(g, node, state, costOf),
-  );
-  return conditionsOk && groupsOk;
+  return passesGate(modifier.conditions, modifier.conditionGroups, node, state, costOf);
 }
