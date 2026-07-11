@@ -47,25 +47,38 @@ describe("roster builder", () => {
   });
 
   it("addOption nests a child under the target selection", () => {
+    const r0 = addUnit(createRoster(catalogue, 2000), "e.captain");
+    const capId = r0.selections[0]!.id;
+    const r1 = addOption(r0, capId, "e.bolter");
+    expect(r0.selections[0]!.selections).toEqual([]); // original untouched
+    expect(r1.selections[0]!.selections[0]!.entryId).toBe("e.bolter");
+  });
+
+  it("addOption on a nested selection recurses past the first level (mapTree)", () => {
     let r = addUnit(createRoster(catalogue, 2000), "e.captain");
     const capId = r.selections[0]!.id;
     r = addOption(r, capId, "e.bolter");
-    expect(r.selections[0]!.selections[0]!.entryId).toBe("e.bolter");
+    const boltId = r.selections[0]!.selections[0]!.id;
+    r = addOption(r, boltId, "e.scope");
+    expect(r.selections[0]!.selections[0]!.selections[0]!.entryId).toBe("e.scope");
   });
 
   it("setCount updates a nested selection's count", () => {
-    let r = addUnit(createRoster(catalogue, 2000), "e.squad");
-    const id = r.selections[0]!.id;
-    r = setCount(r, id, 10);
-    expect(r.selections[0]!.count).toBe(10);
+    const r0 = addUnit(createRoster(catalogue, 2000), "e.squad");
+    const id = r0.selections[0]!.id;
+    const r1 = setCount(r0, id, 10);
+    expect(r0.selections[0]!.count).toBe(1); // original untouched
+    expect(r1.selections[0]!.count).toBe(10);
   });
 
   it("remove drops a selection and its subtree", () => {
     let r = addUnit(createRoster(catalogue, 2000), "e.captain");
     const capId = r.selections[0]!.id;
     r = addOption(r, capId, "e.bolter");
-    r = remove(r, capId);
-    expect(r.selections).toEqual([]);
+    const r0 = r;
+    const r1 = remove(r0, capId);
+    expect(r0.selections).toHaveLength(1); // original untouched
+    expect(r1.selections).toEqual([]);
   });
 
   it("remove of a nested option keeps the parent", () => {
@@ -104,5 +117,18 @@ describe("roster builder", () => {
     let r = addUnit(createRoster(catalogue, 2000), "e.squad");
     const id = r.selections[0]!.id;
     expect(optionsFor(r, id, catalogue).groups).toEqual([]);
+  });
+
+  it("optionsFor on a nested selection recurses (findTree) and falls back to [] when the entry omits groups", () => {
+    let r = addUnit(createRoster(catalogue, 2000), "e.captain");
+    const capId = r.selections[0]!.id;
+    r = addOption(r, capId, "e.bolter");
+    const boltId = r.selections[0]!.selections[0]!.id;
+    // e.bolter has no `children` beyond [] and no `groups` field at all, so
+    // this exercises both findTree's recursive descent past the first level
+    // and the `entry.groups ?? []` fallback (undefined, not an explicit []).
+    const { options, groups } = optionsFor(r, boltId, catalogue);
+    expect(options).toEqual([]);
+    expect(groups).toEqual([]);
   });
 });
