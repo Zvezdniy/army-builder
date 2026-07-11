@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { IrCatalogue, RosterSelection } from "@muster/domain";
-import { Datasheet } from "./Datasheet";
+import { Datasheet, UnitStatline } from "./Datasheet";
 
 const cat = {
   id: "c", name: "C", gameSystemId: "gs", revision: 1,
@@ -24,7 +24,7 @@ const sel = (entryId: string, children: RosterSelection[] = []): RosterSelection
 
 describe("Datasheet", () => {
   it("renders the unit statline characteristics", () => {
-    render(<Datasheet catalogue={cat} selection={sel("e.hero")} />);
+    render(<UnitStatline catalogue={cat} selection={sel("e.hero")} />);
     expect(screen.getByText("M")).toBeInTheDocument();
     expect(screen.getByText('6"')).toBeInTheDocument();
   });

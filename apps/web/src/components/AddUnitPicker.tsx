@@ -62,11 +62,11 @@ export function AddUnitPicker({
                   <span className="picker-chevron">{open ? "▾" : "▸"}</span>
                 </button>
                 {open && g.units.map((u) => (
-                  <div key={u.id} className="picker-item">
+                  <button key={u.id} className="picker-item" aria-label={`add ${u.name}`}
+                    onClick={() => onAdd(u.id)}>
                     <span className="picker-item-name">{u.name}</span>
                     <span className="picker-pts">{points(u)} pts</span>
-                    <button className="picker-add" aria-label={`add ${u.name}`} onClick={() => onAdd(u.id)}>+</button>
-                  </div>
+                  </button>
                 ))}
               </div>
             );

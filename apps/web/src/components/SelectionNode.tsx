@@ -1,7 +1,7 @@
 import type { IrCatalogue, IrGroup, Roster, RosterSelection } from "@muster/domain";
 import { catalogueEntry } from "@muster/roster";
 import { UnitConfig } from "./UnitConfig";
-import { Datasheet } from "./Datasheet";
+import { Datasheet, UnitStatline } from "./Datasheet";
 
 /** One selection in the roster tree: its controls, its datasheet (top level), and its nested options. */
 export function SelectionNode({
@@ -25,7 +25,10 @@ export function SelectionNode({
       borderTop: depth === 0 ? "1px solid var(--line)" : "none",
       paddingTop: 6, marginTop: 6, marginLeft: depth * 16,
     }}>
-      <strong>{name}</strong>
+      {depth === 0
+        ? <h2 className="ud-name">{name}</h2>
+        : <strong>{name}</strong>}
+      {depth === 0 && <UnitStatline catalogue={catalogue} selection={selection} />}
       <UnitConfig roster={roster} selection={selection} catalogue={catalogue}
         onAddOption={onAddOption} onToggleGroupMember={onToggleGroupMember}
         onRemove={onRemove} onSetCount={onSetCount} />
