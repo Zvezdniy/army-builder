@@ -66,7 +66,18 @@ fn map_entry(e: &RawEntry, cat: &RawCatalogue, diags: &mut Vec<Diagnostic>) -> I
     // Attach each raw modifier to the IR cost or constraint it targets, based
     // on where its `field` points: a known cost-type id is a cost modifier, a
     // matching constraint id is a bound modifier. Neither → diagnostic + drop.
+    let mut visibility_modifiers: Vec<IrVisibilityModifier> = Vec::new();
     for (index, m) in e.modifiers.iter().enumerate() {
+        if m.field == "hidden" {
+            match map_visibility_modifier(m, cat) {
+                Some(vm) => visibility_modifiers.push(vm),
+                None => diags.push(Diagnostic {
+                    code: "modifier.hidden_condition_unmapped".to_string(),
+                    message: format!("hidden modifier on entry {} has an unmappable condition (dropped)", e.id),
+                }),
+            }
+            continue;
+        }
         let ir_mod = map_modifier(m, &e.id, index, cat, diags);
         if cat.cost_types.contains_key(&m.field) {
             if let Some(idx) = e.costs.iter().position(|rc| rc.type_id == m.field) {
@@ -104,6 +115,8 @@ fn map_entry(e: &RawEntry, cat: &RawCatalogue, diags: &mut Vec<Diagnostic>) -> I
         children,
         groups,
         profiles,
+        hidden: e.hidden,
+        visibility_modifiers,
     }
 }
 
@@ -326,8 +339,12 @@ fn map_modifier(m: &RawModifier, entry_id: &str, index: usize, cat: &RawCatalogu
 /// passed. RawCondition has no id; engine-eval does not require unique
 /// condition ids, so one is synthesized from the comparator and target.
 fn map_condition(c: &RawCondition, cat: &RawCatalogue, diags: &mut Vec<Diagnostic>) -> Option<IrCondition> {
-    let comparator = match c.comparator.as_str() {
-        "atLeast" | "atMost" | "equalTo" | "notEqualTo" | "greaterThan" | "lessThan" => c.comparator.clone(),
+    // instanceOf / notInstanceOf are membership flags: "has >=1 instance of childId
+    // in scope" / "has 0". They map onto the existing count comparators with value 1.
+    let (comparator, value) = match c.comparator.as_str() {
+        "atLeast" | "atMost" | "equalTo" | "notEqualTo" | "greaterThan" | "lessThan" => (c.comparator.clone(), c.value),
+        "instanceOf" => ("atLeast".to_string(), 1.0),
+        "notInstanceOf" => ("lessThan".to_string(), 1.0),
         other => {
             diags.push(Diagnostic {
                 code: "condition.comparator_unmapped".to_string(),
@@ -346,7 +363,7 @@ fn map_condition(c: &RawCondition, cat: &RawCatalogue, diags: &mut Vec<Diagnosti
     Some(IrCondition {
         id: format!("cond.{}.{}", comparator, c.child_id),
         comparator,
-        value: c.value,
+        value,
         field,
         scope,
         target_type,
@@ -379,6 +396,65 @@ fn map_condition_group(g: &RawConditionGroup, cat: &RawCatalogue, diags: &mut Ve
 
     Some(IrConditionGroup {
         type_,
+        conditions: if conditions.is_empty() { None } else { Some(conditions) },
+        condition_groups: if condition_groups.is_empty() { None } else { Some(condition_groups) },
+    })
+}
+
+/// Map a condition for a VISIBILITY gate. Identical to `map_condition` except
+/// that scope `parent` is ALSO treated as unmappable. Visibility is evaluated on
+/// a parentless synthetic self-node (see engine-eval `hiddenEntryIds`), where a
+/// `parent` scope would silently collapse to `self` and mis-fire — over-hiding a
+/// valid option. Deferring it (whole modifier dropped → entry stays visible)
+/// upholds the never-over-hide invariant. self/force/roster pass through.
+fn map_hidden_condition(c: &RawCondition, cat: &RawCatalogue) -> Option<IrCondition> {
+    let mut sink = Vec::new();
+    let ic = map_condition(c, cat, &mut sink)?;
+    if ic.scope == "parent" {
+        return None;
+    }
+    Some(ic)
+}
+
+/// Strict all-or-nothing condition-group mapping for visibility gates: if any
+/// nested condition or sub-group is unmappable, the whole group fails (`?`
+/// propagates None) so the caller can drop the entire hidden modifier rather
+/// than silently weakening the gate (which would over-hide). Diagnostics from the
+/// inner attempts are discarded here; the caller emits one `hidden_condition_unmapped`.
+fn map_condition_group_strict(g: &RawConditionGroup, cat: &RawCatalogue) -> Option<IrConditionGroup> {
+    let type_ = match g.kind.as_str() {
+        "and" | "or" => g.kind.clone(),
+        _ => return None,
+    };
+    let mut conditions = Vec::new();
+    for c in &g.conditions {
+        conditions.push(map_hidden_condition(c, cat)?);
+    }
+    let mut condition_groups = Vec::new();
+    for sub in &g.groups {
+        condition_groups.push(map_condition_group_strict(sub, cat)?);
+    }
+    Some(IrConditionGroup {
+        type_,
+        conditions: if conditions.is_empty() { None } else { Some(conditions) },
+        condition_groups: if condition_groups.is_empty() { None } else { Some(condition_groups) },
+    })
+}
+
+/// Map a `field="hidden"` modifier into an IrVisibilityModifier. Returns None if
+/// ANY condition/group is unmappable — the caller then drops the whole modifier
+/// (never over-hide). `set` is the boolean the modifier writes to `hidden`.
+fn map_visibility_modifier(m: &RawModifier, cat: &RawCatalogue) -> Option<IrVisibilityModifier> {
+    let mut conditions = Vec::new();
+    for c in &m.conditions {
+        conditions.push(map_hidden_condition(c, cat)?);
+    }
+    let mut condition_groups = Vec::new();
+    for g in &m.condition_groups {
+        condition_groups.push(map_condition_group_strict(g, cat)?);
+    }
+    Some(IrVisibilityModifier {
+        set: m.value_raw == "true",
         conditions: if conditions.is_empty() { None } else { Some(conditions) },
         condition_groups: if condition_groups.is_empty() { None } else { Some(condition_groups) },
     })

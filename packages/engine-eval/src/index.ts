@@ -8,3 +8,4 @@ export * from "./resolve";
 export * from "./scopes";
 export * from "./state";
 export * from "./symbols";
+export * from "./visibility";

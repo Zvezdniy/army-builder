@@ -2,18 +2,20 @@ import type { IrCatalogue, IrGroup, Roster, RosterSelection } from "@muster/doma
 import { optionsFor, selectedGroupMembers, groupControl, optionControl, catalogueEntry } from "@muster/roster";
 
 export function UnitConfig({
-  roster, selection, catalogue, canRemove = true, onAddOption, onToggleGroupMember, onRemove, onSetCount,
+  roster, selection, catalogue, canRemove = true, hiddenIds, onAddOption, onToggleGroupMember, onRemove, onSetCount,
 }: {
   roster: Roster;
   selection: RosterSelection;
   catalogue: IrCatalogue;
   canRemove?: boolean;
+  hiddenIds: Set<string>;
   onAddOption: (parentId: string, entryId: string) => void;
   onToggleGroupMember: (parentId: string, group: IrGroup, entryId: string) => void;
   onRemove: (id: string) => void;
   onSetCount: (id: string, count: number) => void;
 }) {
-  const { options, groups } = optionsFor(roster, selection.id, catalogue);
+  const { options: allOptions, groups } = optionsFor(roster, selection.id, catalogue);
+  const options = allOptions.filter((o) => !hiddenIds.has(o.id));
   const nameById = new Map(options.map((o) => [o.id, o.name] as const));
   const memberIds = new Set(groups.flatMap((g) => g.memberEntryIds));
   const presentEntryIds = new Set(selection.selections.map((s) => s.entryId));
@@ -76,7 +78,7 @@ export function UnitConfig({
               <span className={required ? "uc-hint is-required" : "uc-hint"}>{hint}</span>
             </div>
             <div className="uc-options">
-              {g.memberEntryIds.map((id) => {
+              {g.memberEntryIds.filter((id) => !hiddenIds.has(id) || chosen.has(id)).map((id) => {
                 const on = chosen.has(id);
                 return (
                   <button key={id} aria-pressed={on}

@@ -132,6 +132,7 @@ fn read_entries_into(
                         id: attr(&e, b"id").unwrap_or_default(),
                         name: attr(&e, b"name").unwrap_or_default(),
                         entry_type: attr(&e, b"type").unwrap_or_default(),
+                        hidden: attr_bool(&e, b"hidden"),
                         ..Default::default()
                     });
                 }
@@ -155,6 +156,7 @@ fn read_entry(start: &BytesStart, r: &mut SafeXmlReader) -> Result<RawEntry, Par
         id: attr(start, b"id").unwrap_or_default(),
         name: attr(start, b"name").unwrap_or_default(),
         entry_type: attr(start, b"type").unwrap_or_default(),
+        hidden: attr_bool(start, b"hidden"),
         ..Default::default()
     };
     loop {
@@ -210,6 +212,7 @@ fn read_groups_into(
                         id: attr(&e, b"id").unwrap_or_default(),
                         name: attr(&e, b"name").unwrap_or_default(),
                         default_selection_entry_id: attr(&e, b"defaultSelectionEntryId").unwrap_or_default(),
+                        hidden: attr_bool(&e, b"hidden"),
                         ..Default::default()
                     });
                 }
@@ -233,6 +236,7 @@ fn read_group(start: &BytesStart, r: &mut SafeXmlReader) -> Result<RawGroup, Par
         id: attr(start, b"id").unwrap_or_default(),
         name: attr(start, b"name").unwrap_or_default(),
         default_selection_entry_id: attr(start, b"defaultSelectionEntryId").unwrap_or_default(),
+        hidden: attr_bool(start, b"hidden"),
         ..Default::default()
     };
     loop {
@@ -692,6 +696,7 @@ fn read_modifiers_into(
                         kind: attr(&e, b"type").unwrap_or_default(),
                         field: attr(&e, b"field").unwrap_or_default(),
                         value: attr_f64(&e, b"value").unwrap_or(0.0),
+                        value_raw: attr(&e, b"value").unwrap_or_default(),
                         ..Default::default()
                     });
                 }
@@ -715,6 +720,7 @@ fn read_modifier(start: &BytesStart, r: &mut SafeXmlReader) -> Result<RawModifie
         kind: attr(start, b"type").unwrap_or_default(),
         field: attr(start, b"field").unwrap_or_default(),
         value: attr_f64(start, b"value").unwrap_or(0.0),
+        value_raw: attr(start, b"value").unwrap_or_default(),
         ..Default::default()
     };
     loop {

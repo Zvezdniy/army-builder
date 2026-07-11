@@ -22,6 +22,7 @@ pub struct RawEntry {
     pub id: String,
     pub name: String,
     pub entry_type: String,           // unit|model|upgrade
+    pub hidden: bool,
     pub costs: Vec<RawCost>,
     pub category_links: Vec<RawCategoryLink>,
     pub constraints: Vec<RawConstraint>,
@@ -35,6 +36,7 @@ pub struct RawEntry {
 #[derive(Debug, Default, Clone)] pub struct RawGroup {
     pub id: String, pub name: String,
     pub default_selection_entry_id: String,
+    pub hidden: bool,
     pub entries: Vec<RawEntry>, pub groups: Vec<RawGroup>,
     pub entry_links: Vec<RawEntryLink>, pub constraints: Vec<RawConstraint>,
     pub modifiers: Vec<RawModifier>,
@@ -57,6 +59,7 @@ pub struct RawConstraint {
 pub struct RawModifier {
     pub kind: String,                     // set|increment|decrement
     pub field: String, pub value: f64,
+    pub value_raw: String,                // raw unparsed `value` attribute, needed for field="hidden" ("true"/"false")
     pub conditions: Vec<RawCondition>,
     pub condition_groups: Vec<RawConditionGroup>,
     pub has_repeats: bool,                // if true, emit diagnostic in mapping

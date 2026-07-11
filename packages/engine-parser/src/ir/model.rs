@@ -1,6 +1,10 @@
 use serde::Serialize;
 use std::collections::BTreeMap;
 
+fn is_false(b: &bool) -> bool {
+    !*b
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IrCatalogue {
@@ -34,6 +38,10 @@ pub struct IrEntry {
     pub groups: Vec<IrGroup>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub profiles: Vec<IrProfile>,
+    #[serde(skip_serializing_if = "is_false")]
+    pub hidden: bool,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub visibility_modifiers: Vec<IrVisibilityModifier>,
 }
 
 #[derive(Debug, Serialize)]
@@ -88,6 +96,16 @@ pub struct IrModifier {
     #[serde(rename = "type")]
     pub type_: String,
     pub value: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub conditions: Option<Vec<IrCondition>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub condition_groups: Option<Vec<IrConditionGroup>>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IrVisibilityModifier {
+    pub set: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub conditions: Option<Vec<IrCondition>>,
     #[serde(skip_serializing_if = "Option::is_none")]

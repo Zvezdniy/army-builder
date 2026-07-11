@@ -5,12 +5,13 @@ import { Datasheet, UnitStatline } from "./Datasheet";
 
 /** One selection in the roster tree: its controls, its datasheet (top level), and its nested options. */
 export function SelectionNode({
-  roster, selection, catalogue, depth, onAddOption, onToggleGroupMember, onRemove, onSetCount,
+  roster, selection, catalogue, depth, hiddenIds, onAddOption, onToggleGroupMember, onRemove, onSetCount,
 }: {
   roster: Roster;
   selection: RosterSelection;
   catalogue: IrCatalogue;
   depth: number;
+  hiddenIds: Set<string>;
   onAddOption: (parentId: string, entryId: string) => void;
   onToggleGroupMember: (parentId: string, group: IrGroup, entryId: string) => void;
   onRemove: (id: string) => void;
@@ -30,14 +31,14 @@ export function SelectionNode({
         : <strong>{name}</strong>}
       {depth === 0 && <UnitStatline catalogue={catalogue} selection={selection} />}
       {depth === 0 && <Datasheet catalogue={catalogue} selection={selection} />}
-      <UnitConfig roster={roster} selection={selection} catalogue={catalogue} canRemove={depth > 0}
+      <UnitConfig roster={roster} selection={selection} catalogue={catalogue} canRemove={depth > 0} hiddenIds={hiddenIds}
         onAddOption={onAddOption} onToggleGroupMember={onToggleGroupMember}
         onRemove={onRemove} onSetCount={onSetCount} />
       {freeChildren.length > 0 && (
         <ul style={{ listStyle: "none", padding: 0 }}>
           {freeChildren.map((child) => (
             <SelectionNode key={child.id} roster={roster} selection={child} catalogue={catalogue}
-              depth={depth + 1} onAddOption={onAddOption} onToggleGroupMember={onToggleGroupMember}
+              depth={depth + 1} hiddenIds={hiddenIds} onAddOption={onAddOption} onToggleGroupMember={onToggleGroupMember}
               onRemove={onRemove} onSetCount={onSetCount} />
           ))}
         </ul>

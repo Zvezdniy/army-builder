@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import type { IrCatalogue } from "@muster/domain";
 import { IrCatalogue as IrCatalogueSchema } from "@muster/domain";
 import { createRoster, addUnit, addOption, toggleGroupMember, setCount, remove } from "@muster/roster";
-import { evaluate } from "@muster/engine-eval";
+import { evaluate, hiddenEntryIds } from "@muster/engine-eval";
 import { RosterList } from "./components/RosterList";
 import { UnitDetail } from "./components/UnitDetail";
 import { AddUnitPicker } from "./components/AddUnitPicker";
@@ -14,6 +14,7 @@ export function App() {
   const [selectedUnitId, setSelectedUnitId] = useState<string | undefined>(undefined);
   const [pickerOpen, setPickerOpen] = useState(false);
   const result = useMemo(() => evaluate(roster, catalogue), [roster, catalogue]);
+  const hiddenIds = useMemo(() => hiddenEntryIds(roster, catalogue), [roster, catalogue]);
 
   const loadIr = async (file: File) => {
     const parsed = IrCatalogueSchema.parse(JSON.parse(await file.text()));
@@ -66,7 +67,7 @@ export function App() {
       <div className="builder" data-view={selectedUnitId ? "detail" : "list"}>
         <RosterList roster={roster} catalogue={catalogue} selectedUnitId={selectedUnitId}
           onSelect={setSelectedUnitId} onOpenPicker={() => setPickerOpen(true)} />
-        <UnitDetail roster={roster} catalogue={catalogue} selectedUnitId={selectedUnitId}
+        <UnitDetail roster={roster} catalogue={catalogue} selectedUnitId={selectedUnitId} hiddenIds={hiddenIds}
           onBack={() => setSelectedUnitId(undefined)}
           onAddOption={(pid, eid) => setRoster((r) => addOption(r, pid, eid))}
           onToggleGroupMember={(pid, group, eid) => setRoster((r) => toggleGroupMember(r, pid, group, eid))}
@@ -74,7 +75,7 @@ export function App() {
           onSetCount={(id, c) => setRoster((r) => setCount(r, id, c))} />
       </div>
       {pickerOpen && (
-        <AddUnitPicker catalogue={catalogue} onAdd={addAndSelect} onClose={() => setPickerOpen(false)} />
+        <AddUnitPicker catalogue={catalogue} hiddenIds={hiddenIds} onAdd={addAndSelect} onClose={() => setPickerOpen(false)} />
       )}
     </main>
   );
