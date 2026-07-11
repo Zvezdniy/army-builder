@@ -41,6 +41,25 @@ describe("IR schemas", () => {
   });
 });
 
+describe("IrProfile / IrCharacteristic", () => {
+  it("parses an entry carrying profiles", () => {
+    const entry = IrEntry.parse({
+      id: "e.hero", name: "Hero",
+      profiles: [{
+        name: "Hero", typeName: "Unit",
+        characteristics: [{ name: "M", value: '6"' }, { name: "T", value: "4" }],
+      }],
+    });
+    expect(entry.profiles[0]?.typeName).toBe("Unit");
+    expect(entry.profiles[0]?.characteristics[1]?.value).toBe("4");
+  });
+
+  it("defaults profiles to an empty array when absent", () => {
+    const entry = IrEntry.parse({ id: "e.bare", name: "Bare" });
+    expect(entry.profiles).toEqual([]);
+  });
+});
+
 describe("IrGroup / IrGroupConstraint", () => {
   it("parses a group with min/max constraints and members", () => {
     const g = IrGroup.parse({
