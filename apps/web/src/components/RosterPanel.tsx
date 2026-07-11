@@ -1,4 +1,4 @@
-import type { IrCatalogue, IrEntry, Roster, RosterSelection, ValidationResult } from "@muster/domain";
+import type { IrCatalogue, IrEntry, IrGroup, Roster, RosterSelection, ValidationResult } from "@muster/domain";
 import { UnitConfig } from "./UnitConfig";
 
 /** Resolve a selection's display name from the catalogue, searching nested options too. */
@@ -13,13 +13,14 @@ function entryName(entries: IrEntry[], entryId: string): string | undefined {
 
 /** One selection in the roster tree: its controls plus its nested options, rendered recursively. */
 function SelectionNode({
-  roster, selection, catalogue, depth, onAddOption, onRemove, onSetCount,
+  roster, selection, catalogue, depth, onAddOption, onToggleGroupMember, onRemove, onSetCount,
 }: {
   roster: Roster;
   selection: RosterSelection;
   catalogue: IrCatalogue;
   depth: number;
   onAddOption: (parentId: string, entryId: string) => void;
+  onToggleGroupMember: (parentId: string, group: IrGroup, entryId: string) => void;
   onRemove: (id: string) => void;
   onSetCount: (id: string, count: number) => void;
 }) {
@@ -31,12 +32,14 @@ function SelectionNode({
     }}>
       <strong>{name}</strong>
       <UnitConfig roster={roster} selection={selection} catalogue={catalogue}
-        onAddOption={onAddOption} onRemove={onRemove} onSetCount={onSetCount} />
+        onAddOption={onAddOption} onToggleGroupMember={onToggleGroupMember}
+        onRemove={onRemove} onSetCount={onSetCount} />
       {selection.selections.length > 0 && (
         <ul style={{ listStyle: "none", padding: 0 }}>
           {selection.selections.map((child) => (
             <SelectionNode key={child.id} roster={roster} selection={child} catalogue={catalogue}
-              depth={depth + 1} onAddOption={onAddOption} onRemove={onRemove} onSetCount={onSetCount} />
+              depth={depth + 1} onAddOption={onAddOption} onToggleGroupMember={onToggleGroupMember}
+              onRemove={onRemove} onSetCount={onSetCount} />
           ))}
         </ul>
       )}
@@ -45,12 +48,13 @@ function SelectionNode({
 }
 
 export function RosterPanel({
-  roster, catalogue, result, onAddOption, onRemove, onSetCount,
+  roster, catalogue, result, onAddOption, onToggleGroupMember, onRemove, onSetCount,
 }: {
   roster: Roster;
   catalogue: IrCatalogue;
   result: ValidationResult;
   onAddOption: (parentId: string, entryId: string) => void;
+  onToggleGroupMember: (parentId: string, group: IrGroup, entryId: string) => void;
   onRemove: (id: string) => void;
   onSetCount: (id: string, count: number) => void;
 }) {
@@ -63,7 +67,8 @@ export function RosterPanel({
       <ul data-testid="roster-list" style={{ listStyle: "none", padding: 0 }}>
         {roster.selections.map((s) => (
           <SelectionNode key={s.id} roster={roster} selection={s} catalogue={catalogue}
-            depth={0} onAddOption={onAddOption} onRemove={onRemove} onSetCount={onSetCount} />
+            depth={0} onAddOption={onAddOption} onToggleGroupMember={onToggleGroupMember}
+            onRemove={onRemove} onSetCount={onSetCount} />
         ))}
       </ul>
       <h3>Validation</h3>

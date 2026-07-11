@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
-import type { IrCatalogue } from "@muster/domain";
+import type { IrCatalogue, IrGroup } from "@muster/domain";
 import {
   createRoster, availableUnits, addUnit, addOption, setCount, remove, optionsFor,
+  selectedGroupMembers, toggleGroupMember,
 } from "./index";
 
 const catalogue: IrCatalogue = {
@@ -130,5 +131,94 @@ describe("roster builder", () => {
     const { options, groups } = optionsFor(r, boltId, catalogue);
     expect(options).toEqual([]);
     expect(groups).toEqual([]);
+  });
+});
+
+// A unit with a choose-1 weapon group and a choose-2 trinket group.
+const swapCat: IrCatalogue = {
+  id: "cat", name: "Cat", gameSystemId: "gs", revision: 1,
+  forceConstraints: [],
+  entries: [
+    {
+      id: "e.hero", name: "Hero", costs: [{ name: "points", value: 50 }],
+      categories: [], constraints: [],
+      children: [
+        { id: "e.sword", name: "Sword", costs: [], categories: [], constraints: [], children: [] },
+        { id: "e.axe", name: "Axe", costs: [], categories: [], constraints: [], children: [] },
+        { id: "e.shield", name: "Shield", costs: [], categories: [], constraints: [], children: [] },
+        { id: "e.cloak", name: "Cloak", costs: [], categories: [], constraints: [], children: [] },
+        { id: "e.ring", name: "Ring", costs: [], categories: [], constraints: [], children: [] },
+      ],
+      groups: [
+        { id: "g.weapon", name: "Weapon", memberEntryIds: ["e.sword", "e.axe"], constraints: [{ id: "w.max", type: "max", value: 1 }] },
+        { id: "g.trinket", name: "Trinket", memberEntryIds: ["e.shield", "e.cloak", "e.ring"], constraints: [{ id: "t.max", type: "max", value: 2 }] },
+      ],
+    },
+  ],
+};
+const weaponGroup = swapCat.entries[0]!.groups![0]!;
+const trinketGroup = swapCat.entries[0]!.groups![1]!;
+const groupWithoutMax: IrGroup = { id: "g.free", name: "Free", memberEntryIds: ["e.sword", "e.axe"], constraints: [] };
+
+function addHero() {
+  const r = addUnit(createRoster(swapCat, 2000), "e.hero");
+  return { r, heroId: r.selections[0]!.id };
+}
+
+describe("group single/limited choice", () => {
+  it("selectedGroupMembers lists the group members currently chosen under a unit", () => {
+    let { r, heroId } = addHero();
+    expect(selectedGroupMembers(r, heroId, weaponGroup)).toEqual([]);
+    r = toggleGroupMember(r, heroId, weaponGroup, "e.sword");
+    expect(selectedGroupMembers(r, heroId, weaponGroup)).toEqual(["e.sword"]);
+  });
+
+  it("selectedGroupMembers is empty for an unknown selection id", () => {
+    const { r } = addHero();
+    expect(selectedGroupMembers(r, "nope", weaponGroup)).toEqual([]);
+  });
+
+  it("toggleGroupMember adds a member when the group has room", () => {
+    const { r, heroId } = addHero();
+    const r1 = toggleGroupMember(r, heroId, weaponGroup, "e.sword");
+    expect(selectedGroupMembers(r1, heroId, weaponGroup)).toEqual(["e.sword"]);
+  });
+
+  it("toggleGroupMember on an already-selected member deselects it", () => {
+    const { r, heroId } = addHero();
+    const r1 = toggleGroupMember(r, heroId, weaponGroup, "e.sword");
+    const r2 = toggleGroupMember(r1, heroId, weaponGroup, "e.sword");
+    expect(selectedGroupMembers(r2, heroId, weaponGroup)).toEqual([]);
+  });
+
+  it("toggleGroupMember swaps one for another in a max-1 group", () => {
+    const { r, heroId } = addHero();
+    const r1 = toggleGroupMember(r, heroId, weaponGroup, "e.sword");
+    const r2 = toggleGroupMember(r1, heroId, weaponGroup, "e.axe");
+    // exactly one weapon remains, and it is the newly chosen one
+    expect(selectedGroupMembers(r2, heroId, weaponGroup)).toEqual(["e.axe"]);
+    expect(r2.selections[0]!.selections).toHaveLength(1);
+  });
+
+  it("toggleGroupMember fills up to max then blocks further additions", () => {
+    const { r, heroId } = addHero();
+    const r1 = toggleGroupMember(r, heroId, trinketGroup, "e.shield");
+    const r2 = toggleGroupMember(r1, heroId, trinketGroup, "e.cloak");
+    // group is now full (max 2); a third is a no-op
+    const r3 = toggleGroupMember(r2, heroId, trinketGroup, "e.ring");
+    expect(r3).toBe(r2);
+    expect(selectedGroupMembers(r3, heroId, trinketGroup).sort()).toEqual(["e.cloak", "e.shield"]);
+  });
+
+  it("toggleGroupMember treats a group without a max as unbounded", () => {
+    const { r, heroId } = addHero();
+    const r1 = toggleGroupMember(r, heroId, groupWithoutMax, "e.sword");
+    const r2 = toggleGroupMember(r1, heroId, groupWithoutMax, "e.axe");
+    expect(selectedGroupMembers(r2, heroId, groupWithoutMax).sort()).toEqual(["e.axe", "e.sword"]);
+  });
+
+  it("toggleGroupMember is a no-op when the parent selection is unknown", () => {
+    const { r } = addHero();
+    expect(toggleGroupMember(r, "nope", weaponGroup, "e.sword")).toBe(r);
   });
 });

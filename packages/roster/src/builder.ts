@@ -57,6 +57,46 @@ export function optionsFor(
   return { options: entry.children, groups: entry.groups ?? [] };
 }
 
+/** Member entry ids of `group` currently selected directly under `selectionId`. */
+export function selectedGroupMembers(
+  roster: Roster,
+  selectionId: string,
+  group: IrGroup,
+): string[] {
+  const sel = findTree(roster.selections, selectionId);
+  if (!sel) return [];
+  return sel.selections
+    .filter((c) => group.memberEntryIds.includes(c.entryId))
+    .map((c) => c.entryId);
+}
+
+/**
+ * Toggle a group member under a unit while respecting the group's `max`.
+ * - already selected → deselect it (remove).
+ * - room left (below max) → add it.
+ * - at a max of 1 → swap: drop the current member, add the new one.
+ * - at a max above 1 (full) → no-op (the group is full; deselect one first).
+ * The group's `min` is intentionally NOT enforced here — the engine reports it.
+ */
+export function toggleGroupMember(
+  roster: Roster,
+  parentSelectionId: string,
+  group: IrGroup,
+  entryId: string,
+): Roster {
+  const parent = findTree(roster.selections, parentSelectionId);
+  if (!parent) return roster;
+
+  const members = parent.selections.filter((c) => group.memberEntryIds.includes(c.entryId));
+  const already = members.find((c) => c.entryId === entryId);
+  if (already) return remove(roster, already.id);
+
+  const max = group.constraints.find((c) => c.type === "max")?.value ?? Infinity;
+  if (members.length < max) return addOption(roster, parentSelectionId, entryId);
+  if (max === 1) return addOption(remove(roster, members[0]!.id), parentSelectionId, entryId);
+  return roster;
+}
+
 function freshSelection(entryId: string): RosterSelection {
   return { id: crypto.randomUUID(), entryId, count: 1, selections: [] };
 }

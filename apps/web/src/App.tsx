@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import type { IrCatalogue } from "@muster/domain";
 import { IrCatalogue as IrCatalogueSchema } from "@muster/domain";
-import { createRoster, availableUnits, addUnit, addOption, setCount, remove } from "@muster/roster";
+import { createRoster, availableUnits, addUnit, addOption, toggleGroupMember, setCount, remove } from "@muster/roster";
 import { evaluate } from "@muster/engine-eval";
 import { UnitPalette } from "./components/UnitPalette";
 import { RosterPanel } from "./components/RosterPanel";
@@ -31,6 +31,7 @@ export function App() {
       <UnitPalette units={availableUnits(catalogue)} onAdd={(id) => setRoster((r) => addUnit(r, id))} />
       <RosterPanel roster={roster} catalogue={catalogue} result={result}
         onAddOption={(pid, eid) => setRoster((r) => addOption(r, pid, eid))}
+        onToggleGroupMember={(pid, group, eid) => setRoster((r) => toggleGroupMember(r, pid, group, eid))}
         onRemove={(id) => setRoster((r) => remove(r, id))}
         onSetCount={(id, c) => setRoster((r) => setCount(r, id, c))} />
     </main>

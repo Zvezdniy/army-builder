@@ -53,6 +53,9 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 /* Unit-palette add buttons read as the primary call-to-action. */
 .palette button { background: var(--accent); color: var(--accent-ink); border-color: transparent; font-weight: 600; }
 
+/* A chosen member of a choose-N group is filled to read as selected. */
+button.chosen { background: var(--accent); color: var(--accent-ink); border-color: transparent; font-weight: 600; }
+
 input[type="number"] {
   font: inherit;
   color: var(--ink);

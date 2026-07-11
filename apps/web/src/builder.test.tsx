@@ -15,18 +15,21 @@ describe("builder interactions", () => {
     expect(screen.getByTestId("roster-list")).toHaveTextContent("Captain");
   });
 
-  it("an added option renders nested under its unit and can be removed", async () => {
+  it("selecting a weapon in a choose-1 group swaps rather than stacking", async () => {
     const user = userEvent.setup();
     render(<App />);
     await user.click(screen.getByRole("button", { name: /add Captain/i }));
-    // Captain exposes wargear options; adding one renders a nested node with its
-    // OWN controls — a per-option "remove" button (only real selections produce it,
-    // never the palette/add-option buttons).
-    await user.click(screen.getByRole("button", { name: /add option Power Sword/i }));
-    expect(screen.getByRole("button", { name: /remove e\.captain\.sword/i })).toBeInTheDocument();
-    // that per-option remove drops just the option; the Captain (and its remove) stays.
-    await user.click(screen.getByRole("button", { name: /remove e\.captain\.sword/i }));
-    expect(screen.queryByRole("button", { name: /remove e\.captain\.sword/i })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /remove e\.captain$/i })).toBeInTheDocument();
+    // Wargear is a max-1 group: Power Sword (5) / Power Axe (10) are toggles, not "+".
+    await user.click(screen.getByRole("button", { name: /select Power Sword/i }));
+    expect(screen.getByTestId("points")).toHaveTextContent(/^95 \/ 2000/);
+    // picking the axe REPLACES the sword — points reflect the swap, not a sum (would be 105).
+    await user.click(screen.getByRole("button", { name: /select Power Axe/i }));
+    expect(screen.getByTestId("points")).toHaveTextContent(/^100 \/ 2000/);
+    // the sword is now deselectable-again (offered), the axe is chosen (deselect offered)
+    expect(screen.getByRole("button", { name: /select Power Sword/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /deselect Power Axe/i })).toBeInTheDocument();
+    // clicking the chosen axe again clears it back to no weapon
+    await user.click(screen.getByRole("button", { name: /deselect Power Axe/i }));
+    expect(screen.getByTestId("points")).toHaveTextContent(/^90 \/ 2000/);
   });
 });
