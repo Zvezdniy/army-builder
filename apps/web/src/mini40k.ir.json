@@ -8,7 +8,8 @@
     "Precision": "Each time an attack made with this weapon targets a unit containing a Character, the attacking player can allocate that attack to a Character model in that unit.",
     "Anti-Infantry 4+": "An unmodified Wound roll of 4+ scores a Critical Wound against a target with the Infantry keyword.",
     "Assault": "This weapon can be shot even if the bearer's unit Advanced this turn.",
-    "Heavy": "Each time an attack is made with this weapon, if the bearer's unit Remained Stationary this turn, add 1 to that attack's Hit roll."
+    "Heavy": "Each time an attack is made with this weapon, if the bearer's unit Remained Stationary this turn, add 1 to that attack's Hit roll.",
+    "Pistol": "This weapon can be shot even while the bearer's unit is within Engagement Range of enemy units."
   },
   "entries": [
     {
@@ -37,10 +38,63 @@
           ]
         },
         {
+          "name": "Invulnerable Save",
+          "typeName": "Invulnerable Save",
+          "characteristics": [ { "name": "SV", "value": "4+" } ]
+        },
+        {
+          "name": "Bolt Pistol",
+          "typeName": "Ranged Weapons",
+          "keywords": ["Pistol"],
+          "characteristics": [
+            { "name": "Range", "value": "12\"" }, { "name": "A", "value": "1" }, { "name": "BS", "value": "2+" },
+            { "name": "S", "value": "4" }, { "name": "AP", "value": "0" }, { "name": "D", "value": "1" }
+          ]
+        },
+        {
+          "name": "Leader",
+          "typeName": "Abilities",
+          "group": "Core",
+          "characteristics": []
+        },
+        {
+          "name": "Scouts 6\"",
+          "typeName": "Abilities",
+          "group": "Core",
+          "characteristics": []
+        },
+        {
+          "name": "Oath of Moment",
+          "typeName": "Abilities",
+          "group": "Faction",
+          "characteristics": []
+        },
+        {
           "name": "Rites of Battle",
           "typeName": "Abilities",
           "characteristics": [
-            { "name": "Description", "value": "Once per battle round, re-roll one Hit roll." }
+            { "name": "Description", "value": "Once per battle round, re-roll one Hit roll for a unit within 6\"." }
+          ]
+        },
+        {
+          "name": "Finest Hour",
+          "typeName": "Abilities",
+          "characteristics": [
+            { "name": "Description", "value": "Once per battle, this model's melee attacks gain +1 to Wound." }
+          ]
+        },
+        {
+          "name": "Supreme Commander",
+          "typeName": "Supreme Commander",
+          "characteristics": [
+            { "name": "Description", "value": "If this model is in your army, it must be your Warlord." }
+          ]
+        },
+        {
+          "name": "Damaged: 1-2 Wounds Remaining",
+          "typeName": "Damaged",
+          "characteristics": [
+            { "name": "Description", "value": "While this model has 1-2 wounds remaining, subtract 1 from its Hit rolls." }
           ]
         }
       ],

@@ -45,6 +45,9 @@ export const IrProfile = z.object({
   typeName: z.string(),
   characteristics: z.array(IrCharacteristic).default([]),
   keywords: z.array(z.string()).optional(),
+  // Ability grouping ("Core", "Faction", …): collapsed abilities render as one
+  // compact line per group; ungrouped abilities render as name + description.
+  group: z.string().optional(),
 });
 export type IrProfile = z.infer<typeof IrProfile>;
 

@@ -227,6 +227,29 @@ export function unitsByRole(roster: Roster, catalogue: IrCatalogue): RoleGroup[]
   return groups;
 }
 
+/** A readable loadout summary: the unit's name plus the distinct names of its
+ *  selected wargear — descendant selections whose entry carries no Unit statline
+ *  (i.e. options/weapons chosen, not the unit's model bodies). */
+export function unitLoadout(
+  catalogue: IrCatalogue,
+  selection: RosterSelection,
+): { unit: string; wargear: string[] } {
+  const root = catalogueEntry(catalogue, selection.entryId);
+  const wargear: string[] = [];
+  const seen = new Set<string>();
+  const visit = (sel: RosterSelection, depth: number): void => {
+    const entry = catalogueEntry(catalogue, sel.entryId);
+    const isBody = (entry?.profiles ?? []).some((p) => p.typeName === "Unit");
+    if (depth > 0 && entry && !isBody && !seen.has(entry.name)) {
+      seen.add(entry.name);
+      wargear.push(entry.name);
+    }
+    for (const child of sel.selections) visit(child, depth + 1);
+  };
+  visit(selection, 0);
+  return { unit: root?.name ?? selection.entryId, wargear };
+}
+
 /** Number of models in a unit: sum of counts over selected nodes whose entry
  *  carries a Unit statline profile (IR has no explicit model type). */
 export function modelCount(catalogue: IrCatalogue, selection: RosterSelection): number {

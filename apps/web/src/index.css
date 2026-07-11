@@ -8,6 +8,8 @@
   --accent-ink: #ffffff;
   --error: #b00020;
   --warn: #9a6a00;
+  --head-bg: #33333d;
+  --head-ink: #f2f2f5;
   color-scheme: light dark;
 }
 
@@ -22,6 +24,8 @@
     --accent-ink: #0d0d10;
     --error: #ff6b6b;
     --warn: #e0a94a;
+    --head-bg: #3a3a46;
+    --head-ink: #f2f2f5;
   }
 }
 
@@ -79,11 +83,34 @@ section { background: var(--panel); border: 1px solid var(--line); border-radius
   .ds-statline { grid-auto-flow: row; grid-template-columns: repeat(3, 1fr); }
   .ds-chip:nth-child(3n) { border-right: none; }
 }
+/* Invulnerable-save chip, sitting just under the statline bar. */
+.ds-invuln { display: inline-flex; align-items: stretch; margin: -6px 0 14px; border: 1px solid var(--line);
+  border-radius: 8px; overflow: hidden; }
+.ds-invuln-value { padding: 6px 12px; font-size: 18px; font-weight: 800; font-variant-numeric: tabular-nums;
+  background: var(--head-bg); color: var(--head-ink); }
+.ds-invuln-label { display: flex; align-items: center; padding: 6px 12px; font-size: 11px;
+  text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+
+/* Two-column datasheet body: weapons left, description right (stacks on mobile). */
+.ds-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; }
+.ds-col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+@media (max-width: 900px) { .ds-cols { grid-template-columns: 1fr; } }
+
+/* Dark section bar shared by weapon table heads and description sections (War Organ look). */
+.ds-section-head { background: var(--head-bg); color: var(--head-ink); font-size: 12px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.05em; padding: 6px 10px; border-radius: 6px; }
+.ds-section { display: flex; flex-direction: column; gap: 4px; }
+.ds-loadout { margin: 4px 2px; font-size: 13px; }
+.ds-ability-line { margin: 2px 2px; font-size: 13px; }
+.ds-ability-line strong { color: var(--accent); }
+.ds-ability { margin: 4px 2px; font-size: 13px; line-height: 1.4; }
+
 .ds-table-wrap { overflow-x: auto; }
 .ds-table { border-collapse: collapse; width: 100%; font-size: 13px; }
 .ds-table th, .ds-table td { border: 1px solid var(--line); padding: 3px 8px; text-align: left;
   font-variant-numeric: tabular-nums; }
-.ds-table th { opacity: 0.8; font-weight: 600; }
+.ds-table thead th { background: var(--head-bg); color: var(--head-ink); border-color: var(--head-bg);
+  text-transform: uppercase; letter-spacing: 0.03em; font-weight: 700; }
 .ds-abilities p { margin: 2px 0; font-size: 13px; }
 .ds-kw-row td { padding: 4px 8px; }
 .ds-kw-chip { font-size: 11px; padding: 2px 8px; margin: 0 4px 2px 0; border: 1px solid var(--line);

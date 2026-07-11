@@ -29,10 +29,10 @@ export function SelectionNode({
         ? <h2 className="ud-name">{name}</h2>
         : <strong>{name}</strong>}
       {depth === 0 && <UnitStatline catalogue={catalogue} selection={selection} />}
+      {depth === 0 && <Datasheet catalogue={catalogue} selection={selection} />}
       <UnitConfig roster={roster} selection={selection} catalogue={catalogue}
         onAddOption={onAddOption} onToggleGroupMember={onToggleGroupMember}
         onRemove={onRemove} onSetCount={onSetCount} />
-      {depth === 0 && <Datasheet catalogue={catalogue} selection={selection} />}
       {freeChildren.length > 0 && (
         <ul style={{ listStyle: "none", padding: 0 }}>
           {freeChildren.map((child) => (

@@ -3,6 +3,7 @@ import type { IrCatalogue, IrGroup } from "@muster/domain";
 import {
   createRoster, availableUnits, addUnit, addOption, setCount, remove, optionsFor,
   selectedGroupMembers, toggleGroupMember, groupControl, optionControl, catalogueEntry,
+  unitLoadout,
 } from "./index";
 
 const catalogue: IrCatalogue = {
@@ -316,6 +317,41 @@ describe("catalogueEntry", () => {
     expect(catalogueEntry(swapCat, "e.hero")?.name).toBe("Hero");
     expect(catalogueEntry(swapCat, "e.sword")?.name).toBe("Sword");
     expect(catalogueEntry(swapCat, "ghost")).toBeUndefined();
+  });
+});
+
+describe("unitLoadout", () => {
+  const loadoutCat: IrCatalogue = {
+    id: "c", name: "C", gameSystemId: "g", revision: 1, forceConstraints: [], categoryNames: {},
+    entries: [{
+      id: "u", name: "Squad", costs: [], categories: [], constraints: [], groups: [],
+      children: [
+        { id: "w.sword", name: "Sword", costs: [], categories: [], constraints: [], children: [] },
+        { id: "m", name: "Trooper", costs: [], categories: [], constraints: [], children: [],
+          profiles: [{ name: "Trooper", typeName: "Unit", characteristics: [] }] },
+      ],
+    }],
+  };
+
+  it("lists selected wargear, excluding model bodies and the root itself", () => {
+    const sel = { id: "s0", entryId: "u", count: 1, selections: [
+      { id: "s1", entryId: "w.sword", count: 1, selections: [] },
+      { id: "s2", entryId: "m", count: 3, selections: [] },
+    ] };
+    const lo = unitLoadout(loadoutCat, sel);
+    expect(lo.unit).toBe("Squad");
+    expect(lo.wargear).toEqual(["Sword"]); // Trooper (Unit body) excluded
+  });
+
+  it("dedupes repeated wargear, skips unknown children, and falls back to entryId for an unknown root", () => {
+    const dup = { id: "s0", entryId: "u", count: 1, selections: [
+      { id: "s1", entryId: "w.sword", count: 1, selections: [] },
+      { id: "s2", entryId: "w.sword", count: 1, selections: [] },
+      { id: "s3", entryId: "ghost.child", count: 1, selections: [] },
+    ] };
+    expect(unitLoadout(loadoutCat, dup).wargear).toEqual(["Sword"]);
+    const ghost = { id: "s0", entryId: "ghost", count: 1, selections: [] };
+    expect(unitLoadout(loadoutCat, ghost).unit).toBe("ghost");
   });
 });
 

@@ -1,10 +1,17 @@
 import { Fragment, useState } from "react";
 import type { IrCatalogue, RosterSelection } from "@muster/domain";
-import { datasheet, type DatasheetSection } from "@muster/roster";
+import { datasheet, unitLoadout, type DatasheetSection } from "@muster/roster";
 
 /** Devices that can hover (desktop) show rule popups on hover; touch shows on tap. */
 const canHover =
   typeof window !== "undefined" && !!window.matchMedia && window.matchMedia("(hover: hover)").matches;
+
+const WEAPON_TYPES = new Set(["Ranged Weapons", "Melee Weapons"]);
+const SECTION_LABELS: Record<string, string> = {
+  "Ranged Weapons": "Дальнобойное оружие",
+  "Melee Weapons": "Оружие ближнего боя",
+};
+const sectionLabel = (typeName: string): string => SECTION_LABELS[typeName] ?? typeName;
 
 /** The Unit statline as a prominent, evenly-divided stat bar. */
 function Statline({ section }: { section: DatasheetSection }) {
@@ -22,10 +29,24 @@ function Statline({ section }: { section: DatasheetSection }) {
   );
 }
 
-/** The unit's statline bar (Unit profile) — rendered on its own, right under the name. */
+/** The unit's statline bar plus its invulnerable-save chip — right under the name. */
 export function UnitStatline({ catalogue, selection }: { catalogue: IrCatalogue; selection: RosterSelection }) {
-  const unit = datasheet(catalogue, selection).find((s) => s.typeName === "Unit");
-  return unit ? <Statline section={unit} /> : null;
+  const sections = datasheet(catalogue, selection);
+  const unit = sections.find((s) => s.typeName === "Unit");
+  const invuln = sections.find((s) => s.typeName === "Invulnerable Save")?.profiles[0];
+  const invulnValue = invuln?.characteristics[0]?.value;
+  if (!unit) return null;
+  return (
+    <>
+      <Statline section={unit} />
+      {invulnValue && (
+        <div className="ds-invuln">
+          <span className="ds-invuln-value">{invulnValue}</span>
+          <span className="ds-invuln-label">Invulnerable Save</span>
+        </div>
+      )}
+    </>
+  );
 }
 
 type RuleHandlers = {
@@ -34,9 +55,9 @@ type RuleHandlers = {
   onToggle: (keyword: string, el: HTMLElement) => void;
 };
 
-/** Weapons and other multi-column profiles render as a table; weapon keyword
- *  abilities render as chips that reveal their rule on hover (desktop) or tap. */
-function ProfileTable({ section, rules }: { section: DatasheetSection; rules: RuleHandlers }) {
+/** Weapons render as a table; keyword abilities become chips that reveal their
+ *  rule on hover (desktop) or tap. The table head reads as the section bar. */
+function WeaponTable({ section, rules }: { section: DatasheetSection; rules: RuleHandlers }) {
   const columns = section.profiles[0]?.characteristics.map((c) => c.name) ?? [];
   const span = columns.length + 1;
   return (
@@ -44,7 +65,7 @@ function ProfileTable({ section, rules }: { section: DatasheetSection; rules: Ru
       <table className="ds-table">
         <thead>
           <tr>
-            <th>{section.typeName}</th>
+            <th>{sectionLabel(section.typeName)}</th>
             {columns.map((name) => <th key={name}>{name}</th>)}
           </tr>
         </thead>
@@ -80,12 +101,40 @@ function ProfileTable({ section, rules }: { section: DatasheetSection; rules: Ru
   );
 }
 
-/** Abilities render as name + description blocks. */
-function Abilities({ section }: { section: DatasheetSection }) {
+/** Read-only loadout readout ("X снаряжён: a, b"), the way War Organ summarizes wargear. */
+function Composition({ loadout }: { loadout: { unit: string; wargear: string[] } }) {
   return (
-    <div className="ds-abilities">
-      {section.profiles.map((p) => (
-        <p key={p.name}>
+    <div className="ds-section">
+      <div className="ds-section-head">Состав и снаряжение</div>
+      <p className="ds-loadout">{loadout.unit} снаряжён: {loadout.wargear.join(", ")}.</p>
+    </div>
+  );
+}
+
+/** Abilities: grouped ones (Core/Faction) collapse to one compact line per group;
+ *  ungrouped ones render as name + description. */
+function Abilities({ section }: { section: DatasheetSection }) {
+  const groups = new Map<string, string[]>();
+  const named: DatasheetSection["profiles"] = [];
+  for (const p of section.profiles) {
+    if (p.group) {
+      const list = groups.get(p.group) ?? [];
+      list.push(p.name);
+      groups.set(p.group, list);
+    } else {
+      named.push(p);
+    }
+  }
+  return (
+    <div className="ds-section">
+      <div className="ds-section-head">Способности</div>
+      {[...groups].map(([group, names]) => (
+        <p key={group} className="ds-ability-line">
+          <strong>{group.toUpperCase()}:</strong> {names.join(", ")}
+        </p>
+      ))}
+      {named.map((p) => (
+        <p key={p.name} className="ds-ability">
           <strong>{p.name}.</strong>{" "}
           {p.characteristics.find((c) => c.name === "Description")?.value ?? ""}
         </p>
@@ -94,17 +143,44 @@ function Abilities({ section }: { section: DatasheetSection }) {
   );
 }
 
-/** The datasheet sections OTHER than the Unit statline (abilities, weapon tables).
- *  The statline is rendered separately via UnitStatline, directly under the name. */
+/** A special rule block (Supreme Commander, Damaged, …): a titled section of
+ *  descriptive paragraphs, keyed off the profile's typeName. */
+function SpecialSection({ section }: { section: DatasheetSection }) {
+  return (
+    <div className="ds-section">
+      <div className="ds-section-head">{sectionLabel(section.typeName)}</div>
+      {section.profiles.map((p) => {
+        const desc = p.characteristics.find((c) => c.name === "Description")?.value ?? "";
+        return (
+          <p key={p.name} className="ds-ability">
+            {p.name !== section.typeName && <><strong>{p.name}.</strong>{" "}</>}
+            {desc}
+          </p>
+        );
+      })}
+    </div>
+  );
+}
+
+const RESERVED = new Set(["Unit", "Invulnerable Save", "Abilities"]);
+
+/** The two-column datasheet body: weapons on the left; composition, abilities and
+ *  special rules on the right. The statline/invuln sit above it (UnitStatline). */
 export function Datasheet({
   catalogue, selection,
 }: {
   catalogue: IrCatalogue;
   selection: RosterSelection;
 }) {
-  const sections = datasheet(catalogue, selection).filter((s) => s.typeName !== "Unit");
+  const all = datasheet(catalogue, selection);
+  const weapons = all.filter((s) => WEAPON_TYPES.has(s.typeName));
+  const abilities = all.find((s) => s.typeName === "Abilities");
+  const specials = all.filter((s) => !WEAPON_TYPES.has(s.typeName) && !RESERVED.has(s.typeName));
+  const loadout = unitLoadout(catalogue, selection);
   const [tip, setTip] = useState<{ kw: string; x: number; y: number } | null>(null);
-  if (sections.length === 0) return null;
+
+  const hasRight = loadout.wargear.length > 0 || !!abilities || specials.length > 0;
+  if (weapons.length === 0 && !hasRight) return null;
 
   const at = (el: HTMLElement) => {
     const r = el.getBoundingClientRect();
@@ -119,11 +195,16 @@ export function Datasheet({
 
   return (
     <div className="ds" data-testid="datasheet">
-      {sections.map((section) =>
-        section.typeName === "Abilities"
-          ? <Abilities key={section.typeName} section={section} />
-          : <ProfileTable key={section.typeName} section={section} rules={rules} />,
-      )}
+      <div className="ds-cols">
+        <div className="ds-col">
+          {weapons.map((section) => <WeaponTable key={section.typeName} section={section} rules={rules} />)}
+        </div>
+        <div className="ds-col">
+          {loadout.wargear.length > 0 && <Composition loadout={loadout} />}
+          {abilities && <Abilities section={abilities} />}
+          {specials.map((section) => <SpecialSection key={section.typeName} section={section} />)}
+        </div>
+      </div>
       {tip && (
         <div className="rule-tip" role="tooltip" style={{ position: "fixed", left: tip.x, top: tip.y }}>
           <strong className="rule-tip-name">{tip.kw}</strong>
