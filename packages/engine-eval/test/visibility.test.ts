@@ -42,3 +42,144 @@ describe("hiddenEntryIds", () => {
     expect(hiddenEntryIds(roster(["e.det"]), cat()).has("e.plain")).toBe(false);
   });
 });
+
+// Owner unit e.owner (category cat.owner) contains option e.opt whose gate hides
+// it unless its parent (the owner) is instanceOf cat.other.
+function ctxCat(): IrCatalogue {
+  return {
+    id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [],
+    entries: [
+      {
+        id: "e.owner", name: "Owner", costs: [], categories: ["cat.owner"], constraints: [],
+        children: [
+          {
+            id: "e.opt", name: "Opt", costs: [], categories: [], constraints: [], children: [],
+            // hide the option unless parent is instanceOf cat.other (it isn't) -> hidden in owner ctx
+            visibilityModifiers: [{
+              set: true,
+              conditions: [
+                { id: "c1", comparator: "lessThan", value: 1, field: "selections", scope: "parent", targetType: "category", targetId: "cat.other" },
+              ],
+            }],
+          },
+        ],
+      },
+    ],
+  };
+}
+const rosterWithOwner = (): Roster => ({
+  id: "r", name: "R", gameSystemId: "gs", catalogueId: "c", catalogueRevision: 1, pointsLimit: 2000,
+  selections: [{ id: "own", entryId: "e.owner", count: 1, selections: [] }],
+});
+
+describe("hiddenEntryIds context scopes", () => {
+  it("evaluates a parent-scoped gate against the owner node (hides in owner context)", () => {
+    const hidden = hiddenEntryIds(rosterWithOwner(), ctxCat(), "own");
+    expect(hidden.has("e.opt")).toBe(true); // parent (owner) is not cat.other -> lessThan 1 true -> hide
+  });
+
+  it("skips a context-scoped gate when no owner is given (stays visible)", () => {
+    const hidden = hiddenEntryIds(rosterWithOwner(), ctxCat()); // no owner
+    expect(hidden.has("e.opt")).toBe(false); // parent scope unresolvable -> modifier skipped
+  });
+
+  it("ignores an unknown ownerSelectionId (treated as no owner; context gate skipped)", () => {
+    const hidden = hiddenEntryIds(rosterWithOwner(), ctxCat(), "does-not-exist");
+    expect(hidden.has("e.opt")).toBe(false);
+  });
+
+  it("skips a conditionGroup gate that uses a context scope when no owner is given", () => {
+    const catWithGroup: IrCatalogue = {
+      id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [],
+      entries: [
+        {
+          id: "e.owner2", name: "Owner2", costs: [], categories: ["cat.owner2"], constraints: [],
+          children: [
+            {
+              id: "e.opt2", name: "Opt2", costs: [], categories: [], constraints: [], children: [],
+              visibilityModifiers: [{
+                set: true,
+                conditionGroups: [{
+                  type: "and",
+                  conditions: [
+                    { id: "g1", comparator: "lessThan", value: 1, field: "selections", scope: "parent", targetType: "category", targetId: "cat.other" },
+                  ],
+                }],
+              }],
+            },
+          ],
+        },
+      ],
+    };
+    const rosterOwner2: Roster = {
+      id: "r", name: "R", gameSystemId: "gs", catalogueId: "c", catalogueRevision: 1, pointsLimit: 2000,
+      selections: [{ id: "own2", entryId: "e.owner2", count: 1, selections: [] }],
+    };
+    // Without an owner, the group's context-scoped condition means the whole modifier is skipped.
+    const hiddenNoOwner = hiddenEntryIds(rosterOwner2, catWithGroup);
+    expect(hiddenNoOwner.has("e.opt2")).toBe(false);
+    // With the real owner, the group is evaluated against the ancestor chain and hides it.
+    const hiddenWithOwner = hiddenEntryIds(rosterOwner2, catWithGroup, "own2");
+    expect(hiddenWithOwner.has("e.opt2")).toBe(true);
+  });
+
+  it("skips a gate whose context scope is only reachable via a nested conditionGroup", () => {
+    // The outer group's own `conditions` are non-context (roster-scoped), so
+    // `groupUsesContext` must recurse into `conditionGroups` to find the parent-scoped
+    // condition nested one level deeper.
+    const catWithNestedGroup: IrCatalogue = {
+      id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [],
+      entries: [
+        {
+          id: "e.owner3", name: "Owner3", costs: [], categories: ["cat.owner3"], constraints: [],
+          children: [
+            {
+              id: "e.opt3", name: "Opt3", costs: [], categories: [], constraints: [], children: [],
+              visibilityModifiers: [{
+                set: true,
+                conditionGroups: [{
+                  type: "and",
+                  conditions: [
+                    { id: "g1", comparator: "lessThan", value: 100, field: "selections", scope: "roster", targetType: "category", targetId: "cat.nowhere" },
+                  ],
+                  conditionGroups: [{
+                    type: "and",
+                    conditions: [
+                      { id: "g2", comparator: "lessThan", value: 1, field: "selections", scope: "parent", targetType: "category", targetId: "cat.other" },
+                    ],
+                  }],
+                }],
+              }],
+            },
+          ],
+        },
+      ],
+    };
+    const rosterOwner3: Roster = {
+      id: "r", name: "R", gameSystemId: "gs", catalogueId: "c", catalogueRevision: 1, pointsLimit: 2000,
+      selections: [{ id: "own3", entryId: "e.owner3", count: 1, selections: [] }],
+    };
+    const hiddenNoOwner = hiddenEntryIds(rosterOwner3, catWithNestedGroup);
+    expect(hiddenNoOwner.has("e.opt3")).toBe(false); // no owner -> nested context condition -> whole modifier skipped
+    const hiddenWithOwner = hiddenEntryIds(rosterOwner3, catWithNestedGroup, "own3");
+    expect(hiddenWithOwner.has("e.opt3")).toBe(true); // with owner, both nested conditions pass -> hidden
+  });
+
+  it("treats a conditionGroup with neither conditions nor nested groups as context-free", () => {
+    // Empty group: `conditions` and `conditionGroups` are both omitted, exercising the
+    // `?? []` fallback on each side of groupUsesContext. usesContextScope must report
+    // false for it, so the gate is evaluated normally even with no owner (an empty "and"
+    // group is vacuously true, so the modifier applies unconditionally).
+    const catEmptyGroup: IrCatalogue = {
+      id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [],
+      entries: [
+        {
+          id: "e.opt4", name: "Opt4", costs: [], categories: [], constraints: [], children: [],
+          visibilityModifiers: [{ set: true, conditionGroups: [{ type: "and" }] }],
+        },
+      ],
+    };
+    const hidden = hiddenEntryIds(roster([]), catEmptyGroup); // no owner
+    expect(hidden.has("e.opt4")).toBe(true); // context-free gate is not skipped; empty "and" group is vacuously true
+  });
+});
