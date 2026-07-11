@@ -67,7 +67,7 @@ export function App() {
       <div className="builder" data-view={selectedUnitId ? "detail" : "list"}>
         <RosterList roster={roster} catalogue={catalogue} selectedUnitId={selectedUnitId}
           onSelect={setSelectedUnitId} onOpenPicker={() => setPickerOpen(true)} />
-        <UnitDetail roster={roster} catalogue={catalogue} selectedUnitId={selectedUnitId} hiddenIds={hiddenIds}
+        <UnitDetail roster={roster} catalogue={catalogue} selectedUnitId={selectedUnitId}
           onBack={() => setSelectedUnitId(undefined)}
           onAddOption={(pid, eid) => setRoster((r) => addOption(r, pid, eid))}
           onToggleGroupMember={(pid, group, eid) => setRoster((r) => toggleGroupMember(r, pid, group, eid))}

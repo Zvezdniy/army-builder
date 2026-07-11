@@ -1,19 +1,24 @@
+import { useMemo } from "react";
 import type { IrCatalogue, IrGroup, Roster, RosterSelection } from "@muster/domain";
 import { optionsFor, selectedGroupMembers, groupControl, optionControl, catalogueEntry } from "@muster/roster";
+import { hiddenEntryIds } from "@muster/engine-eval";
 
 export function UnitConfig({
-  roster, selection, catalogue, canRemove = true, hiddenIds, onAddOption, onToggleGroupMember, onRemove, onSetCount,
+  roster, selection, catalogue, canRemove = true, onAddOption, onToggleGroupMember, onRemove, onSetCount,
 }: {
   roster: Roster;
   selection: RosterSelection;
   catalogue: IrCatalogue;
   canRemove?: boolean;
-  hiddenIds: Set<string>;
   onAddOption: (parentId: string, entryId: string) => void;
   onToggleGroupMember: (parentId: string, group: IrGroup, entryId: string) => void;
   onRemove: (id: string) => void;
   onSetCount: (id: string, count: number) => void;
 }) {
+  const hiddenIds = useMemo(
+    () => hiddenEntryIds(roster, catalogue, selection.id),
+    [roster, catalogue, selection.id],
+  );
   const { options: allOptions, groups } = optionsFor(roster, selection.id, catalogue);
   const options = allOptions.filter((o) => !hiddenIds.has(o.id));
   const nameById = new Map(options.map((o) => [o.id, o.name] as const));
