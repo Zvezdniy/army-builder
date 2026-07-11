@@ -44,6 +44,7 @@ export const IrProfile = z.object({
   name: z.string(),
   typeName: z.string(),
   characteristics: z.array(IrCharacteristic).default([]),
+  keywords: z.array(z.string()).optional(),
 });
 export type IrProfile = z.infer<typeof IrProfile>;
 
@@ -81,5 +82,6 @@ export const IrCatalogue = z.object({
   entries: z.array(IrEntry),
   forceConstraints: z.array(IrConstraint).default([]),
   categoryNames: z.record(z.string()).default({}),
+  ruleTexts: z.record(z.string()).optional(),
 });
 export type IrCatalogue = z.infer<typeof IrCatalogue>;

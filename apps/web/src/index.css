@@ -76,6 +76,17 @@ section { background: var(--panel); border: 1px solid var(--line); border-radius
   font-variant-numeric: tabular-nums; }
 .ds-table th { opacity: 0.8; font-weight: 600; }
 .ds-abilities p { margin: 2px 0; font-size: 13px; }
+.ds-kw-row td { padding: 4px 8px; }
+.ds-kw-chip { font-size: 11px; padding: 2px 8px; margin: 0 4px 2px 0; border: 1px solid var(--line);
+  border-radius: 20px; background: transparent; color: var(--accent); cursor: pointer; letter-spacing: 0.02em; }
+.ds-kw-chip:hover { border-color: var(--accent); }
+.rule-popup-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.5); display: flex;
+  align-items: center; justify-content: center; padding: 16px; z-index: 20; }
+.rule-popup { background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+  width: 100%; max-width: 380px; padding: 0; overflow: hidden; }
+.rule-popup-head { display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 14px; border-bottom: 1px solid var(--line); text-transform: uppercase; letter-spacing: 0.03em; font-size: 13px; }
+.rule-popup-body { margin: 0; padding: 12px 14px; font-size: 13px; line-height: 1.5; }
 
 .builder { display: grid; grid-template-columns: minmax(220px, 320px) 1fr; gap: 16px; margin-top: 8px; }
 .rl-group { margin-bottom: 10px; }
@@ -95,10 +106,18 @@ section { background: var(--panel); border: 1px solid var(--line); border-radius
 .picker-close { border: none; background: transparent; cursor: pointer; font-size: 16px; color: var(--muted, #888); }
 .picker-search { margin: 12px 14px 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: inherit; }
 .picker-list { overflow-y: auto; padding: 0 8px 12px; }
-.picker-role { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted, #888); margin: 8px 6px 4px; }
-.picker-item { width: 100%; display: flex; justify-content: space-between; gap: 8px; text-align: left; padding: 8px 10px; margin-bottom: 4px; border: 1px solid var(--line); border-radius: 8px; background: transparent; cursor: pointer; }
-.picker-item:hover { border-color: var(--accent); }
+.picker-section { margin-bottom: 4px; }
+.picker-role-head { width: 100%; display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 8px; margin: 4px 0; border: none; background: transparent; cursor: pointer;
+  font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted, #888); font-weight: 600; }
+.picker-chevron { color: var(--muted, #888); }
+.picker-item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; margin-bottom: 4px;
+  border: 1px solid var(--line); border-radius: 8px; }
+.picker-item-name { flex: 1; min-width: 0; }
 .picker-pts { color: var(--muted, #888); font-variant-numeric: tabular-nums; }
+.picker-add { width: 30px; height: 30px; flex: none; border: 1px solid var(--accent); border-radius: 8px;
+  background: transparent; color: var(--accent); font-size: 18px; line-height: 1; cursor: pointer; }
+.picker-add:hover { background: var(--accent); color: var(--accent-ink); }
 .picker-empty { color: var(--muted, #888); padding: 12px; }
 .ud { min-width: 0; }
 .ud-empty { color: var(--muted, #888); padding: 16px; }

@@ -6,7 +6,8 @@ function points(e: IrEntry): number {
   return e.costs.find((c) => c.name === "points")?.value ?? 0;
 }
 
-/** Modal picker: the full faction unit list, grouped by role, searchable. */
+/** Modal picker: the full faction unit list in collapsible role sections,
+ *  searchable, each unit quick-added via its "+" button. */
 export function AddUnitPicker({
   catalogue, onAdd, onClose,
 }: {
@@ -15,6 +16,7 @@ export function AddUnitPicker({
   onClose: () => void;
 }) {
   const [query, setQuery] = useState("");
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const q = query.trim().toLowerCase();
   const units = availableUnits(catalogue).filter((u) => u.name.toLowerCase().includes(q));
 
@@ -32,6 +34,14 @@ export function AddUnitPicker({
     group.units.push(u);
   }
 
+  const toggle = (role: string) =>
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(role)) next.delete(role);
+      else next.add(role);
+      return next;
+    });
+
   return (
     <div className="picker-overlay" role="dialog" aria-label="add unit" onClick={onClose}>
       <div className="picker" onClick={(e) => e.stopPropagation()}>
@@ -43,18 +53,24 @@ export function AddUnitPicker({
           value={query} onChange={(e) => setQuery(e.target.value)} autoFocus />
         <div className="picker-list">
           {groups.length === 0 && <div className="picker-empty">Ничего не найдено</div>}
-          {groups.map((g) => (
-            <div key={g.role}>
-              <div className="picker-role">{g.role}</div>
-              {g.units.map((u) => (
-                <button key={u.id} className="picker-item" aria-label={`add ${u.name}`}
-                  onClick={() => onAdd(u.id)}>
-                  <span>{u.name}</span>
-                  <span className="picker-pts">{points(u)} pts</span>
+          {groups.map((g) => {
+            const open = !collapsed.has(g.role);
+            return (
+              <div key={g.role} className="picker-section">
+                <button className="picker-role-head" aria-expanded={open} onClick={() => toggle(g.role)}>
+                  <span>{g.role}</span>
+                  <span className="picker-chevron">{open ? "▾" : "▸"}</span>
                 </button>
-              ))}
-            </div>
-          ))}
+                {open && g.units.map((u) => (
+                  <div key={u.id} className="picker-item">
+                    <span className="picker-item-name">{u.name}</span>
+                    <span className="picker-pts">{points(u)} pts</span>
+                    <button className="picker-add" aria-label={`add ${u.name}`} onClick={() => onAdd(u.id)}>+</button>
+                  </div>
+                ))}
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>

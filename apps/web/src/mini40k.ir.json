@@ -4,6 +4,12 @@
   "gameSystemId": "gs.40k",
   "revision": 1,
   "categoryNames": { "cat.hq": "HQ", "cat.troops": "Battleline", "cat.model": "Model" },
+  "ruleTexts": {
+    "Precision": "Each time an attack made with this weapon targets a unit containing a Character, the attacking player can allocate that attack to a Character model in that unit.",
+    "Anti-Infantry 4+": "An unmodified Wound roll of 4+ scores a Critical Wound against a target with the Infantry keyword.",
+    "Assault": "This weapon can be shot even if the bearer's unit Advanced this turn.",
+    "Heavy": "Each time an attack is made with this weapon, if the bearer's unit Remained Stationary this turn, add 1 to that attack's Hit roll."
+  },
   "entries": [
     {
       "id": "e.captain",
@@ -59,7 +65,8 @@
                 { "name": "S", "value": "5" },
                 { "name": "AP", "value": "-2" },
                 { "name": "D", "value": "1" }
-              ]
+              ],
+              "keywords": ["Precision"]
             }
           ]
         },
@@ -83,7 +90,8 @@
                 { "name": "S", "value": "6" },
                 { "name": "AP", "value": "-2" },
                 { "name": "D", "value": "2" }
-              ]
+              ],
+              "keywords": ["Anti-Infantry 4+"]
             }
           ]
         }
@@ -177,7 +185,7 @@
             { "name": "Battle Squad", "typeName": "Unit", "characteristics": [
               { "name": "M", "value": "6\"" }, { "name": "T", "value": "4" }, { "name": "SV", "value": "3+" },
               { "name": "W", "value": "2" }, { "name": "LD", "value": "6+" }, { "name": "OC", "value": "2" } ] },
-            { "name": "Bolt rifle", "typeName": "Ranged Weapons", "characteristics": [
+            { "name": "Bolt rifle", "typeName": "Ranged Weapons", "keywords": ["Assault", "Heavy"], "characteristics": [
               { "name": "Range", "value": "24\"" }, { "name": "A", "value": "2" }, { "name": "BS", "value": "3+" },
               { "name": "S", "value": "4" }, { "name": "AP", "value": "-1" }, { "name": "D", "value": "1" } ] },
             { "name": "Combat Squads", "typeName": "Abilities", "characteristics": [

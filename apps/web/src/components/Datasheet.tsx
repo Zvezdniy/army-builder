@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { IrCatalogue, RosterSelection } from "@muster/domain";
 import { datasheet, type DatasheetSection } from "@muster/roster";
 
@@ -17,9 +18,16 @@ function Statline({ section }: { section: DatasheetSection }) {
   );
 }
 
-/** Weapons and other multi-column profiles render as a table. */
-function ProfileTable({ section }: { section: DatasheetSection }) {
+/** Weapons and other multi-column profiles render as a table; weapon keyword
+ *  abilities render as clickable chips beneath each row. */
+function ProfileTable({
+  section, onRule,
+}: {
+  section: DatasheetSection;
+  onRule: (keyword: string) => void;
+}) {
   const columns = section.profiles[0]?.characteristics.map((c) => c.name) ?? [];
+  const span = columns.length + 1;
   return (
     <div className="ds-table-wrap">
       <table className="ds-table">
@@ -31,14 +39,40 @@ function ProfileTable({ section }: { section: DatasheetSection }) {
         </thead>
         <tbody>
           {section.profiles.map((p) => (
-            <tr key={p.name}>
-              <td>{p.name}</td>
-              {p.characteristics.map((c) => <td key={c.name}>{c.value}</td>)}
-            </tr>
+            <ProfileRows key={p.name} profile={p} span={span} onRule={onRule} />
           ))}
         </tbody>
       </table>
     </div>
+  );
+}
+
+function ProfileRows({
+  profile, span, onRule,
+}: {
+  profile: DatasheetSection["profiles"][number];
+  span: number;
+  onRule: (keyword: string) => void;
+}) {
+  const keywords = profile.keywords ?? [];
+  return (
+    <>
+      <tr>
+        <td>{profile.name}</td>
+        {profile.characteristics.map((c) => <td key={c.name}>{c.value}</td>)}
+      </tr>
+      {keywords.length > 0 && (
+        <tr className="ds-kw-row">
+          <td colSpan={span}>
+            {keywords.map((k) => (
+              <button key={k} className="ds-kw-chip" aria-label={`${k} rule`} onClick={() => onRule(k)}>
+                {k}
+              </button>
+            ))}
+          </td>
+        </tr>
+      )}
+    </>
   );
 }
 
@@ -63,14 +97,28 @@ export function Datasheet({
   selection: RosterSelection;
 }) {
   const sections = datasheet(catalogue, selection);
+  const [openRule, setOpenRule] = useState<string | null>(null);
   if (sections.length === 0) return null;
+  const ruleText = openRule ? (catalogue.ruleTexts?.[openRule] ?? "Нет описания правила.") : "";
   return (
     <div className="ds" data-testid="datasheet">
       {sections.map((section) => {
         if (section.typeName === "Unit") return <Statline key={section.typeName} section={section} />;
         if (section.typeName === "Abilities") return <Abilities key={section.typeName} section={section} />;
-        return <ProfileTable key={section.typeName} section={section} />;
+        return <ProfileTable key={section.typeName} section={section} onRule={setOpenRule} />;
       })}
+      {openRule && (
+        <div className="rule-popup-overlay" role="dialog" aria-label={`${openRule} rule`}
+          onClick={() => setOpenRule(null)}>
+          <div className="rule-popup" onClick={(e) => e.stopPropagation()}>
+            <div className="rule-popup-head">
+              <strong>{openRule}</strong>
+              <button className="picker-close" aria-label="close" onClick={() => setOpenRule(null)}>✕</button>
+            </div>
+            <p className="rule-popup-body">{ruleText}</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
