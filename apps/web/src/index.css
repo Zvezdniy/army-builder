@@ -167,3 +167,52 @@ section { background: var(--panel); border: 1px solid var(--line); border-radius
   .builder[data-view="list"] .ud { display: none; }
   .ud-back { display: inline-block; }
 }
+
+/* ── Unit configuration controls (wargear choosers, count, adders) ────────────
+   Reads as a datasheet section: a dark bar (reuses .ds-section-head), then pill
+   toggles that share the keyword-chip / .chosen vocabulary used above. */
+.uc { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+/* Nested option controls tuck under their name with a quiet rule instead of a bar. */
+.uc-nested { margin-top: 6px; gap: 8px; padding-left: 10px; border-left: 2px solid var(--line); }
+
+/* Self-controls row: stepper / fixed badge / remove. */
+.uc-selfrow { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+
+/* Unified stepper: one bordered segment, − value + fused with no gaps. */
+.uc-stepper { display: inline-flex; align-items: stretch; background: var(--panel);
+  border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.uc-stepper button { border: none; border-radius: 0; background: transparent; color: var(--ink);
+  padding: 4px 12px; font-size: 15px; line-height: 1; }
+.uc-stepper button:hover { background: var(--head-bg); color: var(--head-ink); border-color: transparent; }
+.uc-step-val { display: inline-flex; align-items: center; justify-content: center; min-width: 34px;
+  padding: 4px; font-weight: 700; font-variant-numeric: tabular-nums;
+  border-left: 1px solid var(--line); border-right: 1px solid var(--line); }
+
+/* "×N fixed" reads as a quiet count badge, not a control. */
+.uc-fixed { display: inline-flex; align-items: center; padding: 3px 10px; font-size: 12px;
+  color: var(--muted); border: 1px solid var(--line); border-radius: 20px;
+  font-variant-numeric: tabular-nums; }
+
+/* Ghost "remove": quiet at rest, destructive on hover. */
+.uc-remove { padding: 4px 10px; font-size: 12px; color: var(--muted); border-radius: 8px; }
+.uc-remove:hover { border-color: var(--error); color: var(--error); }
+
+/* One wargear group: a labelled header line + its toggle options. */
+.uc-group { display: flex; flex-direction: column; gap: 5px; }
+.uc-group-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.uc-group-name { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+.uc-hint { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
+.uc-hint.is-required { color: var(--warn); }
+
+/* Toggle options: tap-sized pills matching the chip system.
+   Selected members reuse the global button.chosen (accent fill + ✓). */
+.uc-options { display: flex; flex-wrap: wrap; gap: 6px; }
+.uc-opt { font-size: 12px; padding: 5px 12px; border-radius: 20px; letter-spacing: 0.01em;
+  border: 1px solid var(--line); background: var(--panel); color: var(--ink); }
+.uc-opt:hover { border-color: var(--accent); }
+
+/* Free (non-group) adders read as dashed "+" chips — clearly additive, not a toggle. */
+.uc-adds { display: flex; flex-wrap: wrap; gap: 6px; }
+.uc-add { font-size: 12px; padding: 5px 12px; border-radius: 20px; letter-spacing: 0.01em;
+  border: 1px dashed var(--line); background: transparent; color: var(--accent); }
+.uc-add:hover { border-color: var(--accent); border-style: solid; }
