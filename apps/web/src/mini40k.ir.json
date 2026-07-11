@@ -3,6 +3,7 @@
   "name": "Mini 40k",
   "gameSystemId": "gs.40k",
   "revision": 1,
+  "categoryNames": { "cat.hq": "HQ", "cat.troops": "Battleline", "cat.model": "Model" },
   "entries": [
     {
       "id": "e.captain",
@@ -172,6 +173,16 @@
               "includeChildSelections": true
             }
           ],
+          "profiles": [
+            { "name": "Battle Squad", "typeName": "Unit", "characteristics": [
+              { "name": "M", "value": "6\"" }, { "name": "T", "value": "4" }, { "name": "SV", "value": "3+" },
+              { "name": "W", "value": "2" }, { "name": "LD", "value": "6+" }, { "name": "OC", "value": "2" } ] },
+            { "name": "Bolt rifle", "typeName": "Ranged Weapons", "characteristics": [
+              { "name": "Range", "value": "24\"" }, { "name": "A", "value": "2" }, { "name": "BS", "value": "3+" },
+              { "name": "S", "value": "4" }, { "name": "AP", "value": "-1" }, { "name": "D", "value": "1" } ] },
+            { "name": "Combat Squads", "typeName": "Abilities", "characteristics": [
+              { "name": "Description", "value": "Before deployment you can split this unit into two." } ] }
+          ],
           "children": [
             {
               "id": "squad-body.model",
@@ -287,6 +298,13 @@
               "targetId": "e.assault.marine",
               "includeChildSelections": false
             }
+          ],
+          "profiles": [
+            { "name": "Assault Marine", "typeName": "Unit", "characteristics": [
+              { "name": "M", "value": "12\"" }, { "name": "T", "value": "4" }, { "name": "SV", "value": "3+" },
+              { "name": "W", "value": "2" }, { "name": "LD", "value": "6+" }, { "name": "OC", "value": "2" } ] },
+            { "name": "Jump Pack", "typeName": "Abilities", "characteristics": [
+              { "name": "Description", "value": "This unit can FLY and gains Assault on its move." } ] }
           ]
         }
       ],
