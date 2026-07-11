@@ -28,8 +28,11 @@ pub fn parse_bytes(input: &[u8], is_zip: bool) -> Result<(IrCatalogue, Vec<Diagn
         std::borrow::Cow::Borrowed(input)
     };
     let raw = crate::raw::parse_raw(&xml)?;
-    let resolved = crate::resolve::resolve(raw)?;
-    Ok(crate::ir::to_ir(&resolved))
+    let mut diags = Vec::new();
+    let resolved = crate::resolve::resolve_with_diags(raw, &mut diags)?;
+    let (ir, map_diags) = crate::ir::to_ir(&resolved);
+    diags.extend(map_diags);
+    Ok((ir, diags))
 }
 
 /// Read and parse a file. Zip is detected by extension (.catz/.gstz/.rosz).

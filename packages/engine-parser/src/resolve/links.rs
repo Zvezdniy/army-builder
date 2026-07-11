@@ -1,5 +1,5 @@
 use std::collections::HashSet;
-use crate::error::ParseError;
+use crate::error::{Diagnostic, ParseError};
 use crate::limits::{MAX_RESOLVED_NODES, MAX_RESOLVE_DEPTH};
 use crate::raw::{RawCatalogue, RawEntry, RawGroup};
 use super::symbols::SymbolTable;
@@ -26,42 +26,63 @@ impl Budget {
 /// clearing entry_links. A path visited-set makes a reference CYCLE a typed
 /// error; a node budget and depth cap make acyclic fan-out/long chains typed
 /// errors too (both are DoS vectors past the parse-time limits).
+/// Resolve, discarding diagnostics. Kept for callers that don't need them.
 pub fn resolve(cat: RawCatalogue) -> Result<RawCatalogue, ParseError> {
-    resolve_with_caps(cat, MAX_RESOLVED_NODES, MAX_RESOLVE_DEPTH)
+    let mut diags = Vec::new();
+    resolve_with_caps(cat, MAX_RESOLVED_NODES, MAX_RESOLVE_DEPTH, &mut diags)
 }
 
-pub(crate) fn resolve_with_caps(mut cat: RawCatalogue, max_nodes: u64, max_depth: usize)
+/// Resolve, collecting diagnostics (unresolvable entryLinks). Used by the
+/// pipeline (`parse_bytes`) so incompleteness is loud, not silent.
+pub fn resolve_with_diags(cat: RawCatalogue, diags: &mut Vec<Diagnostic>)
     -> Result<RawCatalogue, ParseError> {
+    resolve_with_caps(cat, MAX_RESOLVED_NODES, MAX_RESOLVE_DEPTH, diags)
+}
+
+pub(crate) fn resolve_with_caps(mut cat: RawCatalogue, max_nodes: u64, max_depth: usize,
+    diags: &mut Vec<Diagnostic>) -> Result<RawCatalogue, ParseError> {
     let symbols = SymbolTable::build(&cat)?;
     let mut path: HashSet<String> = HashSet::new();
     let mut budget = Budget { nodes: 0, max_nodes, max_depth };
-    let resolved: Result<Vec<_>, _> = cat.entries.iter()
-        .map(|e| resolve_entry(e, &symbols, &mut path, &mut budget, 1)).collect();
-    cat.entries = resolved?;
+    let mut resolved = Vec::with_capacity(cat.entries.len());
+    for e in &cat.entries {
+        resolved.push(resolve_entry(e, &symbols, &mut path, &mut budget, diags, 1)?);
+    }
+    cat.entries = resolved;
     Ok(cat)
 }
 
+/// A dropped entryLink whose target is not in this file (root or nested).
+fn unresolved_link_diag(target_id: &str) -> Diagnostic {
+    Diagnostic {
+        code: "entryLink.unresolved".to_string(),
+        message: format!("entryLink target {} not found in this file (dropped)", target_id),
+    }
+}
+
 fn resolve_entry(entry: &RawEntry, symbols: &SymbolTable, path: &mut HashSet<String>,
-    budget: &mut Budget, depth: usize) -> Result<RawEntry, ParseError> {
+    budget: &mut Budget, diags: &mut Vec<Diagnostic>, depth: usize) -> Result<RawEntry, ParseError> {
     budget.check_depth(depth)?;
     budget.account()?;
     let mut out = entry.clone();
     let mut children: Vec<RawEntry> = Vec::new();
     for child in &entry.entries {
-        children.push(resolve_entry(child, symbols, path, budget, depth + 1)?);
+        children.push(resolve_entry(child, symbols, path, budget, diags, depth + 1)?);
     }
     let mut groups: Vec<RawGroup> = Vec::new();
     for g in &entry.groups {
-        groups.push(resolve_group(g, symbols, path, budget, depth + 1)?);
+        groups.push(resolve_group(g, symbols, path, budget, diags, depth + 1)?);
     }
     for link in &entry.entry_links {
-        let target = symbols.entry(&link.target_id)
-            .ok_or_else(|| ParseError::UnresolvedRef(link.target_id.clone()))?;
+        let target = match symbols.entry(&link.target_id) {
+            Some(t) => t,
+            None => { diags.push(unresolved_link_diag(&link.target_id)); continue; }
+        };
         if path.contains(&link.target_id) {
             return Err(ParseError::ReferenceCycle(link.target_id.clone()));
         }
         path.insert(link.target_id.clone());
-        let resolved_target = resolve_entry(target, symbols, path, budget, depth + 1)?;
+        let resolved_target = resolve_entry(target, symbols, path, budget, diags, depth + 1)?;
         path.remove(&link.target_id);
         children.push(resolved_target);
     }
@@ -72,26 +93,28 @@ fn resolve_entry(entry: &RawEntry, symbols: &SymbolTable, path: &mut HashSet<Str
 }
 
 fn resolve_group(group: &RawGroup, symbols: &SymbolTable, path: &mut HashSet<String>,
-    budget: &mut Budget, depth: usize) -> Result<RawGroup, ParseError> {
+    budget: &mut Budget, diags: &mut Vec<Diagnostic>, depth: usize) -> Result<RawGroup, ParseError> {
     budget.check_depth(depth)?;
     budget.account()?;
     let mut out = group.clone();
     let mut children: Vec<RawEntry> = Vec::new();
     for child in &group.entries {
-        children.push(resolve_entry(child, symbols, path, budget, depth + 1)?);
+        children.push(resolve_entry(child, symbols, path, budget, diags, depth + 1)?);
     }
     let mut groups: Vec<RawGroup> = Vec::new();
     for g in &group.groups {
-        groups.push(resolve_group(g, symbols, path, budget, depth + 1)?);
+        groups.push(resolve_group(g, symbols, path, budget, diags, depth + 1)?);
     }
     for link in &group.entry_links {
-        let target = symbols.entry(&link.target_id)
-            .ok_or_else(|| ParseError::UnresolvedRef(link.target_id.clone()))?;
+        let target = match symbols.entry(&link.target_id) {
+            Some(t) => t,
+            None => { diags.push(unresolved_link_diag(&link.target_id)); continue; }
+        };
         if path.contains(&link.target_id) {
             return Err(ParseError::ReferenceCycle(link.target_id.clone()));
         }
         path.insert(link.target_id.clone());
-        children.push(resolve_entry(target, symbols, path, budget, depth + 1)?);
+        children.push(resolve_entry(target, symbols, path, budget, diags, depth + 1)?);
         path.remove(&link.target_id);
     }
     out.entries = children;
@@ -128,7 +151,7 @@ mod tests {
             shared_entries: shared,
             ..Default::default()
         };
-        assert!(matches!(resolve_with_caps(cat, 1000, 10_000), Err(ParseError::ResolvedTooLarge(_))));
+        assert!(matches!(resolve_with_caps(cat, 1000, 10_000, &mut Vec::new()), Err(ParseError::ResolvedTooLarge(_))));
     }
 
     #[test]
@@ -147,6 +170,6 @@ mod tests {
             shared_entries: shared,
             ..Default::default()
         };
-        assert!(matches!(resolve_with_caps(cat, u64::MAX, 10), Err(ParseError::ResolveTooDeep(_))));
+        assert!(matches!(resolve_with_caps(cat, u64::MAX, 10, &mut Vec::new()), Err(ParseError::ResolveTooDeep(_))));
     }
 }

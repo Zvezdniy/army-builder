@@ -1,4 +1,29 @@
-use engine_parser::{raw::parse_raw, resolve::resolve, ir::to_ir};
+use engine_parser::{raw::parse_raw, resolve::{resolve, resolve_with_diags}, ir::to_ir};
+
+#[test]
+fn nested_unresolved_entrylink_is_tolerated() {
+    // A nested entryLink whose target lives in another file must NOT crash the
+    // resolve; it is diagnosed and the child dropped. This is what makes a real
+    // .cat (28% of entryLinks point at the .gst) parseable.
+    let xml = br#"<?xml version="1.0"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <selectionEntries>
+    <selectionEntry id="e.unit" name="Unit" type="unit">
+      <costs><cost name="Points" typeId="pts" value="10"/></costs>
+      <entryLinks>
+        <entryLink id="l" name="Missing" type="selectionEntry" targetId="e.missing"/>
+      </entryLinks>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let mut diags = Vec::new();
+    let raw = resolve_with_diags(parse_raw(xml).unwrap(), &mut diags).unwrap(); // must NOT error
+    let (ir, _d) = to_ir(&raw);
+    assert!(ir.entries.iter().any(|e| e.id == "e.unit"), "unit still maps");
+    assert!(diags.iter().any(|d| d.code == "entryLink.unresolved" && d.message.contains("e.missing")),
+        "dangling nested link diagnosed: {:?}", diags);
+}
 
 #[test]
 fn maps_entries_costs_categories() {
