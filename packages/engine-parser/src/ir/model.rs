@@ -116,7 +116,7 @@ pub struct IrModifier {
     pub condition_groups: Option<Vec<IrConditionGroup>>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct IrVisibilityModifier {
     pub set: bool,
@@ -148,7 +148,7 @@ pub struct IrCategoryModifier {
     pub condition_groups: Option<Vec<IrConditionGroup>>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct IrCondition {
     pub id: String,
@@ -161,7 +161,7 @@ pub struct IrCondition {
     pub include_child_selections: bool,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct IrConditionGroup {
     #[serde(rename = "type")]

@@ -1469,3 +1469,93 @@ fn grouplink_hidden_modifier_still_unsupported() {
     diags.extend(ir_diags);
     assert!(diags.iter().any(|d| d.code == "entryLink.group_hidden_unsupported"), "{:?}", diags);
 }
+
+#[test]
+fn group_hidden_gate_is_pushed_onto_flattened_members() {
+    // A selectionEntryGroup gated hidden by `and(forces CrusadeForce < 1, selections DET < 1)`
+    // — the real enhancement-group detachment gate. The group has no IR visibility node, so
+    // the gate must be lowered onto each flattened member entry. field="forces" now maps, so
+    // the whole strict gate survives.
+    let xml = br#"<?xml version="1.0"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <selectionEntries>
+    <selectionEntry id="e.det" name="Gladius" type="upgrade">
+      <costs><cost name="Points" typeId="pts" value="0"/></costs>
+    </selectionEntry>
+    <selectionEntry id="e.char" name="Captain" type="unit">
+      <costs><cost name="Points" typeId="pts" value="90"/></costs>
+      <selectionEntryGroups>
+        <selectionEntryGroup id="g.enh" name="Gladius Enhancements">
+          <selectionEntries>
+            <selectionEntry id="e.enh1" name="Enh1" type="upgrade">
+              <costs><cost name="Points" typeId="pts" value="10"/></costs>
+            </selectionEntry>
+          </selectionEntries>
+          <modifiers>
+            <modifier type="set" value="true" field="hidden">
+              <conditionGroups>
+                <conditionGroup type="and">
+                  <conditions>
+                    <condition type="lessThan" value="1" field="forces" scope="roster" childId="force.crusade" shared="true"/>
+                    <condition type="lessThan" value="1" field="selections" scope="roster" childId="e.det" shared="true"/>
+                  </conditions>
+                </conditionGroup>
+              </conditionGroups>
+            </modifier>
+          </modifiers>
+        </selectionEntryGroup>
+      </selectionEntryGroups>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let raw = resolve(parse_raw(xml).unwrap()).unwrap();
+    let (ir, _diags) = to_ir(&raw);
+    let ch = ir.entries.iter().find(|e| e.id == "e.char").unwrap();
+    let enh = ch.children.iter().find(|e| e.id == "e.enh1").expect("member flattened into owner");
+    assert_eq!(enh.visibility_modifiers.len(), 1, "group hidden gate pushed onto member");
+    let vm = &enh.visibility_modifiers[0];
+    assert!(vm.set, "gate hides (set=true)");
+    let cg = vm.condition_groups.as_ref().expect("gate carries the and-group");
+    let conds = cg[0].conditions.as_ref().unwrap();
+    assert!(conds.iter().any(|c| c.field == "forces"), "forces condition survived mapping");
+    assert!(conds.iter().any(|c| c.field == "selections" && c.target_id == "e.det"), "detachment condition present");
+}
+
+#[test]
+fn unmappable_group_hidden_gate_is_dropped_with_diagnostic() {
+    // A group hidden gate whose condition uses an unmappable field must drop the whole
+    // gate (never over-hide) and leave members ungated, with a diagnostic.
+    let xml = br#"<?xml version="1.0"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <selectionEntries>
+    <selectionEntry id="e.char" name="Captain" type="unit">
+      <costs><cost name="Points" typeId="pts" value="90"/></costs>
+      <selectionEntryGroups>
+        <selectionEntryGroup id="g.enh" name="Enh">
+          <selectionEntries>
+            <selectionEntry id="e.enh1" name="Enh1" type="upgrade">
+              <costs><cost name="Points" typeId="pts" value="10"/></costs>
+            </selectionEntry>
+          </selectionEntries>
+          <modifiers>
+            <modifier type="set" value="true" field="hidden">
+              <conditions>
+                <condition type="lessThan" value="1" field="wibble" scope="roster" childId="x" shared="true"/>
+              </conditions>
+            </modifier>
+          </modifiers>
+        </selectionEntryGroup>
+      </selectionEntryGroups>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let raw = resolve(parse_raw(xml).unwrap()).unwrap();
+    let (ir, diags) = to_ir(&raw);
+    let ch = ir.entries.iter().find(|e| e.id == "e.char").unwrap();
+    let enh = ch.children.iter().find(|e| e.id == "e.enh1").unwrap();
+    assert!(enh.visibility_modifiers.is_empty(), "unmappable group gate dropped, member ungated");
+    assert!(diags.iter().any(|d| d.code == "modifier.hidden_condition_unmapped" && d.message.contains("group g.enh")),
+        "drop diagnosed: {:?}", diags);
+}

@@ -191,12 +191,48 @@ fn map_profile(p: &RawProfile) -> IrProfile {
 
 /// Flatten a group's member entries (recursing sub-groups) into `out`; members
 /// nested under a group are direct children of the owning entry in the IR.
+///
+/// A `selectionEntryGroup` can carry `field="hidden"` modifiers that gate the WHOLE
+/// group's visibility (e.g. an enhancement group hidden unless its detachment is in the
+/// roster). The IR has no group-level visibility node — groups are flattened away — so
+/// "group hidden when C" is lowered to "each member hidden when C" by pushing the group's
+/// mapped hidden gates onto every member's `visibility_modifiers`. Sub-group members also
+/// inherit their ancestor groups' gates (a member is hidden if any enclosing group is).
 fn flatten_group_members(g: &RawGroup, cat: &RawCatalogue, diags: &mut Vec<Diagnostic>, out: &mut Vec<IrEntry>) {
+    flatten_group_members_gated(g, cat, diags, out, &[]);
+}
+
+fn flatten_group_members_gated(
+    g: &RawGroup,
+    cat: &RawCatalogue,
+    diags: &mut Vec<Diagnostic>,
+    out: &mut Vec<IrEntry>,
+    inherited: &[IrVisibilityModifier],
+) {
+    // This group's own hidden gates, strict all-or-nothing (like entry visibility): an
+    // unmappable condition drops the whole gate with a diagnostic rather than weakening
+    // it (never over-hide). Accumulated with gates inherited from enclosing groups.
+    let mut gates: Vec<IrVisibilityModifier> = inherited.to_vec();
+    for m in &g.modifiers {
+        if m.field == "hidden" {
+            match map_visibility_modifier(m, cat) {
+                Some(vm) => gates.push(vm),
+                None => diags.push(Diagnostic {
+                    code: "modifier.hidden_condition_unmapped".to_string(),
+                    message: format!("hidden modifier on group {} has an unmappable condition (dropped)", g.id),
+                }),
+            }
+        }
+    }
     for child in &g.entries {
-        out.push(map_entry(child, cat, diags));
+        let mut member = map_entry(child, cat, diags);
+        // Append after the member's own gates: the group gate is the outer condition and
+        // must win as the last-applied modifier (a hidden group hides its members).
+        member.visibility_modifiers.extend(gates.iter().cloned());
+        out.push(member);
     }
     for sub in &g.groups {
-        flatten_group_members(sub, cat, diags, out);
+        flatten_group_members_gated(sub, cat, diags, out, &gates);
     }
 }
 
@@ -365,6 +401,13 @@ fn map_constraint(rc: &RawConstraint, target_type: &str, target_id: &str, cat: &
 fn map_field(field: &str, cat: &RawCatalogue, code_prefix: &str, id_for_msg: &str, diags: &mut Vec<Diagnostic>) -> Option<String> {
     if field == "selections" {
         return Some("selections".to_string());
+    }
+    // `forces` counts sub-army forces of a type. engine-eval evaluates it as 0 in our
+    // forceless matched-play roster, which is exactly what makes a Crusade-force gate
+    // term drop out. Mapping it (rather than dropping) is what lets a group's
+    // detachment gate survive strict all-or-nothing mapping.
+    if field == "forces" {
+        return Some("forces".to_string());
     }
     let type_name = cat.cost_types.get(field).cloned().unwrap_or_default();
     if field == "pts" || type_name.to_lowercase().contains("point") {
