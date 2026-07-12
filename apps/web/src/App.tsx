@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import type { IrCatalogue } from "@muster/domain";
 import { IrCatalogue as IrCatalogueSchema } from "@muster/domain";
 import { createRoster, addUnit, addOption, toggleGroupMember, setCount, remove } from "@muster/roster";
-import { evaluate, hiddenEntryIds } from "@muster/engine-eval";
+import { evaluate, hiddenEntryIds, hiddenSelectionIds } from "@muster/engine-eval";
 import { RosterList } from "./components/RosterList";
 import { UnitDetail } from "./components/UnitDetail";
 import { AddUnitPicker } from "./components/AddUnitPicker";
@@ -15,6 +15,7 @@ export function App() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const result = useMemo(() => evaluate(roster, catalogue), [roster, catalogue]);
   const hiddenIds = useMemo(() => hiddenEntryIds(roster, catalogue), [roster, catalogue]);
+  const hiddenSelIds = useMemo(() => hiddenSelectionIds(roster, catalogue), [roster, catalogue]);
 
   const loadIr = async (file: File) => {
     const parsed = IrCatalogueSchema.parse(JSON.parse(await file.text()));
@@ -66,7 +67,7 @@ export function App() {
       )}
       <div className="builder" data-view={selectedUnitId ? "detail" : "list"}>
         <RosterList roster={roster} catalogue={catalogue} selectedUnitId={selectedUnitId}
-          onSelect={setSelectedUnitId} onOpenPicker={() => setPickerOpen(true)} />
+          onSelect={setSelectedUnitId} onOpenPicker={() => setPickerOpen(true)} hiddenIds={hiddenSelIds} />
         <UnitDetail roster={roster} catalogue={catalogue} selectedUnitId={selectedUnitId}
           onBack={() => setSelectedUnitId(undefined)}
           onAddOption={(pid, eid) => setRoster((r) => addOption(r, pid, eid))}

@@ -36,4 +36,18 @@ describe("RosterList", () => {
     await userEvent.click(screen.getByRole("button", { name: /Add unit/i }));
     expect(onOpenPicker).toHaveBeenCalled();
   });
+  it("marks a unit whose subtree contains a hidden selection", () => {
+    const rosterNested = {
+      id: "r", name: "R", gameSystemId: "gs", catalogueId: "c", catalogueRevision: 1, pointsLimit: 2000,
+      selections: [{ id: "u1", entryId: "e.cap", count: 1, selections: [{ id: "opt1", entryId: "e.opt", count: 1, selections: [] }] }],
+    } as unknown as Roster;
+    render(<RosterList roster={rosterNested} catalogue={cat} selectedUnitId={undefined}
+      onSelect={() => {}} onOpenPicker={() => {}} hiddenIds={new Set(["opt1"])} />);
+    expect(screen.getByTitle(/not available in the current army/i)).toBeInTheDocument();
+  });
+  it("shows no marker when nothing in the unit is hidden", () => {
+    render(<RosterList roster={roster} catalogue={cat} selectedUnitId={undefined}
+      onSelect={() => {}} onOpenPicker={() => {}} hiddenIds={new Set()} />);
+    expect(screen.queryByTitle(/not available in the current army/i)).toBeNull();
+  });
 });

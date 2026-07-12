@@ -5,6 +5,7 @@ import { totalCost } from "./cost";
 import { resolveCosts } from "./resolve";
 import { checkConstraint } from "./constraints";
 import { checkGroupConstraint } from "./groups";
+import { nodeHiddenByState } from "./visibility";
 
 export function evaluate(roster: Roster, catalogue: IrCatalogue): ValidationResult {
   const symbols = buildSymbolTable(catalogue);
@@ -46,6 +47,15 @@ export function evaluate(roster: Roster, catalogue: IrCatalogue): ValidationResu
         const issue = checkGroupConstraint(gc, node, group);
         if (issue) raw.push(issue);
       }
+    }
+    if (nodeHiddenByState(node, state)) {
+      raw.push({
+        severity: "warning",
+        code: "selection.hidden",
+        selectionId: node.selectionId,
+        entryId: node.entry.id,
+        message: `${node.entry.name} is not available in the current army configuration`,
+      });
     }
   }
 
