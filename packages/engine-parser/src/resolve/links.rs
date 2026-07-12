@@ -175,13 +175,13 @@ mod tests {
     use super::*;
 
     fn link(target: &str) -> RawEntryLink {
-        RawEntryLink { target_id: target.to_string(), link_type: String::new() }
+        RawEntryLink { target_id: target.to_string(), link_type: String::new(), ..Default::default() }
     }
     fn entry(id: &str, links: Vec<RawEntryLink>) -> RawEntry {
         RawEntry { id: id.to_string(), entry_type: "upgrade".into(), entry_links: links, ..Default::default() }
     }
     fn group_link(target: &str) -> RawEntryLink {
-        RawEntryLink { target_id: target.to_string(), link_type: "selectionEntryGroup".to_string() }
+        RawEntryLink { target_id: target.to_string(), link_type: "selectionEntryGroup".to_string(), ..Default::default() }
     }
 
     #[test]

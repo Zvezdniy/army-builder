@@ -628,11 +628,37 @@ fn read_entrylinks_into(
     loop {
         match r.read_event()? {
             Some(ev) => match ev.event {
-                Event::Start(e) | Event::Empty(e) if e.local_name().as_ref() == b"entryLink" => {
+                Event::Empty(e) if e.local_name().as_ref() == b"entryLink" => {
                     dst.push(RawEntryLink {
                         target_id: attr(&e, b"targetId").unwrap_or_default(),
                         link_type: attr(&e, b"type").unwrap_or_default(),
+                        hidden: attr_bool(&e, b"hidden"),
+                        modifiers: Vec::new(),
                     });
+                }
+                Event::Start(e) if e.local_name().as_ref() == b"entryLink" => {
+                    let mut link = RawEntryLink {
+                        target_id: attr(&e, b"targetId").unwrap_or_default(),
+                        link_type: attr(&e, b"type").unwrap_or_default(),
+                        hidden: attr_bool(&e, b"hidden"),
+                        modifiers: Vec::new(),
+                    };
+                    loop {
+                        match r.read_event()? {
+                            Some(inner) => match inner.event {
+                                Event::Start(m) if m.local_name().as_ref() == b"modifiers" => {
+                                    read_modifiers_into(&mut link.modifiers, r)?;
+                                }
+                                Event::End(end) if end.local_name().as_ref() == b"entryLink" => break,
+                                Event::Start(other) => skip_element(r, other.local_name().as_ref())?,
+                                _ => {}
+                            },
+                            None => return Err(ParseError::MalformedXml(
+                                "unexpected EOF in entryLink".to_string(),
+                            )),
+                        }
+                    }
+                    dst.push(link);
                 }
                 Event::End(end) if end.local_name().as_ref() == b"entryLinks" => return Ok(()),
                 Event::Start(e) => {

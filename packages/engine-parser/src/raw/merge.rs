@@ -257,6 +257,7 @@ mod tests {
             entry_links: vec![RawEntryLink {
                 target_id: "root1".into(),
                 link_type: "profile".into(),
+                ..Default::default()
             }],
             ..Default::default()
         };
