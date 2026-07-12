@@ -67,8 +67,9 @@ pub(crate) fn resolve_with_caps(mut cat: RawCatalogue, max_nodes: u64, max_depth
         // to it is caught as a cycle inside resolve_entry. Roots are processed
         // sequentially with an empty path each iteration, so no pre-check here.
         path.insert(link.target_id.clone());
-        let root = resolve_entry(target, &symbols, &mut path, &mut budget, diags, 1)?;
+        let mut root = resolve_entry(target, &symbols, &mut path, &mut budget, diags, 1)?;
         path.remove(&link.target_id);
+        apply_link_visibility(link, &mut root, diags);
         cat.entries.push(root);
     }
     Ok(cat)

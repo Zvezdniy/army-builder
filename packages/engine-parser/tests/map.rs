@@ -867,3 +867,30 @@ fn group_link_hidden_modifier_is_unsupported_diagnostic() {
     diags.extend(ir_diags);
     assert!(diags.iter().any(|d| d.code == "entryLink.group_hidden_unsupported"));
 }
+
+#[test]
+fn catalogue_root_entrylink_hidden_modifier_lands_on_surfaced_root() {
+    // Catalogue-level entryLinks are surfaced as root entries by a separate loop
+    // in resolve_with_caps; link-hosted hidden must apply there too.
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <sharedSelectionEntries>
+    <selectionEntry id="shared" name="Enh" type="upgrade"/>
+  </sharedSelectionEntries>
+  <entryLinks>
+    <entryLink id="lk" name="L" type="selectionEntry" targetId="shared">
+      <modifiers>
+        <modifier type="set" value="true" field="hidden">
+          <conditions>
+            <condition type="notInstanceOf" value="1" field="selections" scope="ancestor" childId="cat.x"/>
+          </conditions>
+        </modifier>
+      </modifiers>
+    </entryLink>
+  </entryLinks>
+</catalogue>"#;
+    let (ir, _diags) = to_ir(&resolve(parse_raw(xml).unwrap()).unwrap());
+    let root = ir.entries.iter().find(|e| e.id == "shared").unwrap();
+    assert_eq!(root.visibility_modifiers.len(), 1, "link hidden modifier must land on the surfaced root");
+}
