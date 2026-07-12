@@ -205,9 +205,13 @@ fn collect_groups(g: &RawGroup, cat: &RawCatalogue, diags: &mut Vec<Diagnostic>,
     }
 }
 
-/// A group choose-N limit maps only when it is a selections min/max with no
-/// modifier on the limit itself (a conditional limit we cannot yet model).
-/// Anything else is a loud drop — never a guessed static value.
+/// A group choose-N limit maps when it is a selections min/max on a
+/// group-local (or roster) scope. A modifier on the limit itself is now
+/// strict-mapped — all-or-nothing across its kind, conditions, and repeats —
+/// and attached to the constraint. The whole constraint is dropped loudly
+/// (never a guessed static value) when the base, scope, or a limit modifier
+/// (including any of its conditions) is unmappable, or when the scope is
+/// roster and a limit modifier is present at all.
 fn map_group_constraint(c: &RawConstraint, g: &RawGroup, cat: &RawCatalogue, diags: &mut Vec<Diagnostic>) -> Option<IrGroupConstraint> {
     let drop = |why: String| Diagnostic {
         code: "group.constraint_dropped".to_string(),
@@ -390,6 +394,9 @@ fn map_modifier(m: &RawModifier, entry_id: &str, index: usize, cat: &RawCatalogu
 /// the caller emits a single drop diagnostic.
 fn map_modifier_strict(m: &RawModifier, owner_id: &str, index: usize, cat: &RawCatalogue) -> Option<IrModifier> {
     if m.has_repeats {
+        return None;
+    }
+    if !matches!(m.kind.as_str(), "set" | "increment" | "decrement") {
         return None;
     }
     let mut sink: Vec<Diagnostic> = Vec::new();

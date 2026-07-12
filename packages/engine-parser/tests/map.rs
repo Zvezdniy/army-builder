@@ -286,6 +286,10 @@ fn drops_group_limit_modifier_with_unmappable_condition() {
     let u = ir.entries.iter().find(|e| e.id == "e.u").unwrap();
     assert!(u.groups.iter().all(|g| g.id != "g"), "constraint with unmappable modifier must be dropped");
     assert_eq!(diags.iter().filter(|d| d.code == "group.constraint_dropped").count(), 1, "{:?}", diags);
+    assert!(
+        diags.iter().any(|d| d.code == "group.constraint_dropped" && d.message.contains("unmappable modifier")),
+        "{:?}", diags
+    );
 }
 
 #[test]
@@ -316,6 +320,46 @@ fn drops_roster_scope_group_constraint_with_limit_modifier() {
     let u = ir.entries.iter().find(|e| e.id == "e.u").unwrap();
     assert!(u.groups.iter().all(|g| g.id != "g"), "roster-scope + modifier must be dropped");
     assert_eq!(diags.iter().filter(|d| d.code == "group.constraint_dropped").count(), 1, "{:?}", diags);
+    assert!(
+        diags.iter().any(|d| d.code == "group.constraint_dropped" && d.message.contains("roster-scope limit carries a modifier")),
+        "{:?}", diags
+    );
+}
+
+#[test]
+fn drops_group_limit_modifier_with_unknown_kind() {
+    // The limit-modifier's `type` is not a known kind (set/increment/decrement),
+    // so even though its condition is mappable, the whole group constraint must
+    // be dropped loudly rather than emitting an invalid modifier kind into the IR.
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <selectionEntries>
+    <selectionEntry id="e.u" name="Unit" type="unit">
+      <selectionEntryGroups>
+        <selectionEntryGroup id="g" name="Wargear">
+          <constraints><constraint id="g.max" type="max" value="1" field="selections" scope="parent"/></constraints>
+          <modifiers>
+            <modifier type="append" field="g.max" value="1">
+              <conditions>
+                <condition type="atLeast" value="1" field="selections" scope="self" childId="e.sgt"/>
+              </conditions>
+            </modifier>
+          </modifiers>
+          <selectionEntries><selectionEntry id="e.w" name="W" type="upgrade"/></selectionEntries>
+        </selectionEntryGroup>
+      </selectionEntryGroups>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let (ir, diags) = to_ir(&resolve(parse_raw(xml).unwrap()).unwrap());
+    let u = ir.entries.iter().find(|e| e.id == "e.u").unwrap();
+    assert!(u.groups.iter().all(|g| g.id != "g"), "constraint with unknown-kind modifier must be dropped");
+    assert_eq!(diags.iter().filter(|d| d.code == "group.constraint_dropped").count(), 1, "{:?}", diags);
+    assert!(
+        diags.iter().any(|d| d.code == "group.constraint_dropped" && d.message.contains("unmappable modifier")),
+        "{:?}", diags
+    );
 }
 
 #[test]
