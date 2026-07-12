@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { IrCatalogue, Roster } from "@muster/domain";
-import { buildState, totalCost } from "@muster/engine-eval";
+import { buildState, totalCost, pointsCost, nodePoints } from "@muster/engine-eval";
 import type { CostFn } from "@muster/engine-eval";
 
 const cat: IrCatalogue = {
@@ -10,6 +10,33 @@ const cat: IrCatalogue = {
       children: [{ id: "e.gun", name: "Gun", costs: [{ name: "points", value: 5 }], categories: [], constraints: [], children: [] }] },
   ],
 };
+
+describe("pointsCost / nodePoints cost-name resolution", () => {
+  const entry = (costs: { name: string; value: number }[]) => ({
+    id: "e", name: "E", costs, categories: [], constraints: [], children: [],
+  });
+
+  it("matches the real-catalogue \"pts\" cost name", () => {
+    expect(pointsCost(entry([{ name: "pts", value: 80 }]))?.value).toBe(80);
+  });
+
+  it("still matches the mini-fixture \"points\" cost name", () => {
+    expect(pointsCost(entry([{ name: "points", value: 100 }]))?.value).toBe(100);
+  });
+
+  it("prefers \"pts\" over a zero-valued \"points\" (real catalogues carry both)", () => {
+    const e = entry([{ name: "pts", value: 95 }, { name: "points", value: 0 }]);
+    expect(pointsCost(e)?.value).toBe(95);
+    const node = { entry: e, effectiveCount: 2 } as never;
+    expect(nodePoints(node)).toBe(190);
+  });
+
+  it("returns undefined / 0 when neither name is present", () => {
+    expect(pointsCost(entry([{ name: "Crusade: Experience", value: 3 }]))).toBeUndefined();
+    const node = { entry: entry([]), effectiveCount: 1 } as never;
+    expect(nodePoints(node)).toBe(0);
+  });
+});
 
 describe("totalCost", () => {
   it("multiplies costs by effectiveCount through the tree", () => {

@@ -1,5 +1,5 @@
 import type { EvalNode, EvalState } from "./state";
-import { nodePoints, type CostFn } from "./cost";
+import { nodePoints, pointsCost, type CostFn } from "./cost";
 import { applyModifiers } from "./modifiers";
 
 export const MAX_ITERATIONS = 32;
@@ -9,7 +9,7 @@ export function effectiveNodePoints(
   state: EvalState,
   costOf: CostFn,
 ): number {
-  const cost = node.entry.costs.find((c) => c.name === "points");
+  const cost = pointsCost(node.entry);
   if (!cost) return 0;
   const unit = applyModifiers(cost.value, cost.modifiers, node, state, costOf);
   return unit * node.effectiveCount;
