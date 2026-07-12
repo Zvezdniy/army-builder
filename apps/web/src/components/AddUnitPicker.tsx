@@ -1,9 +1,10 @@
 import { useState } from "react";
 import type { IrCatalogue, IrEntry } from "@muster/domain";
 import { availableUnits } from "@muster/roster";
+import { pointsCost } from "@muster/engine-eval";
 
 function points(e: IrEntry): number {
-  return e.costs.find((c) => c.name === "points")?.value ?? 0;
+  return pointsCost(e)?.value ?? 0;
 }
 
 /** Modal picker: the full faction unit list in collapsible role sections,
