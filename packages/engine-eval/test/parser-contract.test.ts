@@ -124,3 +124,53 @@ describe("parser IR contract — conditional group limit", () => {
     expect(withSgt.valid).toBe(true);
   });
 });
+
+describe("parser IR contract — validation rule", () => {
+  // Mirrors the parser's serialized shape for a field="error" modifier turned
+  // validation rule. Validated by Zod, then evaluated — proving parser output →
+  // domain → engine enforcement.
+  const shaped = {
+    id: "c", name: "C", gameSystemId: "gs", revision: 1,
+    entries: [{
+      id: "e.unit", name: "Squad", type: "unit",
+      costs: [], categories: [], constraints: [],
+      children: [{
+        id: "e.w", name: "Weapon", type: "upgrade",
+        costs: [], categories: [], constraints: [], children: [], groups: [],
+        validationRules: [{
+          message: "Max 1 {this} per 5 models",
+          conditions: [{
+            comparator: "atLeast", value: 2, field: "selections", scope: "unit",
+            targetType: "entry", targetId: "e.w", includeChildSelections: true,
+            id: "cond.atLeast.e.w",
+          }],
+        }],
+      }],
+    }],
+  };
+
+  const roster = (weaponCount: number): Roster => ({
+    id: "r", name: "R", gameSystemId: "gs", catalogueId: "c", catalogueRevision: 1, pointsLimit: 2000,
+    selections: [{
+      id: "u", entryId: "e.unit", count: 1,
+      selections: Array.from({ length: weaponCount }, (_, i) => ({ id: `w${i}`, entryId: "e.w", count: 1, selections: [] })),
+    }],
+  });
+
+  it("validates against the domain schema", () => {
+    const parsed = IrCatalogue.safeParse(shaped);
+    if (!parsed.success) console.error(parsed.error);
+    expect(parsed.success).toBe(true);
+  });
+
+  it("emits the authored error only when the gate passes", () => {
+    const cat = IrCatalogue.parse(shaped);
+    const bad = evaluate(roster(2), cat);
+    const issue = bad.issues.find((i) => i.code === "selection.invalid");
+    expect(issue?.message).toBe("Max 1 Weapon per 5 models");
+    expect(bad.valid).toBe(false);
+
+    const ok = evaluate(roster(1), cat);
+    expect(ok.issues.some((i) => i.code === "selection.invalid")).toBe(false);
+  });
+});
