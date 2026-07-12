@@ -29,6 +29,10 @@ export function buildState(roster: Roster, catalogue: IrCatalogue): EvalState {
 
   const resolve = (parentEntry: IrEntry | null, entryId: string): IrEntry => {
     const siblings = parentEntry ? parentEntry.children : catalogue.entries;
+    // NOTE: Per-placement clones under DISTINCT parents resolve correctly (each parent's own child).
+    // If two divergent same-id entries are SIBLINGS under the SAME parent, find() returns the first;
+    // the roster selection carries only entryId and cannot disambiguate them → the second is unaddressable
+    // by construction. This is an accepted format limitation (before per-placement, such a catalogue would crash).
     const local = siblings.find((e) => e.id === entryId);
     if (local) return local;
     const fallback = flat.get(entryId);
