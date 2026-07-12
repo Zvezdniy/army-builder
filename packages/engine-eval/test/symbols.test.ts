@@ -29,15 +29,18 @@ describe("buildSymbolTable", () => {
     expect(table.size).toBe(2);
   });
 
-  it("throws on an id collision between differing entries", () => {
+  it("first-wins on an id collision between differing entries (per-placement clones are legitimate)", () => {
     const dup: IrCatalogue = {
       ...cat,
       entries: [
+        ...cat.entries,
         { id: "dup", name: "A", costs: [], categories: [], constraints: [], children: [] },
         { id: "dup", name: "B", costs: [], categories: [], constraints: [], children: [] },
       ],
     };
-    expect(() => buildSymbolTable(dup)).toThrow(/duplicate/i);
+    const table = buildSymbolTable(dup);
+    expect(table.get("dup")?.name).toBe("A"); // first wins, no throw
+    expect(table.size).toBe(3); // e.unit + e.wargear (from cat) + dup
   });
 
   it("dedups an identical inlined entry (first wins, subtree walked once)", () => {
