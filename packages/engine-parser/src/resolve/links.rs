@@ -69,7 +69,7 @@ pub(crate) fn resolve_with_caps(mut cat: RawCatalogue, max_nodes: u64, max_depth
         path.insert(link.target_id.clone());
         let mut root = resolve_entry(target, &symbols, &mut path, &mut budget, diags, 1)?;
         path.remove(&link.target_id);
-        apply_link_visibility(link, &mut root, diags);
+        apply_link_modifiers(link, &mut root);
         cat.entries.push(root);
     }
     Ok(cat)
@@ -108,21 +108,22 @@ fn resolve_link(
             return Err(ParseError::ReferenceCycle(link.target_id.clone()));
         }
         path.insert(link.target_id.clone());
-        let resolved = resolve_group(target, symbols, path, budget, diags, depth + 1)?;
+        let mut resolved = resolve_group(target, symbols, path, budget, diags, depth + 1)?;
         path.remove(&link.target_id);
-        groups.push(resolved);
         if link.hidden || link.modifiers.iter().any(|m| m.field == "hidden") {
             diags.push(Diagnostic {
                 code: "entryLink.group_hidden_unsupported".to_string(),
                 message: format!("entryLink to group {} carries hidden visibility; unsupported (dropped)", link.target_id),
             });
         }
+        // Non-hidden link modifiers ride onto the cloned group; map_group_constraint
+        // attaches any that target one of the group's own limits (per-placement
+        // constraint override). Group visibility itself is not modeled, so hidden
+        // modifiers are excluded (diagnosed above).
         for m in link.modifiers.iter().filter(|m| m.field != "hidden") {
-            diags.push(Diagnostic {
-                code: "entryLink.modifier_dropped".to_string(),
-                message: format!("entryLink to group {} has a non-hidden modifier (field {}); dropped", link.target_id, m.field),
-            });
+            resolved.modifiers.push(m.clone());
         }
+        groups.push(resolved);
     } else {
         let target = match symbols.entry(&link.target_id) {
             Some(t) => t,
@@ -134,33 +135,25 @@ fn resolve_link(
         path.insert(link.target_id.clone());
         let mut resolved = resolve_entry(target, symbols, path, budget, diags, depth + 1)?;
         path.remove(&link.target_id);
-        apply_link_visibility(link, &mut resolved, diags);
+        apply_link_modifiers(link, &mut resolved);
         children.push(resolved);
     }
     Ok(())
 }
 
-/// Apply an entryLink's own visibility (static `hidden` + `field="hidden"`
-/// modifiers) onto the freshly-cloned inlined instance. `resolved` is unique
-/// per placement, so appended modifiers never leak to the shared target.
-/// Non-hidden modifiers on a link (cost/constraint) are a separate slice —
-/// dropped loudly here rather than silently.
-fn apply_link_visibility(link: &RawEntryLink, resolved: &mut RawEntry, diags: &mut Vec<Diagnostic>) {
+/// Apply an entryLink's own static `hidden` and its `<modifiers>` onto the
+/// freshly-cloned inlined instance. `resolved` is unique per placement, so
+/// appended modifiers never leak to the shared target. Every modifier is routed
+/// downstream by map_entry exactly like one of the target's own modifiers
+/// (hidden→visibility, cost-type→cost, error→validation, category→category,
+/// constraint-id→constraint, else→modifier.target_unmapped) — no field is
+/// special-cased or dropped here.
+fn apply_link_modifiers(link: &RawEntryLink, resolved: &mut RawEntry) {
     if link.hidden {
         resolved.hidden = true;
     }
     for m in &link.modifiers {
-        if m.field == "hidden" {
-            resolved.modifiers.push(m.clone());
-        } else {
-            diags.push(Diagnostic {
-                code: "entryLink.modifier_dropped".to_string(),
-                message: format!(
-                    "entryLink to {} has a non-hidden modifier (field {}); dropped",
-                    link.target_id, m.field
-                ),
-            });
-        }
+        resolved.modifiers.push(m.clone());
     }
 }
 
