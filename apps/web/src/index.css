@@ -130,6 +130,7 @@ section { background: var(--panel); border: 1px solid var(--line); border-radius
 .rl-unit { width: 100%; display: flex; justify-content: space-between; gap: 8px; text-align: left;
   padding: 8px 10px; margin-bottom: 4px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; background: transparent; }
 .rl-unit.selected { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.rl-warn { color: var(--warn); margin-left: 6px; }
 .rl-models { color: var(--muted, #888); font-variant-numeric: tabular-nums; }
 .rl-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
 .rl-title { margin: 0; }
