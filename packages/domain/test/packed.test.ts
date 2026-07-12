@@ -57,6 +57,32 @@ describe("packCatalogue", () => {
   });
 });
 
+describe("packCatalogue defensive fills", () => {
+  it("materializes optional fields absent on a hand-built (non-parsed) entry", () => {
+    // The IrEntry interface leaves groups/profiles/hidden/… optional; a catalogue
+    // built without Zod (e.g. a hand-authored fixture) may omit them. pack must
+    // still produce a schema-valid pool entry.
+    const bare = {
+      id: "x",
+      name: "X",
+      costs: [],
+      categories: [],
+      constraints: [],
+      children: [],
+    } as unknown as IrEntry;
+    const c = { id: "c", name: "c", gameSystemId: "g", revision: 1, entries: [bare] } as unknown as IrCatalogue;
+    const packed = packCatalogue(c);
+    const pooled = packed.entryPool[0]!;
+    expect(pooled.groups).toEqual([]);
+    expect(pooled.profiles).toEqual([]);
+    expect(pooled.hidden).toBe(false);
+    expect(pooled.visibilityModifiers).toEqual([]);
+    expect(pooled.validationRules).toEqual([]);
+    expect(pooled.categoryModifiers).toEqual([]);
+    expect(() => PackedCatalogue.parse(packed)).not.toThrow();
+  });
+});
+
 describe("rehydrateCatalogue", () => {
   it("shares one object for identical subtrees (DAG)", () => {
     const shared = entry({ id: "w", name: "Bolter" });
@@ -78,6 +104,33 @@ describe("rehydrateCatalogue", () => {
     const packed = packCatalogue(cat([entry({ id: "a", name: "A" })]));
     expect(() => PackedCatalogue.parse(packed)).not.toThrow();
   });
+
+  it("round-trips ruleTexts when present", () => {
+    const c = IrCatalogueSchema.parse({
+      id: "c",
+      name: "c",
+      gameSystemId: "g",
+      revision: 1,
+      entries: [{ id: "a", name: "A" }],
+      ruleTexts: { r1: "Rule one text" },
+    });
+    const back = rehydrateCatalogue(packCatalogue(c));
+    expect(back.ruleTexts).toEqual({ r1: "Rule one text" });
+    expect(back).toEqual(c);
+  });
+
+  it("throws on a child index that points outside the pool", () => {
+    const packed = PackedCatalogue.parse({
+      format: "packed-v1",
+      id: "c",
+      name: "c",
+      gameSystemId: "g",
+      revision: 1,
+      entryPool: [{ id: "a", name: "A", children: [99] }],
+      entries: [0],
+    });
+    expect(() => rehydrateCatalogue(packed)).toThrow(/out of range/);
+  });
 });
 
 describe("loadCatalogue", () => {
@@ -94,5 +147,10 @@ describe("loadCatalogue", () => {
 
   it("throws on a malformed packed payload", () => {
     expect(() => loadCatalogue({ format: "packed-v1", id: "x" })).toThrow();
+  });
+
+  it("routes non-object / nullish input to the tree schema (which rejects it)", () => {
+    expect(() => loadCatalogue(null)).toThrow();
+    expect(() => loadCatalogue("not a catalogue")).toThrow();
   });
 });
