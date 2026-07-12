@@ -3,6 +3,7 @@ import type { EvalNode, EvalState } from "./state";
 import { aggregate, scopeUnanchored } from "./scopes";
 import { applyModifiers } from "./modifiers";
 import { nodePoints, type CostFn } from "./cost";
+import type { TargetNamer } from "./names";
 
 export function effectiveConstraintValue(
   constraint: IrConstraint,
@@ -18,6 +19,7 @@ export function checkConstraint(
   node: EvalNode | null,
   state: EvalState,
   costOf: CostFn = nodePoints,
+  nameOf?: TargetNamer,
 ): Issue | null {
   // Force-level checks (node === null) can only evaluate node-independent scopes.
   // A node-relative scope (self/parent/root-entry/ancestor/unit/…) has no owning
@@ -30,7 +32,9 @@ export function checkConstraint(
   const violated = constraint.type === "max" ? actual > limit : actual < limit;
   if (!violated) return null;
 
-  const target = `${constraint.targetType} "${constraint.targetId}"`;
+  // Prefer a resolved human name; without a resolver fall back to the raw id.
+  const name = nameOf ? nameOf(constraint.targetType, constraint.targetId) : constraint.targetId;
+  const target = `${constraint.targetType} "${name}"`;
   const message =
     constraint.type === "max"
       ? `Too many ${target}: ${actual} exceeds max ${limit}`

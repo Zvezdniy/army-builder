@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { IrCatalogue, IrConstraint, Roster } from "@muster/domain";
-import { buildState, checkConstraint, effectiveConstraintValue } from "@muster/engine-eval";
+import { buildState, checkConstraint, effectiveConstraintValue, targetNamer } from "@muster/engine-eval";
 
 const cat: IrCatalogue = {
   id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [],
@@ -39,6 +39,25 @@ describe("checkConstraint", () => {
     const state = buildState(roster, cat);
     const issue = checkConstraint(c({ type: "min", value: 6 }), null, state);
     expect(issue?.code).toBe("constraint.min");
+  });
+
+  it("uses the resolved category name in the message when a namer is supplied", () => {
+    const named: IrCatalogue = { ...cat, categoryNames: { "cat.heavy": "Heavy Support" } };
+    const state = buildState(roster, named);
+    const issue = checkConstraint(c({}), null, state, undefined, targetNamer(named));
+    expect(issue?.message).toContain('category "Heavy Support"');
+    expect(issue?.message).not.toContain("cat.heavy");
+  });
+
+  it("uses the resolved entry name for an entry-typed target", () => {
+    const named: IrCatalogue = { ...cat, categoryNames: {} };
+    const state = buildState(roster, named);
+    const issue = checkConstraint(
+      c({ targetType: "entry", targetId: "e.heavy", type: "min", value: 9 }),
+      null, state, undefined, targetNamer(named),
+    );
+    expect(issue?.message).toContain('entry "Heavy"');
+    expect(issue?.message).not.toContain("e.heavy");
   });
 });
 

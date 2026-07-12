@@ -4,6 +4,7 @@ export * from "./cost";
 export * from "./evaluate";
 export * from "./limits";
 export * from "./modifiers";
+export * from "./names";
 export * from "./resolve";
 export * from "./scopes";
 export * from "./state";
