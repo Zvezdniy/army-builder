@@ -91,3 +91,30 @@ describe("evaluate tolerates inlined duplicate entry ids", () => {
     expect(result.valid).toBe(true);
   });
 });
+
+describe("evaluate flags hidden selections", () => {
+  it("warns about a selected node that is hidden under current state", () => {
+    const catalogue = {
+      id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [], categoryNames: {},
+      entries: [
+        { id: "e.det", name: "Detachment", costs: [], categories: ["cat.det"], constraints: [], children: [] },
+        {
+          id: "e.enh", name: "Relic Blade", costs: [{ name: "points", value: 15 }], categories: [], constraints: [], children: [],
+          visibilityModifiers: [{ set: true, conditions: [{ id: "c1", comparator: "lessThan", value: 1, field: "selections", scope: "roster", targetType: "category", targetId: "cat.det", includeChildSelections: false }] }],
+        },
+      ],
+    } as any;
+    const roster = {
+      id: "r", name: "R", gameSystemId: "gs", catalogueId: "c", catalogueRevision: 1, pointsLimit: 2000,
+      selections: [{ id: "s0", entryId: "e.enh", count: 1, selections: [] }],
+    } as any;
+    const result = evaluate(roster, catalogue);
+    const issue = result.issues.find((i) => i.code === "selection.hidden");
+    expect(issue).toBeDefined();
+    expect(issue!.severity).toBe("warning");
+    expect(issue!.selectionId).toBe("s0");
+    expect(issue!.entryId).toBe("e.enh");
+    expect(result.valid).toBe(true);       // warning does not invalidate
+    expect(result.totalPoints).toBe(15);   // hidden node still costs points
+  });
+});
