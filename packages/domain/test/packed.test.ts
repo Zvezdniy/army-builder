@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { IrCatalogue, IrEntry } from "../src/ir";
 import { IrCatalogue as IrCatalogueSchema } from "../src/ir";
-import { canonicalKey, packCatalogue, rehydrateCatalogue, PackedCatalogue } from "../src/packed";
+import { canonicalKey, packCatalogue, rehydrateCatalogue, loadCatalogue, PackedCatalogue } from "../src/packed";
 
 // Minimal valid entry (Zod fills defaults on parse). Build via schema so runtime
 // shape matches what the app feeds pack().
@@ -77,5 +77,22 @@ describe("rehydrateCatalogue", () => {
   it("produces a PackedCatalogue that its own schema accepts", () => {
     const packed = packCatalogue(cat([entry({ id: "a", name: "A" })]));
     expect(() => PackedCatalogue.parse(packed)).not.toThrow();
+  });
+});
+
+describe("loadCatalogue", () => {
+  const tree = cat([entry({ id: "a", name: "A" })]);
+
+  it("rehydrates a packed-v1 payload", () => {
+    const packed = packCatalogue(tree);
+    expect(loadCatalogue(JSON.parse(JSON.stringify(packed)))).toEqual(tree);
+  });
+
+  it("parses a plain tree IrCatalogue (backward compatible)", () => {
+    expect(loadCatalogue(JSON.parse(JSON.stringify(tree)))).toEqual(tree);
+  });
+
+  it("throws on a malformed packed payload", () => {
+    expect(() => loadCatalogue({ format: "packed-v1", id: "x" })).toThrow();
   });
 });

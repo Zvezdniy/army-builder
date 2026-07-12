@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { IrCatalogue, IrEntry } from "./ir";
-import { IrCost, IrConstraint, IrGroup, IrProfile } from "./ir";
+import { IrCatalogue as IrCatalogueSchema, IrCost, IrConstraint, IrGroup, IrProfile } from "./ir";
 import { VisibilityModifier } from "./visibility";
 import { IrValidationRule } from "./validation-rules";
 import { IrCategoryModifier } from "./category-modifiers";
@@ -124,4 +124,17 @@ export function rehydrateCatalogue(p: PackedCatalogue): IrCatalogue {
     categoryNames: p.categoryNames,
     ...(p.ruleTexts !== undefined ? { ruleTexts: p.ruleTexts } : {}),
   };
+}
+
+// Single load seam: packed payloads are rehydrated; plain tree catalogues are
+// validated as-is (backward compatible with pre-shrink fixtures).
+export function loadCatalogue(raw: unknown): IrCatalogue {
+  if (
+    raw &&
+    typeof raw === "object" &&
+    (raw as { format?: unknown }).format === "packed-v1"
+  ) {
+    return rehydrateCatalogue(PackedCatalogue.parse(raw));
+  }
+  return IrCatalogueSchema.parse(raw);
 }
