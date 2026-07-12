@@ -1,6 +1,7 @@
 import type { Roster, IrCatalogue, ValidationResult, Issue } from "@muster/domain";
 import { buildSymbolTable } from "./symbols";
 import { buildState } from "./state";
+import { resolveCategories } from "./categories";
 import { totalCost } from "./cost";
 import { resolveCosts } from "./resolve";
 import { checkConstraint } from "./constraints";
@@ -11,6 +12,7 @@ import { validationIssues } from "./validation";
 export function evaluate(roster: Roster, catalogue: IrCatalogue): ValidationResult {
   const symbols = buildSymbolTable(catalogue);
   const state = buildState(roster, symbols);
+  resolveCategories(state);
   const { costOf, converged } = resolveCosts(state);
   const raw: Issue[] = [];
 

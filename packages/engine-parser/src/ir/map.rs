@@ -83,6 +83,7 @@ fn map_entry(e: &RawEntry, cat: &RawCatalogue, diags: &mut Vec<Diagnostic>) -> I
     // matching constraint id is a bound modifier. Neither → diagnostic + drop.
     let mut visibility_modifiers: Vec<IrVisibilityModifier> = Vec::new();
     let mut validation_rules: Vec<IrValidationRule> = Vec::new();
+    let mut category_modifiers: Vec<IrCategoryModifier> = Vec::new();
     for (index, m) in e.modifiers.iter().enumerate() {
         if m.field == "hidden" {
             match map_visibility_modifier(m, cat) {
@@ -108,6 +109,26 @@ fn map_entry(e: &RawEntry, cat: &RawCatalogue, diags: &mut Vec<Diagnostic>) -> I
                     code: "modifier.error_type_unsupported".to_string(),
                     message: format!("error modifier on entry {} has unsupported type {} (dropped)", e.id, m.kind),
                 });
+            }
+            continue;
+        }
+        if m.field == "category" {
+            match m.kind.as_str() {
+                "add" | "remove" => match map_category_modifier(m, cat) {
+                    Some(cm) => category_modifiers.push(cm),
+                    None => diags.push(Diagnostic {
+                        code: "modifier.category_condition_unmapped".to_string(),
+                        message: format!("category modifier on entry {} has an unmappable condition (dropped)", e.id),
+                    }),
+                },
+                "set-primary" => diags.push(Diagnostic {
+                    code: "modifier.category_set_primary_unsupported".to_string(),
+                    message: format!("set-primary category modifier on entry {} does not affect membership (dropped)", e.id),
+                }),
+                other => diags.push(Diagnostic {
+                    code: "modifier.category_type_unsupported".to_string(),
+                    message: format!("category modifier on entry {} has unsupported type {} (dropped)", e.id, other),
+                }),
             }
             continue;
         }
@@ -152,6 +173,7 @@ fn map_entry(e: &RawEntry, cat: &RawCatalogue, diags: &mut Vec<Diagnostic>) -> I
         hidden: e.hidden,
         visibility_modifiers,
         validation_rules,
+        category_modifiers,
     }
 }
 
@@ -570,6 +592,29 @@ fn map_validation_rule(m: &RawModifier, cat: &RawCatalogue) -> Option<IrValidati
     }
     Some(IrValidationRule {
         message: m.value_raw.clone(),
+        conditions: if conditions.is_empty() { None } else { Some(conditions) },
+        condition_groups: if condition_groups.is_empty() { None } else { Some(condition_groups) },
+    })
+}
+
+/// Map a `field="category"` add/remove modifier into a category-membership rule.
+/// Strict all-or-nothing on conditions (like map_validation_rule): returns None
+/// (caller drops the whole modifier) if any condition/condition-group is
+/// unmappable, so a partially-represented gate can never add/remove a category
+/// (which could newly trip a category limit). The category id is the raw value.
+fn map_category_modifier(m: &RawModifier, cat: &RawCatalogue) -> Option<IrCategoryModifier> {
+    let mut sink = Vec::new();
+    let mut conditions = Vec::new();
+    for c in &m.conditions {
+        conditions.push(map_condition(c, cat, &mut sink)?);
+    }
+    let mut condition_groups = Vec::new();
+    for g in &m.condition_groups {
+        condition_groups.push(map_condition_group_strict(g, cat)?);
+    }
+    Some(IrCategoryModifier {
+        type_: m.kind.clone(),
+        category_id: m.value_raw.clone(),
         conditions: if conditions.is_empty() { None } else { Some(conditions) },
         condition_groups: if condition_groups.is_empty() { None } else { Some(condition_groups) },
     })

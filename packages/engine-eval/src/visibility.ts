@@ -2,6 +2,7 @@ import type { IrCatalogue, IrCondition, IrConditionGroup, Roster, VisibilityModi
 import { buildSymbolTable } from "./symbols";
 import { buildState, type EvalNode, type EvalState } from "./state";
 import { passesGate } from "./conditions";
+import { resolveCategories } from "./categories";
 
 // Scopes that need a real ancestor chain to resolve. Without one (no owner), a
 // modifier using them is skipped so it can never over-hide by collapsing to self.
@@ -29,6 +30,7 @@ export function hiddenEntryIds(
 ): Set<string> {
   const symbols = buildSymbolTable(catalogue);
   const state = buildState(roster, symbols);
+  resolveCategories(state);
   const owner = ownerSelectionId
     ? state.all.find((n) => n.selectionId === ownerSelectionId) ?? null
     : null;
@@ -90,6 +92,7 @@ export function nodeHiddenByState(node: EvalNode, state: EvalState): boolean {
 export function hiddenSelectionIds(roster: Roster, catalogue: IrCatalogue): Set<string> {
   const symbols = buildSymbolTable(catalogue);
   const state = buildState(roster, symbols);
+  resolveCategories(state);
   const hidden = new Set<string>();
   for (const node of state.all) {
     if (nodeHiddenByState(node, state)) hidden.add(node.selectionId);

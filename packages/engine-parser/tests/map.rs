@@ -1184,3 +1184,71 @@ fn drops_error_modifier_with_unsupported_type() {
     assert!(w.validation_rules.is_empty());
     assert!(diags.iter().any(|d| d.code == "modifier.error_type_unsupported"), "{:?}", diags);
 }
+
+#[test]
+fn maps_category_add_modifier() {
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <selectionEntries>
+    <selectionEntry id="e.u" name="Unit" type="unit">
+      <modifiers>
+        <modifier type="add" value="cat.keyword" field="category">
+          <conditions>
+            <condition type="atLeast" value="1" field="selections" scope="roster" childId="e.det"/>
+          </conditions>
+        </modifier>
+      </modifiers>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let (ir, diags) = to_ir(&resolve(parse_raw(xml).unwrap()).unwrap());
+    let u = ir.entries.iter().find(|e| e.id == "e.u").unwrap();
+    assert_eq!(u.category_modifiers.len(), 1, "{:?}", diags);
+    assert_eq!(u.category_modifiers[0].type_, "add");
+    assert_eq!(u.category_modifiers[0].category_id, "cat.keyword");
+    assert_eq!(u.category_modifiers[0].conditions.as_ref().unwrap().len(), 1);
+    assert!(!diags.iter().any(|d| d.code == "modifier.target_unmapped"), "{:?}", diags);
+}
+
+#[test]
+fn drops_category_modifier_with_unmappable_condition() {
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <selectionEntries>
+    <selectionEntry id="e.u" name="Unit" type="unit">
+      <modifiers>
+        <modifier type="add" value="cat.keyword" field="category">
+          <conditions>
+            <condition type="atLeast" value="1" field="selections" scope="8da0-4570-c3c-819f" childId="e.det"/>
+          </conditions>
+        </modifier>
+      </modifiers>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let (ir, diags) = to_ir(&resolve(parse_raw(xml).unwrap()).unwrap());
+    let u = ir.entries.iter().find(|e| e.id == "e.u").unwrap();
+    assert!(u.category_modifiers.is_empty());
+    assert!(diags.iter().any(|d| d.code == "modifier.category_condition_unmapped"), "{:?}", diags);
+}
+
+#[test]
+fn drops_set_primary_category_modifier() {
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <selectionEntries>
+    <selectionEntry id="e.u" name="Unit" type="unit">
+      <modifiers>
+        <modifier type="set-primary" value="cat.keyword" field="category"/>
+      </modifiers>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let (ir, diags) = to_ir(&resolve(parse_raw(xml).unwrap()).unwrap());
+    let u = ir.entries.iter().find(|e| e.id == "e.u").unwrap();
+    assert!(u.category_modifiers.is_empty());
+    assert!(diags.iter().any(|d| d.code == "modifier.category_set_primary_unsupported"), "{:?}", diags);
+}

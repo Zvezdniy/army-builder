@@ -255,3 +255,86 @@ describe("hiddenSelectionIds", () => {
     expect(ids.size).toBe(0);
   });
 });
+
+describe("visibility with conditional categories", () => {
+  // A unit that conditionally GAINS a category when a detachment is present.
+  // An option (child of unit) whose visibility gate checks for that category on parent.
+  // This tests that resolveCategories is called before gate evaluation.
+  function catWithConditionalCategory(): IrCatalogue {
+    return {
+      id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [],
+      entries: [
+        { id: "e.det", name: "Detachment", costs: [], categories: ["cat.det"], constraints: [], children: [] },
+        {
+          id: "e.unit", name: "Unit", costs: [], categories: ["cat.unit"], constraints: [],
+          children: [
+            {
+              id: "e.opt", name: "Option", costs: [], categories: [], constraints: [], children: [],
+              // Hidden unless parent (e.unit) is instanceOf cat.conditional
+              visibilityModifiers: [{
+                set: true,
+                conditions: [{
+                  id: "c2", comparator: "lessThan", value: 1, field: "selections", scope: "parent",
+                  targetType: "category", targetId: "cat.conditional",
+                }],
+              }],
+            },
+          ],
+          // Conditionally adds cat.conditional when detachment is present
+          categoryModifiers: [{
+            type: "add",
+            categoryId: "cat.conditional",
+            conditions: [{
+              id: "c1", comparator: "atLeast", value: 1, field: "selections", scope: "roster",
+              targetType: "category", targetId: "cat.det",
+            }],
+          }],
+        },
+      ],
+    };
+  }
+
+  it("hiddenEntryIds respects conditionally-added categories: hidden when no detachment", () => {
+    // Without detachment, e.unit does NOT have cat.conditional, so e.opt's gate fires (hidden)
+    // Pass ownerSelectionId to provide context for the parent-scoped gate.
+    const cat = catWithConditionalCategory();
+    // s0 is e.unit (no detachment, so cat.conditional not added)
+    const hidden = hiddenEntryIds(roster(["e.unit"]), cat, "s0");
+    expect(hidden.has("e.opt")).toBe(true);
+  });
+
+  it("hiddenEntryIds respects conditionally-added categories: visible when detachment present", () => {
+    // With detachment, e.unit GAINS cat.conditional, so e.opt's gate does NOT fire (visible)
+    const cat = catWithConditionalCategory();
+    // s0 is e.det, s1 is e.unit (with detachment, cat.conditional is added)
+    const hidden = hiddenEntryIds(roster(["e.det", "e.unit"]), cat, "s1");
+    expect(hidden.has("e.opt")).toBe(false);
+  });
+
+  it("hiddenSelectionIds respects conditionally-added categories: flags when no detachment", () => {
+    // Without detachment, e.unit does not have cat.conditional, so e.opt is hidden by state
+    const cat = catWithConditionalCategory();
+    const rosterNodet: Roster = {
+      id: "r", name: "R", gameSystemId: "gs", catalogueId: "c", catalogueRevision: 1, pointsLimit: 2000,
+      selections: [{ id: "s0", entryId: "e.unit", count: 1, selections: [{ id: "s1", entryId: "e.opt", count: 1, selections: [] }] }],
+    };
+    const ids = hiddenSelectionIds(rosterNodet, cat);
+    // s0 is e.unit, s1 is its child e.opt; e.opt's gate fires and is hidden
+    expect(ids.has("s1")).toBe(true);
+  });
+
+  it("hiddenSelectionIds respects conditionally-added categories: not flagged when detachment present", () => {
+    // With detachment, e.unit gains cat.conditional, so e.opt is no longer hidden
+    const cat = catWithConditionalCategory();
+    const rosterWithdet: Roster = {
+      id: "r", name: "R", gameSystemId: "gs", catalogueId: "c", catalogueRevision: 1, pointsLimit: 2000,
+      selections: [
+        { id: "s0", entryId: "e.det", count: 1, selections: [] },
+        { id: "s1", entryId: "e.unit", count: 1, selections: [{ id: "s2", entryId: "e.opt", count: 1, selections: [] }] },
+      ],
+    };
+    const ids = hiddenSelectionIds(rosterWithdet, cat);
+    // s0 is e.det, s1 is e.unit, s2 is its child e.opt; with detachment, e.opt's gate does not fire
+    expect(ids.has("s2")).toBe(false);
+  });
+});
