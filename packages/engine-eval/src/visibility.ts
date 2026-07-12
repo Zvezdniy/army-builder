@@ -1,6 +1,6 @@
 import type { IrCatalogue, IrCondition, IrConditionGroup, Roster, VisibilityModifier } from "@muster/domain";
 import { buildSymbolTable } from "./symbols";
-import { buildState, type EvalNode } from "./state";
+import { buildState, type EvalNode, type EvalState } from "./state";
 import { passesGate } from "./conditions";
 
 // Scopes that need a real ancestor chain to resolve. Without one (no owner), a
@@ -60,6 +60,33 @@ export function hiddenEntryIds(
       if (passesGate(m.conditions, m.conditionGroups, synth, state)) isHidden = m.set;
     }
     if (isHidden) hidden.add(entry.id);
+  }
+  return hidden;
+}
+
+// Effective `hidden` of a REAL roster node given its actual place in `state`.
+// Unlike hiddenEntryIds (which builds ownerless synthetic candidate nodes and
+// must skip context scopes), a real node always has its real ancestor chain, so
+// every gate — including parent/root-entry/ancestor/type scopes — resolves
+// directly. Modifiers apply in order; the last matching gate wins.
+export function nodeHidden(node: EvalNode, state: EvalState): boolean {
+  let isHidden = node.entry.hidden ?? false;
+  for (const m of node.entry.visibilityModifiers ?? []) {
+    if (passesGate(m.conditions, m.conditionGroups, node, state)) isHidden = m.set;
+  }
+  return isHidden;
+}
+
+// selectionIds of roster nodes whose effective visibility is hidden under the
+// current roster state (e.g. an enhancement gated to a detachment the roster no
+// longer holds). These are still valid data / still cost points — callers
+// surface them as a warning, not a removal.
+export function hiddenSelectionIds(roster: Roster, catalogue: IrCatalogue): Set<string> {
+  const symbols = buildSymbolTable(catalogue);
+  const state = buildState(roster, symbols);
+  const hidden = new Set<string>();
+  for (const node of state.all) {
+    if (nodeHidden(node, state)) hidden.add(node.selectionId);
   }
   return hidden;
 }

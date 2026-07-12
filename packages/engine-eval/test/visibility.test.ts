@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { IrCatalogue, Roster } from "@muster/domain";
-import { hiddenEntryIds } from "@muster/engine-eval";
+import { hiddenEntryIds, hiddenSelectionIds } from "@muster/engine-eval";
 
 // Detachment category cat.det; an enhancement hidden unless the roster holds a
 // detachment selection of that category (set hidden=true when 0 instances → notInstanceOf).
@@ -232,5 +232,24 @@ describe("hiddenEntryIds context scopes", () => {
     };
     const hidden = hiddenEntryIds(emptyRoster, catNestedTypeScope);
     expect(hidden.has("opt")).toBe(false); // nested type scope, no owner -> whole modifier skipped -> visible
+  });
+});
+
+describe("hiddenSelectionIds", () => {
+  it("flags a selected node hidden under current roster state", () => {
+    const ids = hiddenSelectionIds(roster(["e.enh"]), cat());
+    expect(ids.has("s0")).toBe(true); // s0 is e.enh's selection id
+  });
+  it("does not flag the node once its gate no longer fires", () => {
+    const ids = hiddenSelectionIds(roster(["e.det", "e.enh"]), cat());
+    expect(ids.has("s1")).toBe(false); // s1 is e.enh's selection id here
+  });
+  it("flags a statically hidden selected node", () => {
+    const ids = hiddenSelectionIds(roster(["e.static"]), cat());
+    expect(ids.has("s0")).toBe(true);
+  });
+  it("returns an empty set when nothing is hidden", () => {
+    const ids = hiddenSelectionIds(roster(["e.plain"]), cat());
+    expect(ids.size).toBe(0);
   });
 });
