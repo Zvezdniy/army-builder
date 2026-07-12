@@ -1,5 +1,5 @@
-import type { Roster, RosterSelection, IrEntry } from "@muster/domain";
-import type { SymbolTable } from "./symbols";
+import type { Roster, RosterSelection, IrEntry, IrCatalogue } from "@muster/domain";
+import { buildSymbolTable } from "./symbols";
 import { assertDepth } from "./limits";
 
 export interface EvalNode {
@@ -18,8 +18,23 @@ export interface EvalState {
   all: EvalNode[];
 }
 
-export function buildState(roster: Roster, symbols: SymbolTable): EvalState {
+// Resolve each roster selection against the catalogue TREE: a child resolves
+// among its parent's children (root selections among catalogue.entries), so the
+// per-placement inlined instance (with its own modifiers) is used. The tolerant
+// flat index is a fallback for a selection not found under its parent (e.g. a
+// roster built against a slightly different catalogue); an id in neither is unknown.
+export function buildState(roster: Roster, catalogue: IrCatalogue): EvalState {
+  const flat = buildSymbolTable(catalogue);
   const all: EvalNode[] = [];
+
+  const resolve = (parentEntry: IrEntry | null, entryId: string): IrEntry => {
+    const siblings = parentEntry ? parentEntry.children : catalogue.entries;
+    const local = siblings.find((e) => e.id === entryId);
+    if (local) return local;
+    const fallback = flat.get(entryId);
+    if (fallback) return fallback;
+    throw new Error(`Unknown entryId in roster: ${entryId}`);
+  };
 
   const build = (
     selection: RosterSelection,
@@ -28,10 +43,7 @@ export function buildState(roster: Roster, symbols: SymbolTable): EvalState {
     depth: number,
   ): EvalNode => {
     assertDepth(depth, "Roster selection");
-    const entry = symbols.get(selection.entryId);
-    if (!entry) {
-      throw new Error(`Unknown entryId in roster: ${selection.entryId}`);
-    }
+    const entry = resolve(parent ? parent.entry : null, selection.entryId);
     const node: EvalNode = {
       selectionId: selection.id,
       entry,

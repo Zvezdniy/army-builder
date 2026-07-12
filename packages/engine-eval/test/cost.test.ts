@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { IrCatalogue, Roster } from "@muster/domain";
-import { buildSymbolTable, buildState, totalCost } from "@muster/engine-eval";
+import { buildState, totalCost } from "@muster/engine-eval";
 import type { CostFn } from "@muster/engine-eval";
 
 const cat: IrCatalogue = {
@@ -21,7 +21,7 @@ describe("totalCost", () => {
       ],
     };
     // squad: 100 * 2 = 200; gun: 5 * (3 * 2) = 30 => 230
-    const state = buildState(roster, buildSymbolTable(cat));
+    const state = buildState(roster, cat);
     expect(totalCost(state)).toBe(230);
   });
 
@@ -29,7 +29,7 @@ describe("totalCost", () => {
     const roster: Roster = {
       id: "r", name: "R", gameSystemId: "gs", catalogueId: "c", catalogueRevision: 1, pointsLimit: 2000, selections: [],
     };
-    expect(totalCost(buildState(roster, buildSymbolTable(cat)))).toBe(0);
+    expect(totalCost(buildState(roster, cat))).toBe(0);
   });
 });
 
@@ -39,7 +39,7 @@ describe("totalCost with an injected cost view", () => {
       id: "r", name: "R", gameSystemId: "gs", catalogueId: "c", catalogueRevision: 1, pointsLimit: 2000,
       selections: [{ id: "s.squad", entryId: "e.squad", count: 2, selections: [] }],
     };
-    const state = buildState(roster, buildSymbolTable(cat));
+    const state = buildState(roster, cat);
     const flat: CostFn = () => 7;
     expect(totalCost(state, flat)).toBe(7); // one node, view returns 7
     expect(totalCost(state)).toBe(200); // default = raw: squad 100 * 2

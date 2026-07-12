@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { IrCatalogue, IrModifier } from "@muster/domain";
-import { buildSymbolTable, buildState, applyModifiers } from "@muster/engine-eval";
+import { buildState, applyModifiers } from "@muster/engine-eval";
 
 const cat: IrCatalogue = {
   id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [],
@@ -10,7 +10,7 @@ const roster = {
   id: "r", name: "R", gameSystemId: "gs", catalogueId: "c", catalogueRevision: 1, pointsLimit: 2000,
   selections: [{ id: "x1", entryId: "e.x", count: 1, selections: [] }],
 };
-const state = () => buildState(roster, buildSymbolTable(cat));
+const state = () => buildState(roster, cat);
 
 describe("applyModifiers", () => {
   it("returns base when modifiers is undefined", () => {

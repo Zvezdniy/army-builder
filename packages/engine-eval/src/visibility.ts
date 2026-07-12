@@ -29,7 +29,7 @@ export function hiddenEntryIds(
   ownerSelectionId?: string,
 ): Set<string> {
   const symbols = buildSymbolTable(catalogue);
-  const state = buildState(roster, symbols);
+  const state = buildState(roster, catalogue);
   resolveCategories(state);
   const owner = ownerSelectionId
     ? state.all.find((n) => n.selectionId === ownerSelectionId) ?? null
@@ -90,8 +90,7 @@ export function nodeHiddenByState(node: EvalNode, state: EvalState): boolean {
 // These are still valid data / still cost points — callers surface them as a
 // warning, not a removal.
 export function hiddenSelectionIds(roster: Roster, catalogue: IrCatalogue): Set<string> {
-  const symbols = buildSymbolTable(catalogue);
-  const state = buildState(roster, symbols);
+  const state = buildState(roster, catalogue);
   resolveCategories(state);
   const hidden = new Set<string>();
   for (const node of state.all) {

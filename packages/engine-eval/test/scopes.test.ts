@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { IrCatalogue, IrCondition, IrConstraint, Roster } from "@muster/domain";
-import { buildSymbolTable, buildState, aggregate } from "@muster/engine-eval";
+import { buildState, aggregate } from "@muster/engine-eval";
 import type { EvalNode, EvalState } from "@muster/engine-eval";
 
 // Catalogue: two HQ, three Heavy units; a squad with 2 special-weapon options.
@@ -27,7 +27,7 @@ const roster: Roster = {
 };
 
 function setup() {
-  const state = buildState(roster, buildSymbolTable(cat));
+  const state = buildState(roster, cat);
   const byId = (id: string): EvalNode => state.all.find((n) => n.selectionId === id)!;
   return { state, byId };
 }

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { IrCatalogue, Roster } from "@muster/domain";
-import { buildSymbolTable, buildState, resolveCosts, totalCost, evaluate, MAX_ITERATIONS } from "@muster/engine-eval";
+import { buildState, resolveCosts, totalCost, evaluate, MAX_ITERATIONS } from "@muster/engine-eval";
 
 // ---- Test A: a genuine points-field feedback loop that CONVERGES over 3 passes ----
 // A costs 20 with a -10 discount gated on roster points <= 35 (a POINTS-field condition,
@@ -58,7 +58,7 @@ const rosterOscillate: Roster = {
 
 describe("fixed-point cost feedback (points-field conditions)", () => {
   it("iterates to convergence when a discount depends on other nodes' costs", () => {
-    const state = buildState(rosterConverge, buildSymbolTable(catConverge));
+    const state = buildState(rosterConverge, catConverge);
     const res = resolveCosts(state);
     expect(res.converged).toBe(true);
     expect(res.iterations).toBe(3); // 2 would mean the cost-feedback pass was skipped
@@ -68,7 +68,7 @@ describe("fixed-point cost feedback (points-field conditions)", () => {
   });
 
   it("stops at MAX_ITERATIONS and reports non-convergence for an oscillating discount", () => {
-    const state = buildState(rosterOscillate, buildSymbolTable(catOscillate));
+    const state = buildState(rosterOscillate, catOscillate);
     const res = resolveCosts(state);
     expect(res.converged).toBe(false);
     expect(res.iterations).toBe(MAX_ITERATIONS);
