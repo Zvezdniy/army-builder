@@ -1,6 +1,6 @@
 import type { IrConstraint, Issue } from "@muster/domain";
 import type { EvalNode, EvalState } from "./state";
-import { aggregate } from "./scopes";
+import { aggregate, scopeUnanchored } from "./scopes";
 import { applyModifiers } from "./modifiers";
 import { nodePoints, type CostFn } from "./cost";
 
@@ -19,6 +19,7 @@ export function checkConstraint(
   state: EvalState,
   costOf: CostFn = nodePoints,
 ): Issue | null {
+  if (scopeUnanchored(node, constraint, state)) return null;
   const actual = aggregate(node, constraint, state, costOf);
   const limit = effectiveConstraintValue(constraint, node, state, costOf);
   const violated = constraint.type === "max" ? actual > limit : actual < limit;

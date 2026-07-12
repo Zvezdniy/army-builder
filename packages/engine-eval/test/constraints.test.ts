@@ -80,3 +80,43 @@ describe("checkConstraint with a modified bound", () => {
     expect(issue?.message).toMatch(/3 .*max 2/);
   });
 });
+
+describe("checkConstraint context/type scopes", () => {
+  const uCat: IrCatalogue = {
+    id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [],
+    entries: [
+      { id: "e.sqd", name: "Squad", type: "unit", costs: [], categories: [], constraints: [], children: [] },
+      { id: "e.wpn", name: "Weapon", costs: [], categories: ["cat.wpn"], constraints: [], children: [] },
+    ],
+  } as unknown as IrCatalogue;
+  const uRoster: Roster = {
+    id: "r", name: "R", gameSystemId: "gs", catalogueId: "c", catalogueRevision: 1, pointsLimit: 2000,
+    selections: [
+      { id: "sq", entryId: "e.sqd", count: 1, selections: [
+        { id: "w1", entryId: "e.wpn", count: 1, selections: [] },
+        { id: "w2", entryId: "e.wpn", count: 1, selections: [] },
+      ] },
+      { id: "loose", entryId: "e.wpn", count: 1, selections: [] },
+    ],
+  } as unknown as Roster;
+  const unitMax1: IrConstraint = { id: "k", type: "max", value: 1, field: "selections", scope: "unit", targetType: "category", targetId: "cat.wpn", includeChildSelections: true };
+
+  it("enforces a unit-scoped max within the enclosing unit", () => {
+    const state = buildState(uRoster, buildSymbolTable(uCat));
+    const sq = state.all.find((n) => n.selectionId === "sq")!;
+    expect(checkConstraint(unitMax1, sq, state)?.code).toBe("constraint.max");
+  });
+
+  it("skips a unit-scoped constraint on a node with no unit ancestor (no false violation)", () => {
+    const state = buildState(uRoster, buildSymbolTable(uCat));
+    const loose = state.all.find((n) => n.selectionId === "loose")!;
+    const unitMin1: IrConstraint = { ...unitMax1, type: "min", value: 1 };
+    expect(checkConstraint(unitMin1, loose, state)).toBeNull();
+  });
+
+  it("still flags a min on a legitimate but unsatisfied non-type scope (roster)", () => {
+    const state = buildState(uRoster, buildSymbolTable(uCat));
+    const rosterMin: IrConstraint = { id: "k2", type: "min", value: 1, field: "selections", scope: "roster", targetType: "category", targetId: "cat.absent", includeChildSelections: false };
+    expect(checkConstraint(rosterMin, null, state)?.code).toBe("constraint.min");
+  });
+});

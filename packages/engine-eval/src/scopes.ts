@@ -21,6 +21,8 @@ export interface AggregateSpec {
   includeChildSelections: boolean;
 }
 
+const ANCHOR_TYPE_SCOPES = new Set(["unit", "upgrade", "model", "model-or-unit"]);
+
 function subtree(node: EvalNode, includeChildren: boolean): EvalNode[] {
   if (!includeChildren) return [node];
   const acc: EvalNode[] = [];
@@ -84,6 +86,15 @@ function scopeNodes(
       return anchor ? subtree(anchor, spec.includeChildSelections) : [];
     }
   }
+}
+
+// True only when a type scope (unit/upgrade/model/model-or-unit) resolves to no
+// node — the owning node has no ancestor of that type, so the scope cannot be
+// anchored and the spec does not apply here. Non-type scopes are never "unanchored"
+// (their empty result is legitimate, e.g. a roster-wide min on an empty roster).
+export function scopeUnanchored(node: EvalNode | null, spec: AggregateSpec, state: EvalState): boolean {
+  if (!ANCHOR_TYPE_SCOPES.has(spec.scope)) return false;
+  return scopeNodes(node, spec, state).length === 0;
 }
 
 function matchesTarget(node: EvalNode, spec: AggregateSpec): boolean {
