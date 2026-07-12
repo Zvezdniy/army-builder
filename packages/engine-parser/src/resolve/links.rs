@@ -67,8 +67,9 @@ pub(crate) fn resolve_with_caps(mut cat: RawCatalogue, max_nodes: u64, max_depth
         // to it is caught as a cycle inside resolve_entry. Roots are processed
         // sequentially with an empty path each iteration, so no pre-check here.
         path.insert(link.target_id.clone());
-        let root = resolve_entry(target, &symbols, &mut path, &mut budget, diags, 1)?;
+        let mut root = resolve_entry(target, &symbols, &mut path, &mut budget, diags, 1)?;
         path.remove(&link.target_id);
+        apply_link_visibility(link, &mut root, diags);
         cat.entries.push(root);
     }
     Ok(cat)
@@ -110,6 +111,18 @@ fn resolve_link(
         let resolved = resolve_group(target, symbols, path, budget, diags, depth + 1)?;
         path.remove(&link.target_id);
         groups.push(resolved);
+        if link.hidden || link.modifiers.iter().any(|m| m.field == "hidden") {
+            diags.push(Diagnostic {
+                code: "entryLink.group_hidden_unsupported".to_string(),
+                message: format!("entryLink to group {} carries hidden visibility; unsupported (dropped)", link.target_id),
+            });
+        }
+        for m in link.modifiers.iter().filter(|m| m.field != "hidden") {
+            diags.push(Diagnostic {
+                code: "entryLink.modifier_dropped".to_string(),
+                message: format!("entryLink to group {} has a non-hidden modifier (field {}); dropped", link.target_id, m.field),
+            });
+        }
     } else {
         let target = match symbols.entry(&link.target_id) {
             Some(t) => t,
@@ -119,11 +132,36 @@ fn resolve_link(
             return Err(ParseError::ReferenceCycle(link.target_id.clone()));
         }
         path.insert(link.target_id.clone());
-        let resolved = resolve_entry(target, symbols, path, budget, diags, depth + 1)?;
+        let mut resolved = resolve_entry(target, symbols, path, budget, diags, depth + 1)?;
         path.remove(&link.target_id);
+        apply_link_visibility(link, &mut resolved, diags);
         children.push(resolved);
     }
     Ok(())
+}
+
+/// Apply an entryLink's own visibility (static `hidden` + `field="hidden"`
+/// modifiers) onto the freshly-cloned inlined instance. `resolved` is unique
+/// per placement, so appended modifiers never leak to the shared target.
+/// Non-hidden modifiers on a link (cost/constraint) are a separate slice —
+/// dropped loudly here rather than silently.
+fn apply_link_visibility(link: &RawEntryLink, resolved: &mut RawEntry, diags: &mut Vec<Diagnostic>) {
+    if link.hidden {
+        resolved.hidden = true;
+    }
+    for m in &link.modifiers {
+        if m.field == "hidden" {
+            resolved.modifiers.push(m.clone());
+        } else {
+            diags.push(Diagnostic {
+                code: "entryLink.modifier_dropped".to_string(),
+                message: format!(
+                    "entryLink to {} has a non-hidden modifier (field {}); dropped",
+                    link.target_id, m.field
+                ),
+            });
+        }
+    }
 }
 
 fn resolve_entry(entry: &RawEntry, symbols: &SymbolTable, path: &mut HashSet<String>,
@@ -175,13 +213,13 @@ mod tests {
     use super::*;
 
     fn link(target: &str) -> RawEntryLink {
-        RawEntryLink { target_id: target.to_string(), link_type: String::new() }
+        RawEntryLink { target_id: target.to_string(), link_type: String::new(), ..Default::default() }
     }
     fn entry(id: &str, links: Vec<RawEntryLink>) -> RawEntry {
         RawEntry { id: id.to_string(), entry_type: "upgrade".into(), entry_links: links, ..Default::default() }
     }
     fn group_link(target: &str) -> RawEntryLink {
-        RawEntryLink { target_id: target.to_string(), link_type: "selectionEntryGroup".to_string() }
+        RawEntryLink { target_id: target.to_string(), link_type: "selectionEntryGroup".to_string(), ..Default::default() }
     }
 
     #[test]

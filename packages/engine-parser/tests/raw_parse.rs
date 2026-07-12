@@ -209,3 +209,54 @@ fn rule_without_description_is_skipped() {
     assert!(!cat.rules.contains_key("Empty"));
     assert_eq!(cat.rules.get("HasText").map(String::as_str), Some("\"quoted\" text"));
 }
+
+#[test]
+fn entrylink_carries_hidden_attr_and_modifiers() {
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <selectionEntries>
+    <selectionEntry id="host" name="Host" type="unit">
+      <entryLinks>
+        <entryLink id="lk" name="L" type="selectionEntry" targetId="shared" hidden="true">
+          <modifiers>
+            <modifier type="set" value="true" field="hidden">
+              <conditions>
+                <condition type="notInstanceOf" value="1" field="selections" scope="ancestor" childId="cat.x"/>
+              </conditions>
+            </modifier>
+          </modifiers>
+        </entryLink>
+      </entryLinks>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let raw = engine_parser::raw::parse_raw(xml).unwrap();
+    let host = raw.entries.iter().find(|e| e.id == "host").unwrap();
+    let lk = &host.entry_links[0];
+    assert_eq!(lk.target_id, "shared");
+    assert!(lk.hidden);
+    assert_eq!(lk.modifiers.len(), 1);
+    assert_eq!(lk.modifiers[0].field, "hidden");
+    assert_eq!(lk.modifiers[0].conditions.len(), 1);
+}
+
+#[test]
+fn empty_entrylink_has_hidden_attr_no_modifiers() {
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <selectionEntries>
+    <selectionEntry id="host" name="Host" type="unit">
+      <entryLinks>
+        <entryLink id="lk" name="L" type="selectionEntry" targetId="shared" hidden="true"/>
+      </entryLinks>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let raw = engine_parser::raw::parse_raw(xml).unwrap();
+    let host = raw.entries.iter().find(|e| e.id == "host").unwrap();
+    let lk = &host.entry_links[0];
+    assert!(lk.hidden);
+    assert!(lk.modifiers.is_empty());
+}

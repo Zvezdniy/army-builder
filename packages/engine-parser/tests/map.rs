@@ -752,3 +752,145 @@ fn cost_modifier_condition_type_scopes_map() {
     assert_eq!(scopes, vec!["unit", "upgrade", "model", "model-or-unit"]);
     assert!(!diags.iter().any(|d| d.code == "condition.scope_unmapped"));
 }
+
+#[test]
+fn entrylink_hidden_modifier_lands_on_inlined_instance() {
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <sharedSelectionEntries>
+    <selectionEntry id="shared" name="Enh" type="upgrade"/>
+  </sharedSelectionEntries>
+  <selectionEntries>
+    <selectionEntry id="host" name="Host" type="unit">
+      <entryLinks>
+        <entryLink id="lk" name="L" type="selectionEntry" targetId="shared">
+          <modifiers>
+            <modifier type="set" value="true" field="hidden">
+              <conditions>
+                <condition type="notInstanceOf" value="1" field="selections" scope="ancestor" childId="cat.x"/>
+              </conditions>
+            </modifier>
+          </modifiers>
+        </entryLink>
+      </entryLinks>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let (ir, diags) = to_ir(&resolve(parse_raw(xml).unwrap()).unwrap());
+    let host = ir.entries.iter().find(|e| e.id == "host").unwrap();
+    let inlined = host.children.iter().find(|e| e.id == "shared").unwrap();
+    assert_eq!(inlined.visibility_modifiers.len(), 1, "link hidden modifier must land on the inlined instance");
+    assert!(!diags.iter().any(|d| d.code == "entryLink.modifier_dropped"));
+}
+
+#[test]
+fn entrylink_static_hidden_sets_inlined_instance_hidden() {
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <sharedSelectionEntries>
+    <selectionEntry id="shared" name="Enh" type="upgrade"/>
+  </sharedSelectionEntries>
+  <selectionEntries>
+    <selectionEntry id="host" name="Host" type="unit">
+      <entryLinks>
+        <entryLink id="lk" name="L" type="selectionEntry" targetId="shared" hidden="true"/>
+      </entryLinks>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let (ir, _diags) = to_ir(&resolve(parse_raw(xml).unwrap()).unwrap());
+    let host = ir.entries.iter().find(|e| e.id == "host").unwrap();
+    let inlined = host.children.iter().find(|e| e.id == "shared").unwrap();
+    assert!(inlined.hidden);
+}
+
+#[test]
+fn entrylink_non_hidden_modifier_is_dropped_loudly() {
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <costTypes><costType id="pts" name="Points"/></costTypes>
+  <sharedSelectionEntries>
+    <selectionEntry id="shared" name="Enh" type="upgrade"/>
+  </sharedSelectionEntries>
+  <selectionEntries>
+    <selectionEntry id="host" name="Host" type="unit">
+      <entryLinks>
+        <entryLink id="lk" name="L" type="selectionEntry" targetId="shared">
+          <modifiers>
+            <modifier type="increment" field="pts" value="5"/>
+          </modifiers>
+        </entryLink>
+      </entryLinks>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let mut diags = Vec::new();
+    let resolved = resolve_with_diags(parse_raw(xml).unwrap(), &mut diags).unwrap();
+    let (ir, ir_diags) = to_ir(&resolved);
+    diags.extend(ir_diags);
+    let host = ir.entries.iter().find(|e| e.id == "host").unwrap();
+    let inlined = host.children.iter().find(|e| e.id == "shared").unwrap();
+    assert!(inlined.visibility_modifiers.is_empty());
+    assert!(diags.iter().any(|d| d.code == "entryLink.modifier_dropped"));
+}
+
+#[test]
+fn group_link_hidden_modifier_is_unsupported_diagnostic() {
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <sharedSelectionEntryGroups>
+    <selectionEntryGroup id="grp" name="G"/>
+  </sharedSelectionEntryGroups>
+  <selectionEntries>
+    <selectionEntry id="host" name="Host" type="unit">
+      <entryLinks>
+        <entryLink id="lk" name="L" type="selectionEntryGroup" targetId="grp">
+          <modifiers>
+            <modifier type="set" value="true" field="hidden">
+              <conditions>
+                <condition type="notInstanceOf" value="1" field="selections" scope="ancestor" childId="cat.x"/>
+              </conditions>
+            </modifier>
+          </modifiers>
+        </entryLink>
+      </entryLinks>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let mut diags = Vec::new();
+    let resolved = resolve_with_diags(parse_raw(xml).unwrap(), &mut diags).unwrap();
+    let (_ir, ir_diags) = to_ir(&resolved);
+    diags.extend(ir_diags);
+    assert!(diags.iter().any(|d| d.code == "entryLink.group_hidden_unsupported"));
+}
+
+#[test]
+fn catalogue_root_entrylink_hidden_modifier_lands_on_surfaced_root() {
+    // Catalogue-level entryLinks are surfaced as root entries by a separate loop
+    // in resolve_with_caps; link-hosted hidden must apply there too.
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <sharedSelectionEntries>
+    <selectionEntry id="shared" name="Enh" type="upgrade"/>
+  </sharedSelectionEntries>
+  <entryLinks>
+    <entryLink id="lk" name="L" type="selectionEntry" targetId="shared">
+      <modifiers>
+        <modifier type="set" value="true" field="hidden">
+          <conditions>
+            <condition type="notInstanceOf" value="1" field="selections" scope="ancestor" childId="cat.x"/>
+          </conditions>
+        </modifier>
+      </modifiers>
+    </entryLink>
+  </entryLinks>
+</catalogue>"#;
+    let (ir, _diags) = to_ir(&resolve(parse_raw(xml).unwrap()).unwrap());
+    let root = ir.entries.iter().find(|e| e.id == "shared").unwrap();
+    assert_eq!(root.visibility_modifiers.len(), 1, "link hidden modifier must land on the surfaced root");
+}
