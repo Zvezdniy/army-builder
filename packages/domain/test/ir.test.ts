@@ -154,3 +154,27 @@ describe("IrGroupConstraint.scope", () => {
     expect(IrGroupConstraint.parse({ id: "g", type: "max", value: 1 }).scope).toBe("self");
   });
 });
+
+describe("IrGroupConstraint.modifiers", () => {
+  it("parses a group constraint carrying a conditional limit modifier", () => {
+    const parsed = IrGroupConstraint.parse({
+      id: "g.max", type: "max", value: 1, scope: "self",
+      modifiers: [{
+        id: "mod.g.0", type: "increment", value: 1,
+        conditions: [{
+          id: "cond.atLeast.e.sgt", comparator: "atLeast", value: 1,
+          field: "selections", scope: "model-or-unit", targetType: "entry",
+          targetId: "e.sgt", includeChildSelections: true,
+        }],
+      }],
+    });
+    expect(parsed.modifiers?.[0]?.type).toBe("increment");
+    expect(parsed.modifiers?.[0]?.value).toBe(1);
+  });
+
+  it("defaults modifiers to undefined when absent", () => {
+    const parsed = IrGroupConstraint.parse({ id: "g.max", type: "max", value: 2 });
+    expect(parsed.modifiers).toBeUndefined();
+    expect(parsed.scope).toBe("self");
+  });
+});
