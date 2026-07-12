@@ -205,4 +205,32 @@ describe("hiddenEntryIds context scopes", () => {
     const hidden = hiddenEntryIds(emptyRoster, catTypeScope);
     expect(hidden.has("opt")).toBe(false);
   });
+
+  it("skips a type-scoped gate nested inside a conditionGroup when no owner is given", () => {
+    // The type scope lives inside a nested conditionGroup, so usesContextScope must
+    // recurse through conditionGroups (not just top-level conditions) for the skip to fire.
+    const catNestedTypeScope: IrCatalogue = {
+      id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [], categoryNames: {},
+      entries: [
+        {
+          id: "opt", name: "Opt", costs: [], categories: [], constraints: [], children: [],
+          visibilityModifiers: [{
+            set: true,
+            conditionGroups: [{
+              type: "and",
+              conditions: [
+                { id: "c", comparator: "lessThan", value: 1, field: "selections", scope: "model", targetType: "category", targetId: "cat.x", includeChildSelections: false },
+              ],
+            }],
+          }],
+        },
+      ],
+    };
+    const emptyRoster: Roster = {
+      id: "r", name: "R", gameSystemId: "gs", catalogueId: "c", catalogueRevision: 1, pointsLimit: 2000,
+      selections: [],
+    };
+    const hidden = hiddenEntryIds(emptyRoster, catNestedTypeScope);
+    expect(hidden.has("opt")).toBe(false); // nested type scope, no owner -> whole modifier skipped -> visible
+  });
 });

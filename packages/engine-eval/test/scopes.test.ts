@@ -258,4 +258,18 @@ describe("aggregate type scopes (unit/upgrade/model/model-or-unit)", () => {
     };
     expect(aggregate(null, spec, state)).toBe(0);
   });
+
+  it("model scope aggregates the nearest model ancestor's subtree", () => {
+    // model > wargear(upgrade) > cat.x(upgrade); the plain `model` predicate must
+    // resolve the model anchor and count the target in its subtree.
+    const target = node("cat.x", "upgrade");
+    const model = node("m", "model", [node("wargear", "upgrade", [target])]);
+    const leaf = model.children[0]!.children[0]!;
+    const state = { all: [model] } as EvalState;
+    const spec: IrCondition = {
+      id: "c1", value: 1, comparator: "atLeast", field: "selections",
+      scope: "model", targetType: "entry", targetId: "cat.x", includeChildSelections: true,
+    };
+    expect(aggregate(leaf, spec, state)).toBe(1);
+  });
 });
