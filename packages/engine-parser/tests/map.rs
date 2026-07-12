@@ -979,7 +979,11 @@ fn entrylink_static_hidden_sets_inlined_instance_hidden() {
 }
 
 #[test]
-fn entrylink_non_hidden_modifier_is_dropped_loudly() {
+fn entrylink_non_hidden_modifier_without_matching_cost_is_target_unmapped() {
+    // A `pts`-field modifier is now routed through map_entry like any of the
+    // target's own modifiers; `shared` has no <costs> at all, so there's no
+    // cost slot to attach to and map_entry recategorizes it as
+    // modifier.target_unmapped rather than the link machinery dropping it.
     let xml = br#"<?xml version="1.0" encoding="utf-8"?>
 <catalogue id="c" name="C" revision="1" gameSystemId="gs"
            xmlns="http://www.battlescribe.net/schema/catalogueSchema">
@@ -1006,7 +1010,8 @@ fn entrylink_non_hidden_modifier_is_dropped_loudly() {
     let host = ir.entries.iter().find(|e| e.id == "host").unwrap();
     let inlined = host.children.iter().find(|e| e.id == "shared").unwrap();
     assert!(inlined.visibility_modifiers.is_empty());
-    assert!(diags.iter().any(|d| d.code == "entryLink.modifier_dropped"));
+    assert!(diags.iter().any(|d| d.code == "modifier.target_unmapped"), "{:?}", diags);
+    assert!(!diags.iter().any(|d| d.code == "entryLink.modifier_dropped"), "{:?}", diags);
 }
 
 #[test]
@@ -1251,4 +1256,189 @@ fn drops_set_primary_category_modifier() {
     let u = ir.entries.iter().find(|e| e.id == "e.u").unwrap();
     assert!(u.category_modifiers.is_empty());
     assert!(diags.iter().any(|d| d.code == "modifier.category_set_primary_unsupported"), "{:?}", diags);
+}
+
+#[test]
+fn entrylink_cost_modifier_lands_on_inlined_instance() {
+    // A link that discounts the shared entry by 2 pts on this placement.
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <costTypes><costType id="pts" name="Points"/></costTypes>
+  <sharedSelectionEntries>
+    <selectionEntry id="shared" name="Wargear" type="upgrade">
+      <costs><cost name="Points" typeId="pts" value="5"/></costs>
+    </selectionEntry>
+  </sharedSelectionEntries>
+  <selectionEntries>
+    <selectionEntry id="host" name="Host" type="unit">
+      <entryLinks>
+        <entryLink id="lk" name="L" type="selectionEntry" targetId="shared">
+          <modifiers><modifier type="decrement" value="2" field="pts"/></modifiers>
+        </entryLink>
+      </entryLinks>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let (ir, diags) = to_ir(&resolve(parse_raw(xml).unwrap()).unwrap());
+    let host = ir.entries.iter().find(|e| e.id == "host").unwrap();
+    let inlined = host.children.iter().find(|e| e.id == "shared").unwrap();
+    let cost = inlined.costs.iter().find(|c| c.name == "points").expect("cost present");
+    let mods = cost.modifiers.as_ref().expect("cost modifier attached");
+    assert_eq!((mods[0].type_.as_str(), mods[0].value), ("decrement", 2.0));
+    assert!(!diags.iter().any(|d| d.code == "entryLink.modifier_dropped"), "{:?}", diags);
+}
+
+#[test]
+fn entrylink_constraint_modifier_lands_on_inlined_instance() {
+    // A link that raises the shared entry's own max on this placement.
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <sharedSelectionEntries>
+    <selectionEntry id="shared" name="Wargear" type="upgrade">
+      <constraints><constraint id="cc" type="max" value="1" field="selections" scope="parent"/></constraints>
+    </selectionEntry>
+  </sharedSelectionEntries>
+  <selectionEntries>
+    <selectionEntry id="host" name="Host" type="unit">
+      <entryLinks>
+        <entryLink id="lk" name="L" type="selectionEntry" targetId="shared">
+          <modifiers><modifier type="increment" value="1" field="cc"/></modifiers>
+        </entryLink>
+      </entryLinks>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let (ir, diags) = to_ir(&resolve(parse_raw(xml).unwrap()).unwrap());
+    let host = ir.entries.iter().find(|e| e.id == "host").unwrap();
+    let inlined = host.children.iter().find(|e| e.id == "shared").unwrap();
+    let c = inlined.constraints.iter().find(|c| c.id == "cc").expect("constraint present");
+    let mods = c.modifiers.as_ref().expect("constraint modifier attached");
+    assert_eq!((mods[0].type_.as_str(), mods[0].value), ("increment", 1.0));
+    assert!(!diags.iter().any(|d| d.code == "entryLink.modifier_dropped"), "{:?}", diags);
+}
+
+#[test]
+fn entrylink_unrepresentable_modifier_becomes_target_unmapped() {
+    // A `name` modifier is not representable → routed by map_entry to
+    // modifier.target_unmapped (recategorized), NOT entryLink.modifier_dropped.
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <sharedSelectionEntries>
+    <selectionEntry id="shared" name="Wargear" type="upgrade"/>
+  </sharedSelectionEntries>
+  <selectionEntries>
+    <selectionEntry id="host" name="Host" type="unit">
+      <entryLinks>
+        <entryLink id="lk" name="L" type="selectionEntry" targetId="shared">
+          <modifiers><modifier type="set" value="Master-crafted" field="name"/></modifiers>
+        </entryLink>
+      </entryLinks>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let (_ir, diags) = to_ir(&resolve(parse_raw(xml).unwrap()).unwrap());
+    assert!(diags.iter().any(|d| d.code == "modifier.target_unmapped"), "{:?}", diags);
+    assert!(!diags.iter().any(|d| d.code == "entryLink.modifier_dropped"), "{:?}", diags);
+}
+
+#[test]
+fn entrylink_modifier_isolated_to_its_placement() {
+    // The same shared entry is linked into two hosts; only host_a's link carries
+    // the cost modifier. host_b's inlined copy must be untouched (clone, no leak).
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <costTypes><costType id="pts" name="Points"/></costTypes>
+  <sharedSelectionEntries>
+    <selectionEntry id="shared" name="Wargear" type="upgrade">
+      <costs><cost name="Points" typeId="pts" value="5"/></costs>
+    </selectionEntry>
+  </sharedSelectionEntries>
+  <selectionEntries>
+    <selectionEntry id="host_a" name="A" type="unit">
+      <entryLinks>
+        <entryLink id="la" name="L" type="selectionEntry" targetId="shared">
+          <modifiers><modifier type="decrement" value="2" field="pts"/></modifiers>
+        </entryLink>
+      </entryLinks>
+    </selectionEntry>
+    <selectionEntry id="host_b" name="B" type="unit">
+      <entryLinks>
+        <entryLink id="lb" name="L" type="selectionEntry" targetId="shared"/>
+      </entryLinks>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let (ir, _d) = to_ir(&resolve(parse_raw(xml).unwrap()).unwrap());
+    let a = ir.entries.iter().find(|e| e.id == "host_a").unwrap()
+        .children.iter().find(|e| e.id == "shared").unwrap();
+    let b = ir.entries.iter().find(|e| e.id == "host_b").unwrap()
+        .children.iter().find(|e| e.id == "shared").unwrap();
+    assert!(a.costs[0].modifiers.is_some(), "host_a placement carries the modifier");
+    assert!(b.costs[0].modifiers.is_none(), "host_b placement must be untouched");
+}
+
+#[test]
+fn grouplink_constraint_modifier_lands_on_inlined_group() {
+    // A group link carrying a modifier on the shared group's own limit → attached
+    // via the conditional-group-limits machinery (map_group_constraint).
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <sharedSelectionEntryGroups>
+    <selectionEntryGroup id="sg" name="Loadout">
+      <constraints><constraint id="gm" type="max" value="1" field="selections" scope="self"/></constraints>
+      <selectionEntries><selectionEntry id="w" name="W" type="upgrade"/></selectionEntries>
+    </selectionEntryGroup>
+  </sharedSelectionEntryGroups>
+  <selectionEntries>
+    <selectionEntry id="host" name="Host" type="unit">
+      <entryLinks>
+        <entryLink id="lg" name="L" type="selectionEntryGroup" targetId="sg">
+          <modifiers><modifier type="increment" value="1" field="gm"/></modifiers>
+        </entryLink>
+      </entryLinks>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let (ir, diags) = to_ir(&resolve(parse_raw(xml).unwrap()).unwrap());
+    let host = ir.entries.iter().find(|e| e.id == "host").unwrap();
+    let g = host.groups.iter().find(|g| g.id == "sg").expect("inlined group present");
+    let gc = g.constraints.iter().find(|c| c.id == "gm").expect("group constraint present");
+    assert!(gc.modifiers.as_ref().map(|m| !m.is_empty()).unwrap_or(false), "group limit modifier attached");
+    assert!(!diags.iter().any(|d| d.code == "entryLink.modifier_dropped"), "{:?}", diags);
+}
+
+#[test]
+fn grouplink_hidden_modifier_still_unsupported() {
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <sharedSelectionEntryGroups>
+    <selectionEntryGroup id="sg" name="Loadout">
+      <constraints><constraint id="gm" type="max" value="1" field="selections" scope="self"/></constraints>
+      <selectionEntries><selectionEntry id="w" name="W" type="upgrade"/></selectionEntries>
+    </selectionEntryGroup>
+  </sharedSelectionEntryGroups>
+  <selectionEntries>
+    <selectionEntry id="host" name="Host" type="unit">
+      <entryLinks>
+        <entryLink id="lg" name="L" type="selectionEntryGroup" targetId="sg">
+          <modifiers><modifier type="set" value="true" field="hidden"/></modifiers>
+        </entryLink>
+      </entryLinks>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    // entryLink.group_hidden_unsupported is a resolve-stage diagnostic (emitted
+    // in resolve/links.rs, before to_ir ever sees the catalogue), so it must be
+    // captured via resolve_with_diags — bare resolve() discards it.
+    let mut diags = Vec::new();
+    let resolved = resolve_with_diags(parse_raw(xml).unwrap(), &mut diags).unwrap();
+    let (_ir, ir_diags) = to_ir(&resolved);
+    diags.extend(ir_diags);
+    assert!(diags.iter().any(|d| d.code == "entryLink.group_hidden_unsupported"), "{:?}", diags);
 }
