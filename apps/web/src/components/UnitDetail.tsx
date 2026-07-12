@@ -1,6 +1,7 @@
 import type { IrCatalogue, IrGroup, Roster } from "@muster/domain";
 import { catalogueEntry } from "@muster/roster";
 import { SelectionNode } from "./SelectionNode";
+import { Datasheet, UnitStatline } from "./Datasheet";
 
 export function UnitDetail({
   roster, catalogue, selectedUnitId, onBack, onAddOption, onToggleGroupMember, onRemove, onSetCount,
@@ -31,11 +32,13 @@ export function UnitDetail({
           {keywords.map((k) => <span key={k} className="kw">{k}</span>)}
         </div>
       )}
+      <UnitStatline catalogue={catalogue} selection={sel} />
       <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
         <SelectionNode roster={roster} selection={sel} catalogue={catalogue} depth={0}
           onAddOption={onAddOption} onToggleGroupMember={onToggleGroupMember}
           onRemove={onRemove} onSetCount={onSetCount} />
       </ul>
+      <Datasheet catalogue={catalogue} selection={sel} />
     </section>
   );
 }
