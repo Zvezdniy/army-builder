@@ -195,6 +195,21 @@ fn resolve_group(group: &RawGroup, symbols: &SymbolTable, path: &mut HashSet<Str
     for link in &group.entry_links {
         resolve_link(link, symbols, path, budget, diags, depth, &mut children, &mut groups)?;
     }
+    // A group's `defaultSelectionEntryId` may name one of its `<entryLink>`s by the
+    // LINK's own id, but link members are inlined under their TARGET id (that is
+    // what map_group emits as memberEntryIds and what lands in children). Remap the
+    // default from link id to target id so it matches a real member; a direct
+    // (non-link) member default already equals the member's entry id (no-op). Done
+    // here while entry_links are still available (cleared just below).
+    if !out.default_selection_entry_id.is_empty() {
+        if let Some(link) = group
+            .entry_links
+            .iter()
+            .find(|l| l.id == out.default_selection_entry_id)
+        {
+            out.default_selection_entry_id = link.target_id.clone();
+        }
+    }
     out.entries = children;
     out.groups = groups;
     out.entry_links = Vec::new();
@@ -307,6 +322,70 @@ mod tests {
             ..Default::default()
         };
         assert!(matches!(resolve_with_caps(cat, 1000, 10_000, &mut Vec::new()), Err(ParseError::ResolvedTooLarge(_))));
+    }
+
+    #[test]
+    fn group_default_link_id_is_remapped_to_target_id() {
+        // A group whose defaultSelectionEntryId names an <entryLink> by the LINK id;
+        // the link targets member "m.real". After resolve, the group's default must
+        // point at the target id (the id the member is inlined under), not the link id.
+        let member = entry("m.real", vec![]);
+        let mut g0 = RawGroup {
+            id: "g0".into(),
+            name: "Weapon".into(),
+            default_selection_entry_id: "lnk1".into(),
+            ..Default::default()
+        };
+        g0.entry_links.push(RawEntryLink {
+            id: "lnk1".into(),
+            target_id: "m.real".into(),
+            ..Default::default()
+        });
+        let owner = RawEntry {
+            id: "owner".into(),
+            entry_type: "unit".into(),
+            entry_links: vec![group_link("g0")],
+            ..Default::default()
+        };
+        let cat = RawCatalogue {
+            id: "c".into(),
+            entries: vec![owner],
+            shared_groups: vec![g0],
+            shared_entries: vec![member],
+            ..Default::default()
+        };
+        let resolved = resolve(cat).unwrap();
+        let owner = resolved.entries.iter().find(|e| e.id == "owner").unwrap();
+        let g = &owner.groups[0];
+        assert_eq!(g.default_selection_entry_id, "m.real", "link-id default remapped to target id");
+        assert!(g.entries.iter().any(|m| m.id == "m.real"), "member inlined under target id");
+    }
+
+    #[test]
+    fn group_default_direct_member_id_is_unchanged() {
+        // defaultSelectionEntryId names a DIRECT entry member by its own id → no remap.
+        let mut g0 = RawGroup {
+            id: "g0".into(),
+            name: "Weapon".into(),
+            default_selection_entry_id: "m0".into(),
+            ..Default::default()
+        };
+        g0.entries.push(entry("m0", vec![]));
+        let owner = RawEntry {
+            id: "owner".into(),
+            entry_type: "unit".into(),
+            entry_links: vec![group_link("g0")],
+            ..Default::default()
+        };
+        let cat = RawCatalogue {
+            id: "c".into(),
+            entries: vec![owner],
+            shared_groups: vec![g0],
+            ..Default::default()
+        };
+        let resolved = resolve(cat).unwrap();
+        let g = &resolved.entries.iter().find(|e| e.id == "owner").unwrap().groups[0];
+        assert_eq!(g.default_selection_entry_id, "m0", "direct member default is a no-op");
     }
 
     #[test]

@@ -519,6 +519,33 @@ fn group_with_default_emits_default_member_entry_id() {
 }
 
 #[test]
+fn group_default_none_sentinel_is_treated_as_absent() {
+    // BattleScribe uses defaultSelectionEntryId="none" to mean "no default".
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <selectionEntries>
+    <selectionEntry id="e.u" name="Unit" type="unit">
+      <selectionEntryGroups>
+        <selectionEntryGroup id="g" name="Loadout" defaultSelectionEntryId="none">
+          <constraints>
+            <constraint id="g.max" type="max" value="1" field="selections" scope="parent"/>
+          </constraints>
+          <selectionEntries>
+            <selectionEntry id="e.x" name="X" type="upgrade"/>
+          </selectionEntries>
+        </selectionEntryGroup>
+      </selectionEntryGroups>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let raw = resolve(parse_raw(xml).unwrap()).unwrap();
+    let (ir, _diags) = to_ir(&raw);
+    let g = ir.entries[0].groups.iter().find(|g| g.id == "g").unwrap();
+    assert_eq!(g.default_member_entry_id, None, "\"none\" sentinel means no default");
+}
+
+#[test]
 fn group_without_default_omits_default_member_entry_id() {
     let xml = br#"<?xml version="1.0" encoding="utf-8"?>
 <catalogue id="c" name="C" revision="1" gameSystemId="gs"

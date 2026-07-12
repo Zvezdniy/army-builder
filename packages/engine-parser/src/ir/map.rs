@@ -216,7 +216,10 @@ fn map_group(g: &RawGroup, cat: &RawCatalogue, diags: &mut Vec<Diagnostic>) -> O
     if constraints.is_empty() {
         return None;
     }
-    let default_member_entry_id = (!g.default_selection_entry_id.is_empty())
+    // BattleScribe writes `defaultSelectionEntryId="none"` to mean "no default"; treat
+    // that sentinel (and empty) as absent so downstream never seeds a non-member id.
+    let default_member_entry_id = (!g.default_selection_entry_id.is_empty()
+        && g.default_selection_entry_id != "none")
         .then(|| g.default_selection_entry_id.clone());
     Some(IrGroup {
         id: g.id.clone(),

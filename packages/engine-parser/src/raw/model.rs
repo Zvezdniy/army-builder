@@ -44,7 +44,7 @@ pub struct RawEntry {
 }
 #[derive(Debug, Default, Clone)] pub struct RawCost { pub type_id: String, pub value: f64 }
 #[derive(Debug, Default, Clone)] pub struct RawCategoryLink { pub target_id: String, pub primary: bool, pub constraints: Vec<RawConstraint> }
-#[derive(Debug, Default, Clone)] pub struct RawEntryLink { pub target_id: String, pub link_type: String, pub hidden: bool, pub modifiers: Vec<RawModifier> }
+#[derive(Debug, Default, Clone)] pub struct RawEntryLink { pub id: String, pub target_id: String, pub link_type: String, pub hidden: bool, pub modifiers: Vec<RawModifier> }
 #[derive(Debug, Default, Clone)] pub struct RawForce { pub id: String, pub name: String, pub constraints: Vec<RawConstraint>, pub category_links: Vec<RawCategoryLink> }
 #[derive(Debug, Default, Clone)] pub struct RawCatalogueLink { pub target_id: String, pub import_root_entries: bool }
 
