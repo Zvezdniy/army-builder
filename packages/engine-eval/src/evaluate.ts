@@ -5,6 +5,7 @@ import { totalCost } from "./cost";
 import { resolveCosts } from "./resolve";
 import { checkConstraint } from "./constraints";
 import { checkGroupConstraint } from "./groups";
+import { targetNamer } from "./names";
 import { nodeHiddenByState } from "./visibility";
 import { validationIssues } from "./validation";
 
@@ -12,6 +13,7 @@ export function evaluate(roster: Roster, catalogue: IrCatalogue): ValidationResu
   const state = buildState(roster, catalogue);
   resolveCategories(state);
   const { costOf, converged } = resolveCosts(state);
+  const nameOf = targetNamer(catalogue);
   const raw: Issue[] = [];
 
   const totalPoints = totalCost(state, costOf);
@@ -35,13 +37,13 @@ export function evaluate(roster: Roster, catalogue: IrCatalogue): ValidationResu
   }
 
   for (const constraint of catalogue.forceConstraints) {
-    const issue = checkConstraint(constraint, null, state, costOf);
+    const issue = checkConstraint(constraint, null, state, costOf, nameOf);
     if (issue) raw.push(issue);
   }
   const seenRosterGroup = new Set<string>();
   for (const node of state.all) {
     for (const constraint of node.entry.constraints) {
-      const issue = checkConstraint(constraint, node, state, costOf);
+      const issue = checkConstraint(constraint, node, state, costOf, nameOf);
       if (issue) raw.push(issue);
     }
     for (const group of node.entry.groups ?? []) {
