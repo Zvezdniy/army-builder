@@ -630,6 +630,7 @@ fn read_entrylinks_into(
             Some(ev) => match ev.event {
                 Event::Empty(e) if e.local_name().as_ref() == b"entryLink" => {
                     dst.push(RawEntryLink {
+                        id: attr(&e, b"id").unwrap_or_default(),
                         target_id: attr(&e, b"targetId").unwrap_or_default(),
                         link_type: attr(&e, b"type").unwrap_or_default(),
                         hidden: attr_bool(&e, b"hidden"),
@@ -638,6 +639,7 @@ fn read_entrylinks_into(
                 }
                 Event::Start(e) if e.local_name().as_ref() == b"entryLink" => {
                     let mut link = RawEntryLink {
+                        id: attr(&e, b"id").unwrap_or_default(),
                         target_id: attr(&e, b"targetId").unwrap_or_default(),
                         link_type: attr(&e, b"type").unwrap_or_default(),
                         hidden: attr_bool(&e, b"hidden"),

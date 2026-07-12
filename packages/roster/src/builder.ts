@@ -271,25 +271,48 @@ function freshSelection(entryId: string): RosterSelection {
 function initialChildren(entry: IrEntry): RosterSelection[] {
   const kids: RosterSelection[] = [];
   const grouped = new Set((entry.groups ?? []).flatMap((g) => g.memberEntryIds));
+  const childById = new Map(entry.children.map((c) => [c.id, c]));
 
   for (const g of entry.groups ?? []) {
-    const min = groupBound(g, "min", 0);
-    const pick = g.defaultMemberEntryId ?? (min >= 1 ? g.memberEntryIds[0] : undefined);
-    if (pick !== undefined) kids.push(seedChild(entry, pick));
+    const pick = groupSeed(g, childById);
+    if (pick !== undefined) kids.push(seedChild(pick));
   }
   for (const child of entry.children) {
     if (grouped.has(child.id)) continue; // group members handled above
-    if (ownBound(child, "min", 0) >= 1) kids.push(seedChild(entry, child.id));
+    if (ownBound(child, "min", 0) >= 1) kids.push(seedChild(child));
   }
   return kids;
 }
 
-/** A fresh child selection for `entryId`, counted to that option's own min (>=1). */
-function seedChild(parent: IrEntry, entryId: string): RosterSelection {
-  const child = parent.children.find((c) => c.id === entryId);
-  const count = child ? Math.max(1, ownBound(child, "min", 0)) : 1;
-  const grandkids = child ? initialChildren(child) : [];
-  return { id: crypto.randomUUID(), entryId, count, selections: grandkids };
+/**
+ * Choose which member of a group to pre-seed, returning only an id that is a real
+ * materialized child of the entry. Prefer the declared default; if it is absent,
+ * the "no default" case, or doesn't resolve to a child (e.g. a dangling/cross-file
+ * link the parser could not inline), fall back to the first resolvable member when
+ * the group is required (min>=1); otherwise seed nothing. This keeps addUnit from
+ * ever injecting an unresolvable entryId that would crash evaluate().
+ */
+function groupSeed(g: IrGroup, childById: Map<string, IrEntry>): IrEntry | undefined {
+  // childById spans all of the entry's children; a group's default/members always
+  // name its own members, so resolving against the full child set is safe and any
+  // real child seeds without crashing.
+  if (g.defaultMemberEntryId !== undefined) {
+    const def = childById.get(g.defaultMemberEntryId);
+    if (def) return def;
+  }
+  if (groupBound(g, "min", 0) >= 1) {
+    for (const id of g.memberEntryIds) {
+      const m = childById.get(id);
+      if (m) return m;
+    }
+  }
+  return undefined;
+}
+
+/** A fresh child selection for a materialized child entry, counted to its own min (>=1). */
+function seedChild(child: IrEntry): RosterSelection {
+  const count = Math.max(1, ownBound(child, "min", 0));
+  return { id: crypto.randomUUID(), entryId: child.id, count, selections: initialChildren(child) };
 }
 
 function mapTree(

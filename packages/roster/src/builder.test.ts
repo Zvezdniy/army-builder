@@ -466,7 +466,11 @@ describe("addUnit prepopulates from defaults and mins", () => {
     expect(model?.count).toBe(2);
   });
 
-  it("seedChild falls back to count 1 with no grandkids when the picked default id is not in children", () => {
+  it("never seeds an unresolvable default; falls back to the first resolvable member", () => {
+    // A required group whose default id is not a materialized child (e.g. a
+    // dangling/cross-file link the parser could not inline). The old behavior
+    // seeded the ghost id verbatim, which then crashed evaluate() with
+    // "Unknown entryId". The guard must instead seed the first real member.
     const ghostCat: IrCatalogue = {
       ...defCat,
       entries: [{
@@ -478,8 +482,43 @@ describe("addUnit prepopulates from defaults and mins", () => {
       }],
     };
     const r = addUnit(createRoster(ghostCat, 2000), "u", ghostCat);
-    const seeded = r.selections[0]!.selections.find((s) => s.entryId === "ghost.id");
-    expect(seeded?.count).toBe(1);
-    expect(seeded?.selections).toEqual([]);
+    const kids = r.selections[0]!.selections.map((s) => s.entryId);
+    expect(kids).not.toContain("ghost.id"); // no unresolvable id injected
+    expect(kids).toContain("w.sword"); // fell back to the first resolvable member
+  });
+
+  it("seeds nothing when a required group has no resolvable member at all", () => {
+    // Required group whose default AND every member id are absent from children
+    // (e.g. all links dangled). No valid seed exists → seed nothing (no crash).
+    const allGhostCat: IrCatalogue = {
+      ...defCat,
+      entries: [{
+        ...defCat.entries[0]!,
+        children: [], // nothing materialized
+        groups: [
+          { id: "gw", name: "Weapon", memberEntryIds: ["ghost.a", "ghost.b"], defaultMemberEntryId: "ghost.a",
+            constraints: [{ id: "gw.min", type: "min", value: 1 }, { id: "gw.max", type: "max", value: 1 }] },
+        ],
+      }],
+    };
+    const r = addUnit(createRoster(allGhostCat, 2000), "u", allGhostCat);
+    expect(r.selections[0]!.selections).toEqual([]);
+  });
+
+  it("seeds nothing for an optional group whose default is unresolvable", () => {
+    const optGhostCat: IrCatalogue = {
+      ...defCat,
+      entries: [{
+        ...defCat.entries[0]!,
+        groups: [
+          { id: "gw", name: "Weapon", memberEntryIds: ["w.sword", "w.axe"], defaultMemberEntryId: "ghost.id",
+            constraints: [{ id: "gw.max", type: "max", value: 1 }] },
+        ],
+      }],
+    };
+    const r = addUnit(createRoster(optGhostCat, 2000), "u", optGhostCat);
+    const kids = r.selections[0]!.selections.map((s) => s.entryId);
+    expect(kids).not.toContain("ghost.id");
+    expect(kids).not.toContain("w.sword"); // optional + no valid default → seed nothing
   });
 });
