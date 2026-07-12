@@ -47,6 +47,34 @@ const roster = {
 
 const noop = () => {};
 
+// Same shape as catalogueWithoutGate, but the owner entry carries a `type`
+// so we can assert the display-only type badge in UnitConfig's self-row.
+const catalogueWithType = {
+  id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [], categoryNames: {},
+  entries: [
+    {
+      id: "e.u", name: "Unit", type: "unit", costs: [], categories: ["cat.u"], constraints: [],
+      children: [
+        { id: "e.opt", name: "Opt", costs: [], categories: [], constraints: [], children: [] },
+      ],
+    },
+  ],
+} as unknown as IrCatalogue;
+
+describe("UnitConfig entry type badge", () => {
+  it("shows the entry's type in the self-row when the entry has a type", () => {
+    render(<UnitConfig roster={roster} selection={roster.selections[0]!} catalogue={catalogueWithType}
+      onAddOption={noop} onToggleGroupMember={noop} onRemove={noop} onSetCount={noop} />);
+    expect(screen.getByText("unit")).toBeInTheDocument();
+  });
+
+  it("shows no type badge when the entry has no type", () => {
+    const { container } = render(<UnitConfig roster={roster} selection={roster.selections[0]!} catalogue={catalogueWithoutGate}
+      onAddOption={noop} onToggleGroupMember={noop} onRemove={noop} onSetCount={noop} />);
+    expect(container.querySelector(".uc-type")).toBeNull();
+  });
+});
+
 describe("UnitConfig hidden filtering (owner-scoped, via data)", () => {
   it("hides a free option whose gate is true in the owner's context", () => {
     render(<UnitConfig roster={roster} selection={roster.selections[0]!} catalogue={catalogueWithGate}

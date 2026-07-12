@@ -45,6 +45,7 @@ export function UnitConfig({
 
       {hasSelf && (
         <div className="uc-selfrow">
+          {entry?.type && <span className="uc-type">{entry.type}</span>}
           {control.kind === "stepper" && (
             <span className="uc-stepper">
               <button aria-label={`decrease ${selection.entryId}`}
