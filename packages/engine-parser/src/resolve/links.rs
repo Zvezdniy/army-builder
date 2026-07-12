@@ -362,6 +362,42 @@ mod tests {
     }
 
     #[test]
+    fn group_default_link_remaps_even_when_target_is_a_dangler() {
+        // Default names a link whose target is absent (another file). The link is
+        // dropped (diag), but the default is still remapped to the target id — the
+        // roster guard tolerates the now-absent member. Locks the remap contract.
+        let mut g0 = RawGroup {
+            id: "g0".into(),
+            name: "Weapon".into(),
+            default_selection_entry_id: "lnk1".into(),
+            ..Default::default()
+        };
+        g0.entry_links.push(RawEntryLink {
+            id: "lnk1".into(),
+            target_id: "absent.target".into(),
+            ..Default::default()
+        });
+        let owner = RawEntry {
+            id: "owner".into(),
+            entry_type: "unit".into(),
+            entry_links: vec![group_link("g0")],
+            ..Default::default()
+        };
+        let cat = RawCatalogue {
+            id: "c".into(),
+            entries: vec![owner],
+            shared_groups: vec![g0],
+            ..Default::default()
+        };
+        let mut diags = Vec::new();
+        let resolved = resolve_with_diags(cat, &mut diags).unwrap();
+        let g = &resolved.entries.iter().find(|e| e.id == "owner").unwrap().groups[0];
+        assert_eq!(g.default_selection_entry_id, "absent.target", "remap applies even for a dangling target");
+        assert!(g.entries.is_empty(), "dangling member is not inlined");
+        assert!(diags.iter().any(|d| d.code == "entryLink.unresolved"));
+    }
+
+    #[test]
     fn group_default_direct_member_id_is_unchanged() {
         // defaultSelectionEntryId names a DIRECT entry member by its own id → no remap.
         let mut g0 = RawGroup {

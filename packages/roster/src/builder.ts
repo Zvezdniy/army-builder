@@ -293,6 +293,9 @@ function initialChildren(entry: IrEntry): RosterSelection[] {
  * ever injecting an unresolvable entryId that would crash evaluate().
  */
 function groupSeed(g: IrGroup, childById: Map<string, IrEntry>): IrEntry | undefined {
+  // childById spans all of the entry's children; a group's default/members always
+  // name its own members, so resolving against the full child set is safe and any
+  // real child seeds without crashing.
   if (g.defaultMemberEntryId !== undefined) {
     const def = childById.get(g.defaultMemberEntryId);
     if (def) return def;
