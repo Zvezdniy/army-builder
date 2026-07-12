@@ -106,7 +106,7 @@ describe("IrGroup / IrGroupConstraint", () => {
       constraints: [{ id: "g.max", type: "max", value: 1 }],
     });
     expect(g.memberEntryIds).toEqual(["e.sword", "e.axe"]);
-    expect(g.constraints[0]).toEqual({ id: "g.max", type: "max", value: 1 });
+    expect(g.constraints[0]).toEqual({ id: "g.max", type: "max", value: 1, scope: "self" });
   });
 
   it("defaults memberEntryIds and constraints to empty arrays", () => {
@@ -145,5 +145,12 @@ describe("IrConstraint.scope", () => {
       const parsed = IrConstraint.parse({ id: "k", type: "max", value: 1, field: "selections", scope, targetType: "entry", targetId: "e.x" });
       expect(parsed.scope).toBe(scope);
     }
+  });
+});
+
+describe("IrGroupConstraint.scope", () => {
+  it("accepts roster scope and defaults to self", () => {
+    expect(IrGroupConstraint.parse({ id: "g", type: "max", value: 1, scope: "roster" }).scope).toBe("roster");
+    expect(IrGroupConstraint.parse({ id: "g", type: "max", value: 1 }).scope).toBe("self");
   });
 });

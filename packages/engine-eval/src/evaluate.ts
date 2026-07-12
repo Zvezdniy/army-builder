@@ -37,6 +37,7 @@ export function evaluate(roster: Roster, catalogue: IrCatalogue): ValidationResu
     const issue = checkConstraint(constraint, null, state, costOf);
     if (issue) raw.push(issue);
   }
+  const seenRosterGroup = new Set<string>();
   for (const node of state.all) {
     for (const constraint of node.entry.constraints) {
       const issue = checkConstraint(constraint, node, state, costOf);
@@ -44,7 +45,17 @@ export function evaluate(roster: Roster, catalogue: IrCatalogue): ValidationResu
     }
     for (const group of node.entry.groups ?? []) {
       for (const gc of group.constraints) {
-        const issue = checkGroupConstraint(gc, node, group);
+        if (gc.scope === "roster") {
+          // A shared group is inlined at N placements; a roster-wide limit is one
+          // army rule, so evaluate it once. The member set is part of the key so
+          // that two placements which somehow carry the same group+constraint id
+          // with DIVERGENT members are both evaluated rather than one silently
+          // dropped (mirrors symbols.ts's refusal to collapse divergent ids).
+          const key = `${group.id}:${gc.id}:${[...group.memberEntryIds].sort().join(",")}`;
+          if (seenRosterGroup.has(key)) continue;
+          seenRosterGroup.add(key);
+        }
+        const issue = checkGroupConstraint(gc, node, group, state);
         if (issue) raw.push(issue);
       }
     }

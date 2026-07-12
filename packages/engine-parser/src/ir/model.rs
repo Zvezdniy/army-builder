@@ -5,6 +5,10 @@ fn is_false(b: &bool) -> bool {
     !*b
 }
 
+fn is_self(s: &str) -> bool {
+    s == "self"
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IrCatalogue {
@@ -65,6 +69,8 @@ pub struct IrGroupConstraint {
     #[serde(rename = "type")]
     pub type_: String,
     pub value: f64,
+    #[serde(skip_serializing_if = "is_self")]
+    pub scope: String,
 }
 
 #[derive(Debug, Serialize)]
