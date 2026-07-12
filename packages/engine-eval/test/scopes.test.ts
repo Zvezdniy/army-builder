@@ -74,10 +74,10 @@ describe("aggregate", () => {
     expect(aggregate(special, c, state)).toBe(2);
   });
 
-  it("throws if self/parent scope is given a null node", () => {
+  it("resolves a self scope to 0 when given a null node (force level), never throws", () => {
     const { state } = setup();
     const c: IrConstraint = { ...base, type: "max", field: "selections", scope: "self", targetType: "category", targetId: "cat.special" };
-    expect(() => aggregate(null, c, state)).toThrow(/requires an owning node/i);
+    expect(aggregate(null, c, state)).toBe(0);
   });
 
   it("self scope with points field and includeChildSelections sums descendant points", () => {
@@ -161,16 +161,16 @@ describe("aggregate", () => {
     expect(aggregate(squad, c, state)).toBe(0);
   });
 
-  it("throws if root-entry scope is given a null node", () => {
+  it("resolves a root-entry scope to 0 when given a null node, never throws", () => {
     const { state } = setup();
     const c: IrCondition = { id: "c1", value: 0, includeChildSelections: false, comparator: "atLeast", field: "selections", scope: "root-entry", targetType: "category", targetId: "cat.special" };
-    expect(() => aggregate(null, c, state)).toThrow(/requires an owning node/i);
+    expect(aggregate(null, c, state)).toBe(0);
   });
 
-  it("throws if ancestor scope is given a null node", () => {
+  it("resolves an ancestor scope to 0 when given a null node, never throws", () => {
     const { state } = setup();
     const c: IrCondition = { id: "c1", value: 0, includeChildSelections: false, comparator: "atLeast", field: "selections", scope: "ancestor", targetType: "category", targetId: "cat.special" };
-    expect(() => aggregate(null, c, state)).toThrow(/requires an owning node/i);
+    expect(aggregate(null, c, state)).toBe(0);
   });
 });
 

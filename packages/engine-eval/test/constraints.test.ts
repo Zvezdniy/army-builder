@@ -131,4 +131,20 @@ describe("checkConstraint context/type scopes", () => {
       expect(checkConstraint(fc, null, state)).toBeNull();
     }
   });
+
+  it("does not throw when a force constraint's modifier gate uses a node-relative condition scope", () => {
+    // The constraint scope is force (node-independent, passes the guard), but its
+    // modifier's condition gate is node-relative. At force level (node null) that
+    // condition's aggregate must resolve to 0, not throw and abort evaluate().
+    const state = buildState(uRoster, buildSymbolTable(uCat));
+    const fc: IrConstraint = {
+      id: "fc.mod", type: "max", value: 5, field: "selections", scope: "roster",
+      targetType: "category", targetId: "cat.wpn", includeChildSelections: false,
+      modifiers: [{
+        id: "m", type: "increment", field: "fc.mod", value: 1,
+        conditions: [{ id: "cond", comparator: "atLeast", value: 1, field: "selections", scope: "self", targetType: "category", targetId: "cat.wpn", includeChildSelections: false }],
+      }],
+    } as unknown as IrConstraint;
+    expect(() => checkConstraint(fc, null, state)).not.toThrow();
+  });
 });

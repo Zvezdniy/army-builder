@@ -53,22 +53,27 @@ function scopeNodes(
     case "force":
     case "roster":
       return state.all;
+    // Node-relative scopes resolve to nothing without an owning node. This happens
+    // only at force level (evaluate checks forceConstraints with node === null),
+    // where a node-relative scope — on the constraint or on a modifier's condition
+    // gate — is meaningless. Returning [] (never throwing) keeps evaluate() robust
+    // against adversarial catalogues instead of aborting the whole validation.
     case "self":
-      if (!node) throw new Error(`Spec ${spec.id} (scope=self) requires an owning node`);
+      if (!node) return [];
       return subtree(node, spec.includeChildSelections);
     case "parent": {
-      if (!node) throw new Error(`Spec ${spec.id} (scope=parent) requires an owning node`);
+      if (!node) return [];
       const anchor = node.parent ?? node;
       return subtree(anchor, spec.includeChildSelections);
     }
     case "root-entry": {
-      if (!node) throw new Error(`Spec ${spec.id} (scope=root-entry) requires an owning node`);
+      if (!node) return [];
       let top = node;
       while (top.parent) top = top.parent;
       return subtree(top, spec.includeChildSelections);
     }
     case "ancestor": {
-      if (!node) throw new Error(`Spec ${spec.id} (scope=ancestor) requires an owning node`);
+      if (!node) return [];
       const acc: EvalNode[] = [];
       for (let a = node.parent; a; a = a.parent) acc.push(a);
       return acc;
