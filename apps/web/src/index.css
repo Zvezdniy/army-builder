@@ -178,6 +178,16 @@ section { background: var(--panel); border: 1px solid var(--line); border-radius
 /* Self-controls row: stepper / fixed badge / remove. */
 .uc-selfrow { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 
+.uc-type {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.6;
+  padding: 0.1em 0.4em;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+}
+
 /* Unified stepper: one bordered segment, − value + fused with no gaps. */
 .uc-stepper { display: inline-flex; align-items: stretch; background: var(--panel);
   border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }

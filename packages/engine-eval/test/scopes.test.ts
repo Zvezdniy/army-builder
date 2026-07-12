@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { IrCatalogue, IrCondition, IrConstraint, Roster } from "@muster/domain";
 import { buildSymbolTable, buildState, aggregate } from "@muster/engine-eval";
-import type { EvalNode } from "@muster/engine-eval";
+import type { EvalNode, EvalState } from "@muster/engine-eval";
 
 // Catalogue: two HQ, three Heavy units; a squad with 2 special-weapon options.
 const cat: IrCatalogue = {
@@ -171,5 +171,105 @@ describe("aggregate", () => {
     const { state } = setup();
     const c: IrCondition = { id: "c1", value: 0, includeChildSelections: false, comparator: "atLeast", field: "selections", scope: "ancestor", targetType: "category", targetId: "cat.special" };
     expect(() => aggregate(null, c, state)).toThrow(/requires an owning node/i);
+  });
+});
+
+function node(id: string, type: string | undefined, children: EvalNode[] = []): EvalNode {
+  const n: EvalNode = {
+    selectionId: `sel:${id}`,
+    entry: { id, name: id, costs: [], categories: [], constraints: [], children: [], type } as any,
+    count: 1, multiplier: 1, effectiveCount: 1, categories: [id], parent: null, children,
+  };
+  for (const c of children) c.parent = n;
+  return n;
+}
+
+describe("aggregate type scopes (unit/upgrade/model/model-or-unit)", () => {
+  it("unit scope aggregates the nearest unit ancestor's subtree", () => {
+    const leaf = node("cat.x", "model");
+    const mid = node("mid", "upgrade", [leaf]);
+    const unit = node("u", "unit", [mid]);
+    void unit;
+    const state = { all: [unit, mid, leaf] } as EvalState;
+    const spec: IrCondition = {
+      id: "c1", value: 0, comparator: "atLeast", field: "selections",
+      scope: "unit", targetType: "entry", targetId: "cat.x", includeChildSelections: true,
+    };
+    expect(aggregate(leaf, spec, state)).toBe(1);
+  });
+
+  it("unit scope self-match without includeChildSelections", () => {
+    const unit = node("u", "unit");
+    const state = { all: [unit] } as EvalState;
+    const spec: IrCondition = {
+      id: "c1", value: 0, comparator: "atLeast", field: "selections",
+      scope: "unit", targetType: "entry", targetId: "u", includeChildSelections: false,
+    };
+    expect(aggregate(unit, spec, state)).toBe(1);
+  });
+
+  it("upgrade scope self-match without includeChildSelections", () => {
+    const upgrade = node("up", "upgrade");
+    const state = { all: [upgrade] } as EvalState;
+    const spec: IrCondition = {
+      id: "c1", value: 0, comparator: "atLeast", field: "selections",
+      scope: "upgrade", targetType: "entry", targetId: "up", includeChildSelections: false,
+    };
+    expect(aggregate(upgrade, spec, state)).toBe(1);
+  });
+
+  it("model-or-unit scope matches a model ancestor", () => {
+    const leaf = node("leaf", "upgrade");
+    const model = node("m", "model", [leaf]);
+    const state = { all: [model, leaf] } as EvalState;
+    const spec: IrCondition = {
+      id: "c1", value: 0, comparator: "atLeast", field: "selections",
+      scope: "model-or-unit", targetType: "entry", targetId: "m", includeChildSelections: false,
+    };
+    expect(aggregate(leaf, spec, state)).toBe(1);
+  });
+
+  it("model-or-unit scope matches a unit ancestor", () => {
+    const leaf = node("leaf", "upgrade");
+    const unit = node("u", "unit", [leaf]);
+    const state = { all: [unit, leaf] } as EvalState;
+    const spec: IrCondition = {
+      id: "c1", value: 0, comparator: "atLeast", field: "selections",
+      scope: "model-or-unit", targetType: "entry", targetId: "u", includeChildSelections: false,
+    };
+    expect(aggregate(leaf, spec, state)).toBe(1);
+  });
+
+  it("returns 0 when no ancestor of the required type exists", () => {
+    const leaf = node("leaf", "upgrade");
+    const state = { all: [leaf] } as EvalState;
+    const spec: IrCondition = {
+      id: "c1", value: 0, comparator: "atLeast", field: "selections",
+      scope: "unit", targetType: "entry", targetId: "leaf", includeChildSelections: false,
+    };
+    expect(aggregate(leaf, spec, state)).toBe(0);
+  });
+
+  it("returns empty array (0) when the owning node is null", () => {
+    const state = { all: [] } as unknown as EvalState;
+    const spec: IrCondition = {
+      id: "c1", value: 0, comparator: "atLeast", field: "selections",
+      scope: "model", targetType: "entry", targetId: "x", includeChildSelections: false,
+    };
+    expect(aggregate(null, spec, state)).toBe(0);
+  });
+
+  it("model scope aggregates the nearest model ancestor's subtree", () => {
+    // model > wargear(upgrade) > cat.x(upgrade); the plain `model` predicate must
+    // resolve the model anchor and count the target in its subtree.
+    const target = node("cat.x", "upgrade");
+    const model = node("m", "model", [node("wargear", "upgrade", [target])]);
+    const leaf = model.children[0]!.children[0]!;
+    const state = { all: [model] } as EvalState;
+    const spec: IrCondition = {
+      id: "c1", value: 1, comparator: "atLeast", field: "selections",
+      scope: "model", targetType: "entry", targetId: "cat.x", includeChildSelections: true,
+    };
+    expect(aggregate(leaf, spec, state)).toBe(1);
   });
 });

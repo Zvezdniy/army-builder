@@ -5,7 +5,17 @@ import { nodePoints, type CostFn } from "./cost";
 export interface AggregateSpec {
   id: string;
   field: "selections" | "points";
-  scope: "self" | "parent" | "force" | "roster" | "root-entry" | "ancestor";
+  scope:
+    | "self"
+    | "parent"
+    | "force"
+    | "roster"
+    | "root-entry"
+    | "ancestor"
+    | "unit"
+    | "upgrade"
+    | "model"
+    | "model-or-unit";
   targetType: "category" | "entry";
   targetId: string;
   includeChildSelections: boolean;
@@ -20,6 +30,13 @@ function subtree(node: EvalNode, includeChildren: boolean): EvalNode[] {
   };
   walk(node);
   return acc;
+}
+
+function nearestByType(node: EvalNode, pred: (t: string | undefined) => boolean): EvalNode | null {
+  for (let n: EvalNode | null = node; n; n = n.parent) {
+    if (pred(n.entry.type)) return n;
+  }
+  return null;
 }
 
 function scopeNodes(
@@ -53,6 +70,18 @@ function scopeNodes(
       const acc: EvalNode[] = [];
       for (let a = node.parent; a; a = a.parent) acc.push(a);
       return acc;
+    }
+    case "unit":
+    case "upgrade":
+    case "model":
+    case "model-or-unit": {
+      if (!node) return [];
+      const pred =
+        spec.scope === "model-or-unit"
+          ? (t: string | undefined) => t === "model" || t === "unit"
+          : (t: string | undefined) => t === spec.scope;
+      const anchor = nearestByType(node, pred);
+      return anchor ? subtree(anchor, spec.includeChildSelections) : [];
     }
   }
 }

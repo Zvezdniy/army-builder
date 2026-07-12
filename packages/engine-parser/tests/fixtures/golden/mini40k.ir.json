@@ -7,6 +7,7 @@
     {
       "id": "e.captain",
       "name": "Captain",
+      "type": "model",
       "costs": [
         {
           "name": "points",
@@ -20,6 +21,7 @@
         {
           "id": "e.captain.sword",
           "name": "Power Sword",
+          "type": "upgrade",
           "costs": [
             {
               "name": "points",
@@ -62,6 +64,7 @@
         {
           "id": "e.captain.axe",
           "name": "Power Axe",
+          "type": "upgrade",
           "costs": [
             {
               "name": "points",
@@ -165,6 +168,7 @@
     {
       "id": "e.squad",
       "name": "Battle Squad",
+      "type": "unit",
       "categories": [
         "cat.troops"
       ],
@@ -172,6 +176,7 @@
         {
           "id": "squad-body",
           "name": "Battle Squad",
+          "type": "unit",
           "costs": [
             {
               "name": "points",
@@ -233,6 +238,7 @@
             {
               "id": "squad-body.model",
               "name": "Trooper",
+              "type": "model",
               "costs": [
                 {
                   "name": "points",

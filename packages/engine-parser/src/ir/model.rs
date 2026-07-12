@@ -26,6 +26,8 @@ pub struct IrCatalogue {
 pub struct IrEntry {
     pub id: String,
     pub name: String,
+    #[serde(rename = "type", skip_serializing_if = "Option::is_none")]
+    pub entry_type: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub costs: Vec<IrCost>,
     #[serde(skip_serializing_if = "Vec::is_empty")]

@@ -55,9 +55,8 @@ impl<'a> SafeXmlReader<'a> {
             .reader
             .read_event_into(&mut self.buf)
             .map_err(|e| ParseError::MalformedXml(e.to_string()))?;
-        match &ev {
-            Event::DocType(_) => return Err(ParseError::DtdForbidden),
-            _ => {}
+        if let Event::DocType(_) = &ev {
+            return Err(ParseError::DtdForbidden);
         }
         self.nodes += 1;
         if self.nodes > self.max_nodes {

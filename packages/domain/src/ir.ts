@@ -56,6 +56,7 @@ export type IrProfile = z.infer<typeof IrProfile>;
 export interface IrEntry {
   id: string;
   name: string;
+  type?: "unit" | "upgrade" | "model";
   costs: IrCost[];
   categories: string[];
   constraints: IrConstraint[];
@@ -71,6 +72,7 @@ export const IrEntry: z.ZodType<IrEntry, z.ZodTypeDef, unknown> = z.lazy(() =>
   z.object({
     id: z.string(),
     name: z.string(),
+    type: z.enum(["unit", "upgrade", "model"]).optional(),
     costs: z.array(IrCost).default([]),
     categories: z.array(z.string()).default([]),
     constraints: z.array(IrConstraint).default([]),

@@ -13,11 +13,6 @@ proptest! {
     #[test]
     fn xml_reader_never_panics(bytes in proptest::collection::vec(any::<u8>(), 0..8192)) {
         let mut r = engine_parser::xml::SafeXmlReader::from_bytes(&bytes);
-        loop {
-            match r.read_event() {
-                Ok(Some(_)) => continue,
-                _ => break,
-            }
-        }
+        while let Ok(Some(_)) = r.read_event() {}
     }
 }

@@ -57,4 +57,11 @@ describe("IrConditionGroup", () => {
       expect(c.scope).toBe(scope);
     }
   });
+
+  it("accepts type-based scopes unit/upgrade/model/model-or-unit", () => {
+    for (const scope of ["unit", "upgrade", "model", "model-or-unit"] as const) {
+      const c = IrCondition.parse({ id: "c", comparator: "atLeast", value: 1, field: "selections", scope, targetType: "entry", targetId: "e.x" });
+      expect(c.scope).toBe(scope);
+    }
+  });
 });
