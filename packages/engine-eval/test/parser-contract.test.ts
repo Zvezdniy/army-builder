@@ -68,3 +68,59 @@ describe("parser IR contract", () => {
     expect(issue?.code).toBe("group.max");
   });
 });
+
+describe("parser IR contract — conditional group limit", () => {
+  // Mirrors the parser's serialized shape for a group max=1 whose limit carries
+  // an increment-by-1 modifier gated by "unit has >=1 e.sgt". Validated by Zod,
+  // then evaluated — proving parser output → domain → engine enforcement.
+  const shaped = {
+    id: "c", name: "C", gameSystemId: "gs", revision: 1,
+    entries: [{
+      id: "e.captain", name: "Captain", type: "unit",
+      costs: [{ name: "points", value: 90 }], categories: [], constraints: [],
+      children: [
+        { id: "e.sword", name: "Sword", costs: [], categories: [], constraints: [], children: [], groups: [] },
+        { id: "e.axe", name: "Axe", costs: [], categories: [], constraints: [], children: [], groups: [] },
+        { id: "e.sgt", name: "Sergeant", costs: [], categories: [], constraints: [], children: [], groups: [] },
+      ],
+      groups: [{
+        id: "g.wargear", name: "Wargear", memberEntryIds: ["e.sword", "e.axe"],
+        constraints: [{
+          id: "g.wargear.max", type: "max", value: 1, scope: "self",
+          modifiers: [{
+            id: "mod.g.wargear.0", type: "increment", value: 1,
+            conditions: [{
+              comparator: "atLeast", value: 1, field: "selections", scope: "self",
+              targetType: "entry", targetId: "e.sgt", includeChildSelections: true,
+              id: "cond.atLeast.e.sgt",
+            }],
+          }],
+        }],
+      }],
+    }],
+  };
+
+  const roster = (members: string[]): Roster => ({
+    id: "r", name: "R", gameSystemId: "gs", catalogueId: "c", catalogueRevision: 1, pointsLimit: 2000,
+    selections: [{
+      id: "cap", entryId: "e.captain", count: 1,
+      selections: members.map((m, i) => ({ id: `m${i}`, entryId: m, count: 1, selections: [] })),
+    }],
+  });
+
+  it("validates against the domain schema", () => {
+    const parsed = IrCatalogue.safeParse(shaped);
+    if (!parsed.success) console.error(parsed.error);
+    expect(parsed.success).toBe(true);
+  });
+
+  it("enforces base max when the gate is absent, relaxes it when present", () => {
+    const cat = IrCatalogue.parse(shaped);
+    const withoutSgt = evaluate(roster(["e.sword", "e.axe"]), cat);
+    expect(withoutSgt.issues.some((i) => i.constraintId === "g.wargear.max")).toBe(true);
+
+    const withSgt = evaluate(roster(["e.sword", "e.axe", "e.sgt"]), cat);
+    expect(withSgt.issues.some((i) => i.constraintId === "g.wargear.max")).toBe(false);
+    expect(withSgt.valid).toBe(true);
+  });
+});
