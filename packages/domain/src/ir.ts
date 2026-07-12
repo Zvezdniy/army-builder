@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { IrModifier } from "./modifiers";
 import { VisibilityModifier } from "./visibility";
+import { IrValidationRule } from "./validation-rules";
 
 export const IrCost = z.object({
   name: z.string(),
@@ -67,6 +68,7 @@ export interface IrEntry {
   profiles?: IrProfile[];
   hidden?: boolean;
   visibilityModifiers?: VisibilityModifier[];
+  validationRules?: IrValidationRule[];
 }
 // Use `unknown` for the input generic because `.default([])` makes those fields optional in input,
 // not matching the strict required-field interface. Output type stays `IrEntry`.
@@ -83,6 +85,7 @@ export const IrEntry: z.ZodType<IrEntry, z.ZodTypeDef, unknown> = z.lazy(() =>
     profiles: z.array(IrProfile).default([]),
     hidden: z.boolean().default(false),
     visibilityModifiers: z.array(VisibilityModifier).default([]),
+    validationRules: z.array(IrValidationRule).default([]),
   }),
 );
 
