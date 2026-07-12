@@ -119,4 +119,16 @@ describe("checkConstraint context/type scopes", () => {
     const rosterMin: IrConstraint = { id: "k2", type: "min", value: 1, field: "selections", scope: "roster", targetType: "category", targetId: "cat.absent", includeChildSelections: false };
     expect(checkConstraint(rosterMin, null, state)?.code).toBe("constraint.min");
   });
+
+  it("skips a node-relative scope at force level (node null) instead of throwing", () => {
+    // A force-level constraint (node === null) carrying a scope that needs an owning
+    // node would make scopeNodes throw and abort evaluate(). Each such scope must be
+    // skipped (return null), never crash.
+    const state = buildState(uRoster, buildSymbolTable(uCat));
+    for (const scope of ["self", "parent", "root-entry", "ancestor", "unit", "model", "upgrade", "model-or-unit"] as const) {
+      const fc: IrConstraint = { id: `fc.${scope}`, type: "max", value: 1, field: "selections", scope, targetType: "category", targetId: "cat.wpn", includeChildSelections: false };
+      expect(() => checkConstraint(fc, null, state)).not.toThrow();
+      expect(checkConstraint(fc, null, state)).toBeNull();
+    }
+  });
 });
