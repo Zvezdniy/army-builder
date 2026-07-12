@@ -227,10 +227,18 @@ describe("parser IR contract — conditional category membership", () => {
   });
 });
 
-describe("parser IR contract — per-placement link cost modifier", () => {
-  // Mirrors the parser output after routing a link's cost modifier onto the
-  // inlined instance: unit A's copy of the shared wargear is discounted by 2,
-  // unit B's copy is not. Proves per-placement pricing evaluates end-to-end.
+describe("parser IR contract — cost modifier shape from an inlined link", () => {
+  // Two structurally-distinct entries — same name ("Wargear"), different ids —
+  // one carrying a costs[].modifiers decrement, one without. This is the exact
+  // wire shape the parser emits when it routes an entryLink's cost modifier
+  // onto an inlined instance (Task 1). It proves that shape validates via
+  // IrCatalogue.parse and is applied end-to-end by evaluate()'s cost
+  // resolution — it does NOT prove per-placement isolation of a single shared
+  // entry inlined at two sites under different modifiers. That case (same id,
+  // divergent placements) is currently unreachable: buildSymbolTable
+  // (packages/engine-eval/src/symbols.ts) throws "Duplicate entry id" for
+  // same-id entries that aren't byte-identical, so it can't be evaluated until
+  // that keystone limitation is addressed.
   const shaped = {
     id: "c", name: "C", gameSystemId: "gs", revision: 1,
     entries: [
