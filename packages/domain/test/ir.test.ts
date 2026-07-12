@@ -66,6 +66,19 @@ describe("IR schemas", () => {
   });
 });
 
+describe("IrEntry.type", () => {
+  it("round-trips each known type value", () => {
+    for (const t of ["unit", "upgrade", "model"] as const) {
+      const e = IrEntry.parse({ id: "e", name: "E", type: t });
+      expect(e.type).toBe(t);
+    }
+  });
+  it("defaults to undefined when type is absent", () => {
+    const e = IrEntry.parse({ id: "e", name: "E" });
+    expect(e.type).toBeUndefined();
+  });
+});
+
 describe("IrProfile / IrCharacteristic", () => {
   it("parses an entry carrying profiles", () => {
     const entry = IrEntry.parse({
