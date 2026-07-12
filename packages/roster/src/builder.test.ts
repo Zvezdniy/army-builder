@@ -3,7 +3,7 @@ import type { IrCatalogue, IrGroup } from "@muster/domain";
 import {
   createRoster, availableUnits, addUnit, addOption, setCount, remove, optionsFor,
   selectedGroupMembers, toggleGroupMember, groupControl, optionControl, catalogueEntry,
-  unitLoadout,
+  unitLoadout, availableDetachments, selectedDetachment, setDetachment, setPointsLimit,
 } from "./index";
 
 const catalogue: IrCatalogue = {
@@ -520,5 +520,72 @@ describe("addUnit prepopulates from defaults and mins", () => {
     const kids = r.selections[0]!.selections.map((s) => s.entryId);
     expect(kids).not.toContain("ghost.id");
     expect(kids).not.toContain("w.sword"); // optional + no valid default → seed nothing
+  });
+});
+
+const detCat: IrCatalogue = {
+  id: "cat", name: "Cat", gameSystemId: "gs", revision: 1, forceConstraints: [], categoryNames: {},
+  entries: [
+    { id: "e.captain", name: "Captain", type: "unit", costs: [], categories: ["cat.hq"], constraints: [], children: [] },
+    {
+      id: "e.det", name: "Detachment", type: "upgrade", costs: [], categories: [], constraints: [],
+      children: [
+        { id: "e.gladius", name: "Gladius Task Force", type: "upgrade", costs: [], categories: [], constraints: [], children: [] },
+        { id: "e.anvil", name: "Anvil Siege Force", type: "upgrade", costs: [], categories: [], constraints: [], children: [] },
+      ],
+    },
+  ],
+};
+
+describe("detachment + points-limit API", () => {
+  it("availableDetachments lists the root Detachment's option children", () => {
+    expect(availableDetachments(detCat).map((d) => d.id)).toEqual(["e.gladius", "e.anvil"]);
+  });
+
+  it("availableDetachments is empty when the catalogue models no detachment", () => {
+    expect(availableDetachments(catalogue)).toEqual([]);
+  });
+
+  it("setDetachment adds one Detachment selection holding the chosen option", () => {
+    const r = setDetachment(createRoster(detCat, 2000), "e.gladius", detCat);
+    const roots = r.selections.filter((s) => s.entryId === "e.det");
+    expect(roots).toHaveLength(1);
+    expect(roots[0]!.selections.map((s) => s.entryId)).toEqual(["e.gladius"]);
+    expect(selectedDetachment(r, detCat)).toBe("e.gladius");
+  });
+
+  it("setDetachment swaps the option without leaving a duplicate", () => {
+    let r = setDetachment(createRoster(detCat, 2000), "e.gladius", detCat);
+    r = setDetachment(r, "e.anvil", detCat);
+    expect(r.selections.filter((s) => s.entryId === "e.det")).toHaveLength(1);
+    expect(selectedDetachment(r, detCat)).toBe("e.anvil");
+  });
+
+  it("setDetachment on an option id absent from the catalogue still records the choice", () => {
+    const r = setDetachment(createRoster(detCat, 2000), "e.unknown", detCat);
+    expect(selectedDetachment(r, detCat)).toBe("e.unknown");
+  });
+
+  it("setDetachment is a no-op when the catalogue models no detachment", () => {
+    const r = createRoster(catalogue, 2000);
+    expect(setDetachment(r, "whatever", catalogue)).toBe(r);
+  });
+
+  it("selectedDetachment is undefined before any choice", () => {
+    expect(selectedDetachment(createRoster(detCat, 2000), detCat)).toBeUndefined();
+  });
+
+  it("selectedDetachment is undefined when the catalogue models no detachment", () => {
+    expect(selectedDetachment(createRoster(catalogue, 2000), catalogue)).toBeUndefined();
+  });
+
+  it("selectedDetachment is undefined when the Detachment selection holds no option", () => {
+    const base = createRoster(detCat, 2000);
+    const r = { ...base, selections: [{ id: "x", entryId: "e.det", count: 1, selections: [] }] };
+    expect(selectedDetachment(r, detCat)).toBeUndefined();
+  });
+
+  it("setPointsLimit changes the army's points limit", () => {
+    expect(setPointsLimit(createRoster(detCat, 2000), 1000).pointsLimit).toBe(1000);
   });
 });

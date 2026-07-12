@@ -47,6 +47,50 @@ export function remove(roster: Roster, selectionId: string): Roster {
   return { ...roster, selections: removeTree(roster.selections, selectionId) };
 }
 
+/**
+ * The root "Detachment" choice entry, if this catalogue models detachments. It is a
+ * top-level `upgrade` entry named "Detachment" whose children are the detachment options
+ * (matched-play requires exactly one). Absent in catalogues without detachments.
+ */
+function detachmentRoot(catalogue: IrCatalogue): IrEntry | undefined {
+  return catalogue.entries.find((e) => e.name === "Detachment" && e.type === "upgrade");
+}
+
+/** The detachment options available in this catalogue (empty if it models none). */
+export function availableDetachments(catalogue: IrCatalogue): IrEntry[] {
+  return detachmentRoot(catalogue)?.children ?? [];
+}
+
+/** The chosen detachment option's entryId, or undefined if none is selected. */
+export function selectedDetachment(roster: Roster, catalogue: IrCatalogue): string | undefined {
+  const root = detachmentRoot(catalogue);
+  if (!root) return undefined;
+  return roster.selections.find((s) => s.entryId === root.id)?.selections[0]?.entryId;
+}
+
+/**
+ * Set (or replace) the army's detachment: ensure exactly one "Detachment" root selection
+ * holding the single chosen option. Idempotent per option; changing detachment swaps the
+ * option without leaving a duplicate. The option is stored as a real roster selection so
+ * roster-scoped enhancement gates count it. No-op if the catalogue models no detachment.
+ */
+export function setDetachment(roster: Roster, detachmentEntryId: string, catalogue: IrCatalogue): Roster {
+  const root = detachmentRoot(catalogue);
+  if (!root) return roster;
+  const optionEntry = catalogueEntry(catalogue, detachmentEntryId);
+  const optionSel: RosterSelection = optionEntry
+    ? { ...freshSelection(detachmentEntryId), selections: initialChildren(optionEntry) }
+    : freshSelection(detachmentEntryId);
+  const rootSel: RosterSelection = { ...freshSelection(root.id), selections: [optionSel] };
+  const withoutOld = roster.selections.filter((s) => s.entryId !== root.id);
+  return { ...roster, selections: [...withoutOld, rootSel] };
+}
+
+/** Change the army's points limit. */
+export function setPointsLimit(roster: Roster, pointsLimit: number): Roster {
+  return { ...roster, pointsLimit };
+}
+
 /** Find an entry anywhere in the catalogue tree by id (roots and nested children). */
 export function catalogueEntry(catalogue: IrCatalogue, entryId: string): IrEntry | undefined {
   return findEntry(catalogue, entryId);
