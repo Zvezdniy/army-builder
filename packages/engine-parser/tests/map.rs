@@ -673,14 +673,37 @@ fn cost_modifier_condition_root_entry_scope_maps() {
 }
 
 #[test]
-fn constraint_root_entry_scope_still_dropped() {
-    // Scope broadening is conditions-only; constraints keep the 4 scopes.
+fn constraint_context_scopes_now_map() {
     let xml = br#"<?xml version="1.0" encoding="utf-8"?>
 <catalogue id="c" name="C" revision="1" gameSystemId="gs"
            xmlns="http://www.battlescribe.net/schema/catalogueSchema">
   <selectionEntries>
     <selectionEntry id="e.u" name="U" type="unit">
-      <constraints><constraint id="k" type="max" value="1" field="selections" scope="root-entry"/></constraints>
+      <constraints>
+        <constraint id="k1" type="max" value="1" field="selections" scope="unit"/>
+        <constraint id="k2" type="max" value="1" field="selections" scope="root-entry"/>
+        <constraint id="k3" type="max" value="1" field="selections" scope="primary-catalogue"/>
+      </constraints>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let (ir, diags) = to_ir(&resolve(parse_raw(xml).unwrap()).unwrap());
+    let e = ir.entries.iter().find(|e| e.id == "e.u").unwrap();
+    let scopes: Vec<&str> = e.constraints.iter().map(|c| c.scope.as_str()).collect();
+    assert!(scopes.contains(&"unit"));
+    assert!(scopes.contains(&"root-entry"));
+    assert!(scopes.contains(&"roster")); // primary-catalogue -> roster
+    assert!(!diags.iter().any(|d| d.code == "constraint.scope_unmapped"));
+}
+
+#[test]
+fn constraint_unknown_scope_still_dropped() {
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <selectionEntries>
+    <selectionEntry id="e.u" name="U" type="unit">
+      <constraints><constraint id="k" type="max" value="1" field="selections" scope="bogus-scope"/></constraints>
     </selectionEntry>
   </selectionEntries>
 </catalogue>"#;

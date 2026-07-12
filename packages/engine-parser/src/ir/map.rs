@@ -260,6 +260,8 @@ fn map_constraint(rc: &RawConstraint, target_type: &str, target_id: &str, cat: &
 
     let scope = match rc.scope.as_str() {
         "parent" | "force" | "roster" | "self" => rc.scope.clone(),
+        "root-entry" | "ancestor" | "unit" | "upgrade" | "model" | "model-or-unit" => rc.scope.clone(),
+        "primary-catalogue" => "roster".to_string(),
         other => {
             diags.push(Diagnostic {
                 code: "constraint.scope_unmapped".to_string(),
