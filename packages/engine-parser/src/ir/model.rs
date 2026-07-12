@@ -50,6 +50,8 @@ pub struct IrEntry {
     pub visibility_modifiers: Vec<IrVisibilityModifier>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub validation_rules: Vec<IrValidationRule>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub category_modifiers: Vec<IrCategoryModifier>,
 }
 
 #[derive(Debug, Serialize)]
@@ -128,6 +130,18 @@ pub struct IrVisibilityModifier {
 #[serde(rename_all = "camelCase")]
 pub struct IrValidationRule {
     pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub conditions: Option<Vec<IrCondition>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub condition_groups: Option<Vec<IrConditionGroup>>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IrCategoryModifier {
+    #[serde(rename = "type")]
+    pub type_: String,
+    pub category_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub conditions: Option<Vec<IrCondition>>,
     #[serde(skip_serializing_if = "Option::is_none")]
