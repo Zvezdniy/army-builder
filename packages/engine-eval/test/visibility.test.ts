@@ -244,9 +244,11 @@ describe("hiddenSelectionIds", () => {
     const ids = hiddenSelectionIds(roster(["e.det", "e.enh"]), cat());
     expect(ids.has("s1")).toBe(false); // s1 is e.enh's selection id here
   });
-  it("flags a statically hidden selected node", () => {
+  it("does NOT flag a statically hidden selected node (structural, not 'unavailable')", () => {
+    // e.static is definitionally hidden:true — a permanent/structural part, not
+    // something that became unavailable. It must not raise the "unavailable" signal.
     const ids = hiddenSelectionIds(roster(["e.static"]), cat());
-    expect(ids.has("s0")).toBe(true);
+    expect(ids.has("s0")).toBe(false);
   });
   it("returns an empty set when nothing is hidden", () => {
     const ids = hiddenSelectionIds(roster(["e.plain"]), cat());

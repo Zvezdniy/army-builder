@@ -5,7 +5,7 @@ import { totalCost } from "./cost";
 import { resolveCosts } from "./resolve";
 import { checkConstraint } from "./constraints";
 import { checkGroupConstraint } from "./groups";
-import { nodeHidden } from "./visibility";
+import { nodeHiddenByState } from "./visibility";
 
 export function evaluate(roster: Roster, catalogue: IrCatalogue): ValidationResult {
   const symbols = buildSymbolTable(catalogue);
@@ -48,7 +48,7 @@ export function evaluate(roster: Roster, catalogue: IrCatalogue): ValidationResu
         if (issue) raw.push(issue);
       }
     }
-    if (nodeHidden(node, state)) {
+    if (nodeHiddenByState(node, state)) {
       raw.push({
         severity: "warning",
         code: "selection.hidden",

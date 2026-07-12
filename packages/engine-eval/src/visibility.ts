@@ -64,29 +64,35 @@ export function hiddenEntryIds(
   return hidden;
 }
 
-// Effective `hidden` of a REAL roster node given its actual place in `state`.
-// Unlike hiddenEntryIds (which builds ownerless synthetic candidate nodes and
-// must skip context scopes), a real node always has its real ancestor chain, so
-// every gate — including parent/root-entry/ancestor/type scopes — resolves
-// directly. Modifiers apply in order; the last matching gate wins.
-export function nodeHidden(node: EvalNode, state: EvalState): boolean {
-  let isHidden = node.entry.hidden ?? false;
+// A real roster node is hidden *by current army state* when it is visible by
+// definition (static `hidden` false) but a visibility modifier hides it under the
+// present roster — e.g. an enhancement gated to a detachment the roster no longer
+// holds. Nodes that are statically `hidden: true` are EXCLUDED: those are
+// structural, definitionally-hidden parts (the builder auto-seeds mandatory hidden
+// children), permanently present rather than "no longer available", so warning on
+// them is noise with the wrong meaning. Option-filtering (`hiddenEntryIds`) still
+// honours static hidden — this narrowing is only for the "became unavailable"
+// signal. Unlike hiddenEntryIds (ownerless synthetic candidate nodes, context-scope
+// skip), a real node has its real ancestor chain, so every gate resolves directly.
+// Modifiers apply in order; the last matching gate wins.
+export function nodeHiddenByState(node: EvalNode, state: EvalState): boolean {
+  if (node.entry.hidden) return false;
+  let isHidden = false; // base is definitionally false here (guarded above)
   for (const m of node.entry.visibilityModifiers ?? []) {
     if (passesGate(m.conditions, m.conditionGroups, node, state)) isHidden = m.set;
   }
   return isHidden;
 }
 
-// selectionIds of roster nodes whose effective visibility is hidden under the
-// current roster state (e.g. an enhancement gated to a detachment the roster no
-// longer holds). These are still valid data / still cost points — callers
-// surface them as a warning, not a removal.
+// selectionIds of roster nodes hidden by current state (see nodeHiddenByState).
+// These are still valid data / still cost points — callers surface them as a
+// warning, not a removal.
 export function hiddenSelectionIds(roster: Roster, catalogue: IrCatalogue): Set<string> {
   const symbols = buildSymbolTable(catalogue);
   const state = buildState(roster, symbols);
   const hidden = new Set<string>();
   for (const node of state.all) {
-    if (nodeHidden(node, state)) hidden.add(node.selectionId);
+    if (nodeHiddenByState(node, state)) hidden.add(node.selectionId);
   }
   return hidden;
 }
