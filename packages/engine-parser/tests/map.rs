@@ -249,7 +249,7 @@ fn emits_group_constraint_two_levels_deep() {
 }
 
 #[test]
-fn nested_group_roster_scope_still_drops() {
+fn nested_group_roster_scope_now_maps() {
     let xml = br#"<?xml version="1.0" encoding="utf-8"?>
 <catalogue id="c" name="C" revision="1" gameSystemId="gs"
            xmlns="http://www.battlescribe.net/schema/catalogueSchema">
@@ -270,8 +270,9 @@ fn nested_group_roster_scope_still_drops() {
 </catalogue>"#;
     let (ir, diags) = to_ir(&resolve(parse_raw(xml).unwrap()).unwrap());
     let u = ir.entries.iter().find(|e| e.id == "e.u").unwrap();
-    assert!(u.groups.is_empty(), "roster-scope nested limit must not map: {:?}", u.groups);
-    assert_eq!(diags.iter().filter(|d| d.code == "group.constraint_dropped").count(), 1);
+    let g = u.groups.iter().find(|g| g.id == "g.inner").expect("roster-scope nested limit now maps");
+    assert_eq!(g.constraints[0].scope, "roster");
+    assert!(!diags.iter().any(|d| d.code == "group.constraint_dropped"));
 }
 
 #[test]
@@ -305,19 +306,21 @@ fn min_and_max_group_constraints_both_map() {
 
 #[test]
 fn drops_group_constraint_with_non_group_local_scope() {
-    // A group choose-N is a per-owner local count; a force/roster-scoped limit
-    // (an army-wide "0-1 across the whole roster" cap placed at group level)
-    // aggregates over a different set than the engine counts, so mapping it as a
-    // per-owner group limit would silently miscount. It must be dropped loudly.
+    // A group choose-N is a per-owner local count over the group's direct
+    // members ("self"/"parent"/group-id), or an army-wide "roster" limit
+    // enforced separately. Any other scope (e.g. force, or a foreign id)
+    // aggregates over a different set than the engine counts, so mapping it
+    // as a per-owner group limit would silently miscount. It must be dropped
+    // loudly.
     let xml = br#"<?xml version="1.0" encoding="utf-8"?>
 <catalogue id="c" name="C" revision="1" gameSystemId="gs"
            xmlns="http://www.battlescribe.net/schema/catalogueSchema">
   <selectionEntries>
     <selectionEntry id="e.u" name="Unit" type="unit">
       <selectionEntryGroups>
-        <selectionEntryGroup id="g" name="Army-wide 0-1">
+        <selectionEntryGroup id="g" name="Force-wide 0-1">
           <constraints>
-            <constraint id="g.max" type="max" value="1" field="selections" scope="roster"/>
+            <constraint id="g.max" type="max" value="1" field="selections" scope="force"/>
           </constraints>
           <selectionEntries>
             <selectionEntry id="e.x" name="X" type="upgrade"/>
@@ -329,8 +332,8 @@ fn drops_group_constraint_with_non_group_local_scope() {
 </catalogue>"#;
     let (ir, diags) = to_ir(&resolve(parse_raw(xml).unwrap()).unwrap());
     let u = ir.entries.iter().find(|e| e.id == "e.u").unwrap();
-    // roster-scope group limit isn't a per-owner count → no IrGroup emitted
-    assert!(u.groups.is_empty(), "roster-scope group limit must not map: {:?}", u.groups);
+    // force-scope group limit isn't a per-owner count → no IrGroup emitted
+    assert!(u.groups.is_empty(), "force-scope group limit must not map: {:?}", u.groups);
     assert_eq!(
         diags.iter().filter(|d| d.code == "group.constraint_dropped").count(),
         1,
@@ -916,4 +919,54 @@ fn catalogue_root_entrylink_hidden_modifier_lands_on_surfaced_root() {
     let (ir, _diags) = to_ir(&resolve(parse_raw(xml).unwrap()).unwrap());
     let root = ir.entries.iter().find(|e| e.id == "shared").unwrap();
     assert_eq!(root.visibility_modifiers.len(), 1, "link hidden modifier must land on the surfaced root");
+}
+
+#[test]
+fn group_constraint_roster_scope_maps() {
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <selectionEntries>
+    <selectionEntry id="e.u" name="U" type="unit">
+      <selectionEntryGroups>
+        <selectionEntryGroup id="g.relic" name="Relics">
+          <constraints><constraint id="k" type="max" value="1" field="selections" scope="roster"/></constraints>
+          <selectionEntries>
+            <selectionEntry id="e.r1" name="R1" type="upgrade"/>
+          </selectionEntries>
+        </selectionEntryGroup>
+      </selectionEntryGroups>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let (ir, diags) = to_ir(&resolve(parse_raw(xml).unwrap()).unwrap());
+    let e = ir.entries.iter().find(|e| e.id == "e.u").unwrap();
+    let g = e.groups.iter().find(|g| g.id == "g.relic").unwrap();
+    assert_eq!(g.constraints.len(), 1);
+    assert_eq!(g.constraints[0].scope, "roster");
+    assert!(!diags.iter().any(|d| d.code == "group.constraint_dropped"));
+}
+
+#[test]
+fn group_constraint_self_scope_omits_scope_field() {
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <selectionEntries>
+    <selectionEntry id="e.u" name="U" type="unit">
+      <selectionEntryGroups>
+        <selectionEntryGroup id="g.w" name="W">
+          <constraints><constraint id="k" type="max" value="1" field="selections" scope="parent"/></constraints>
+          <selectionEntries><selectionEntry id="e.w1" name="W1" type="upgrade"/></selectionEntries>
+        </selectionEntryGroup>
+      </selectionEntryGroups>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let (ir, _diags) = to_ir(&resolve(parse_raw(xml).unwrap()).unwrap());
+    let e = ir.entries.iter().find(|e| e.id == "e.u").unwrap();
+    let g = e.groups.iter().find(|g| g.id == "g.w").unwrap();
+    assert_eq!(g.constraints[0].scope, "self");
+    let v = serde_json::to_value(&g.constraints[0]).unwrap();
+    assert!(v.get("scope").is_none(), "self scope must be skip-serialized: {:?}", v);
 }
