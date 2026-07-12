@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { IrCatalogue } from "@muster/domain";
-import { buildSymbolTable, buildState, resolveCosts, totalCost } from "@muster/engine-eval";
+import { buildState, resolveCosts, totalCost } from "@muster/engine-eval";
 
 // A troop costs 10, but gets a -3 discount when the army fields at least 3 troops.
 const cat: IrCatalogue = {
@@ -26,14 +26,14 @@ function rosterOf(n: number) {
 
 describe("resolveCosts", () => {
   it("applies a bulk discount when the count condition holds (converges)", () => {
-    const state = buildState(rosterOf(3), buildSymbolTable(cat));
+    const state = buildState(rosterOf(3), cat);
     const res = resolveCosts(state);
     expect(res.converged).toBe(true);
     expect(totalCost(state, res.costOf)).toBe(21); // 3 troops * (10 - 3)
   });
 
   it("no discount below the threshold", () => {
-    const state = buildState(rosterOf(2), buildSymbolTable(cat));
+    const state = buildState(rosterOf(2), cat);
     const res = resolveCosts(state);
     expect(res.converged).toBe(true);
     expect(totalCost(state, res.costOf)).toBe(20); // 2 * 10
@@ -41,7 +41,7 @@ describe("resolveCosts", () => {
 
   it("terminates and reports converged for a plain catalogue", () => {
     const plain: IrCatalogue = { ...cat, entries: [{ id: "e.troop", name: "T", categories: [], constraints: [], children: [], costs: [{ name: "points", value: 10 }] }] };
-    const state = buildState(rosterOf(5), buildSymbolTable(plain));
+    const state = buildState(rosterOf(5), plain);
     const res = resolveCosts(state);
     expect(res.converged).toBe(true);
     expect(res.iterations).toBeLessThanOrEqual(2);

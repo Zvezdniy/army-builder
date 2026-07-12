@@ -51,8 +51,7 @@ function deepGroup(depth: number): IrConditionGroup {
 
 describe("recursion is bounded (no stack-overflow DoS)", () => {
   it("throws a controlled error for a roster nested past MAX_DEPTH", () => {
-    const symbols = buildSymbolTable(soloCatalogue);
-    expect(() => buildState(deepRoster(MAX_DEPTH + 5), symbols)).toThrow(/MAX_DEPTH/);
+    expect(() => buildState(deepRoster(MAX_DEPTH + 5), soloCatalogue)).toThrow(/MAX_DEPTH/);
   });
 
   it("throws a controlled error for a catalogue nested past MAX_DEPTH", () => {
@@ -60,15 +59,13 @@ describe("recursion is bounded (no stack-overflow DoS)", () => {
   });
 
   it("throws a controlled error for condition groups nested past MAX_DEPTH", () => {
-    const symbols = buildSymbolTable(soloCatalogue);
-    const state = buildState({ ...rosterMeta, selections: [{ id: "s", entryId: "e", count: 1, selections: [] }] }, symbols);
+    const state = buildState({ ...rosterMeta, selections: [{ id: "s", entryId: "e", count: 1, selections: [] }] }, soloCatalogue);
     const node = state.all[0]!;
     expect(() => evaluateConditionGroup(deepGroup(MAX_DEPTH + 5), node, state)).toThrow(/MAX_DEPTH/);
   });
 
   it("still handles legitimately deep (but bounded) structures", () => {
-    const symbols = buildSymbolTable(soloCatalogue);
-    const state = buildState(deepRoster(MAX_DEPTH - 1), symbols);
+    const state = buildState(deepRoster(MAX_DEPTH - 1), soloCatalogue);
     expect(state.all).toHaveLength(MAX_DEPTH - 1);
     // Empty AND group at legal depth resolves to true without throwing.
     expect(evaluateConditionGroup(deepGroup(MAX_DEPTH - 1), state.all[0]!, state)).toBe(true);
@@ -76,7 +73,11 @@ describe("recursion is bounded (no stack-overflow DoS)", () => {
 });
 
 describe("malformed structures fail loudly, not silently", () => {
-  it("rejects duplicate entry ids (also makes self-referential cycles unrepresentable)", () => {
+  it("tolerates duplicate entry ids: the flat index is first-wins, not a loud reject", () => {
+    // The parser legitimately inlines shared entries by cloning them into every
+    // referencing site, so the same id reappearing is expected, not malformed.
+    // buildSymbolTable is a tolerant flat fallback index (see symbols.ts); correct
+    // per-placement resolution is buildState's job (tree walk by parent context).
     const dup: IrCatalogue = {
       ...soloCatalogue,
       entries: [
@@ -84,18 +85,17 @@ describe("malformed structures fail loudly, not silently", () => {
         { id: "e", name: "B", costs: [], categories: [], constraints: [], children: [] },
       ],
     };
-    expect(() => buildSymbolTable(dup)).toThrow(/Duplicate entry id/);
+    const t = buildSymbolTable(dup);
+    expect(t.get("e")?.name).toBe("A");
   });
 
   it("rejects a roster referencing an unknown entry", () => {
-    const symbols = buildSymbolTable(soloCatalogue);
     const bad: Roster = { ...rosterMeta, selections: [{ id: "s", entryId: "nope", count: 1, selections: [] }] };
-    expect(() => buildState(bad, symbols)).toThrow(/Unknown entryId/);
+    expect(() => buildState(bad, soloCatalogue)).toThrow(/Unknown entryId/);
   });
 
   it("rejects an unknown modifier type instead of miscomputing", () => {
-    const symbols = buildSymbolTable(soloCatalogue);
-    const state = buildState({ ...rosterMeta, selections: [{ id: "s", entryId: "e", count: 1, selections: [] }] }, symbols);
+    const state = buildState({ ...rosterMeta, selections: [{ id: "s", entryId: "e", count: 1, selections: [] }] }, soloCatalogue);
     const bogus = { id: "m", type: "multiply", value: 2 } as unknown as IrModifier;
     expect(() => applyModifiers(10, [bogus], state.all[0]!, state)).toThrow(/Unknown modifier type/);
   });
@@ -135,11 +135,11 @@ describe("never-block: evaluate returns a result, it does not throw", () => {
 
 describe("cost / scope edge cases", () => {
   it("treats an entry with no points cost as 0 points", () => {
-    const symbols = buildSymbolTable({
+    const freeCatalogue: IrCatalogue = {
       ...soloCatalogue,
       entries: [{ id: "free", name: "Free", costs: [], categories: [], constraints: [], children: [] }],
-    });
-    const state = buildState({ ...rosterMeta, selections: [{ id: "s", entryId: "free", count: 3, selections: [] }] }, symbols);
+    };
+    const state = buildState({ ...rosterMeta, selections: [{ id: "s", entryId: "free", count: 3, selections: [] }] }, freeCatalogue);
     expect(nodePoints(state.all[0]!)).toBe(0);
   });
 
@@ -147,8 +147,7 @@ describe("cost / scope edge cases", () => {
     // Force-level checks pass node === null; a node-relative scope there is meaningless.
     // Returning 0 rather than throwing keeps evaluate() robust against adversarial
     // catalogues (a thrown error would abort the entire validation).
-    const symbols = buildSymbolTable(soloCatalogue);
-    const state = buildState({ ...rosterMeta, selections: [{ id: "s", entryId: "e", count: 1, selections: [] }] }, symbols);
+    const state = buildState({ ...rosterMeta, selections: [{ id: "s", entryId: "e", count: 1, selections: [] }] }, soloCatalogue);
     const spec = { id: "p", field: "selections", scope: "parent", targetType: "category", targetId: "cat", includeChildSelections: false } as const;
     expect(aggregate(null, spec, state)).toBe(0);
   });

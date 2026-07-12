@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { IrCatalogue, IrCondition } from "@muster/domain";
-import { buildSymbolTable, buildState, evaluateCondition } from "@muster/engine-eval";
+import { buildState, evaluateCondition } from "@muster/engine-eval";
 
 const cat: IrCatalogue = {
   id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [],
@@ -21,13 +21,13 @@ const cond = (over: Partial<IrCondition>): IrCondition => ({
 
 describe("evaluateCondition", () => {
   it("atLeast true at the boundary", () => {
-    const state = buildState(roster, buildSymbolTable(cat));
+    const state = buildState(roster, cat);
     expect(evaluateCondition(cond({ comparator: "atLeast", value: 3 }), null, state)).toBe(true);
     expect(evaluateCondition(cond({ comparator: "atLeast", value: 4 }), null, state)).toBe(false);
   });
 
   it("covers every comparator (actual = 3 troops)", () => {
-    const state = buildState(roster, buildSymbolTable(cat));
+    const state = buildState(roster, cat);
     expect(evaluateCondition(cond({ comparator: "atMost", value: 3 }), null, state)).toBe(true);
     expect(evaluateCondition(cond({ comparator: "equalTo", value: 3 }), null, state)).toBe(true);
     expect(evaluateCondition(cond({ comparator: "notEqualTo", value: 3 }), null, state)).toBe(false);
@@ -40,7 +40,7 @@ import type { IrConditionGroup, IrModifier } from "@muster/domain";
 import { evaluateConditionGroup, gatePasses } from "@muster/engine-eval";
 
 describe("evaluateConditionGroup", () => {
-  const state = () => buildState(roster, buildSymbolTable(cat)); // 3 troops
+  const state = () => buildState(roster, cat); // 3 troops
   const cTrue = cond({ comparator: "equalTo", value: 3 });   // true
   const cFalse = cond({ comparator: "equalTo", value: 99 }); // false
 
@@ -63,7 +63,7 @@ describe("evaluateConditionGroup", () => {
 });
 
 describe("gatePasses", () => {
-  const state = () => buildState(roster, buildSymbolTable(cat));
+  const state = () => buildState(roster, cat);
   const cTrue = cond({ comparator: "equalTo", value: 3 });
   const cFalse = cond({ comparator: "equalTo", value: 99 });
 

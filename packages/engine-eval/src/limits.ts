@@ -4,7 +4,7 @@
 // process — a denial-of-service that bypasses the never-block guarantee. Every
 // recursive walk over caller-supplied structure checks this bound and throws a
 // clear, catchable Error instead, which the app boundary handles like any other
-// malformed-input rejection (cf. buildSymbolTable's duplicate-id throw).
+// malformed-input rejection (cf. buildState's unknown-entryId throw).
 //
 // Real rosters nest only a few levels (force → unit → model → upgrade), so 128 is
 // far beyond any legitimate structure while still tripping long before the engine

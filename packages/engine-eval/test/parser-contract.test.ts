@@ -235,10 +235,9 @@ describe("parser IR contract — cost modifier shape from an inlined link", () =
   // IrCatalogue.parse and is applied end-to-end by evaluate()'s cost
   // resolution — it does NOT prove per-placement isolation of a single shared
   // entry inlined at two sites under different modifiers. That case (same id,
-  // divergent placements) is currently unreachable: buildSymbolTable
-  // (packages/engine-eval/src/symbols.ts) throws "Duplicate entry id" for
-  // same-id entries that aren't byte-identical, so it can't be evaluated until
-  // that keystone limitation is addressed.
+  // divergent placements) was previously unreachable due to buildSymbolTable
+  // throwing "Duplicate entry id" for same-id entries that aren't byte-identical;
+  // it is now supported via tree-based resolution (see the keystone test below).
   const shaped = {
     id: "c", name: "C", gameSystemId: "gs", revision: 1,
     entries: [
@@ -277,5 +276,52 @@ describe("parser IR contract — cost modifier shape from an inlined link", () =
     const cat = IrCatalogue.parse(shaped);
     expect(evaluate(roster("e.a"), cat).totalPoints).toBe(3);
     expect(evaluate(roster("e.b"), cat).totalPoints).toBe(5);
+  });
+});
+
+describe("parser IR contract — same-id per-placement now evaluates (keystone)", () => {
+  // The SAME shared id `e.wargear` inlined under two units, one placement
+  // discounted via costs[].modifiers. Before the keystone this threw in
+  // buildSymbolTable ("Duplicate entry id"); now tree resolution gives each
+  // placement its own instance and evaluate() prices them independently.
+  const shaped = {
+    id: "c", name: "C", gameSystemId: "gs", revision: 1,
+    entries: [
+      {
+        id: "e.a", name: "A", type: "unit", costs: [], categories: [], constraints: [],
+        children: [{
+          id: "e.wargear", name: "Wargear", type: "upgrade", categories: [], constraints: [], children: [], groups: [],
+          costs: [{ name: "points", value: 5, modifiers: [{ id: "m0", type: "decrement", value: 2 }] }],
+        }],
+      },
+      {
+        id: "e.b", name: "B", type: "unit", costs: [], categories: [], constraints: [],
+        children: [{
+          id: "e.wargear", name: "Wargear", type: "upgrade", categories: [], constraints: [], children: [], groups: [],
+          costs: [{ name: "points", value: 5 }],
+        }],
+      },
+    ],
+  };
+
+  const roster = (host: "e.a" | "e.b"): Roster => ({
+    id: "r", name: "R", gameSystemId: "gs", catalogueId: "c", catalogueRevision: 1, pointsLimit: 2000,
+    selections: [{
+      id: "u", entryId: host, count: 1,
+      selections: [{ id: "w", entryId: "e.wargear", count: 1, selections: [] }],
+    }],
+  });
+
+  it("validates against the domain schema", () => {
+    const parsed = IrCatalogue.safeParse(shaped);
+    if (!parsed.success) console.error(parsed.error);
+    expect(parsed.success).toBe(true);
+  });
+
+  it("evaluates without throwing and prices each placement independently", () => {
+    const cat = IrCatalogue.parse(shaped);
+    expect(() => evaluate(roster("e.a"), cat)).not.toThrow();
+    expect(evaluate(roster("e.a"), cat).totalPoints).toBe(3); // discounted placement
+    expect(evaluate(roster("e.b"), cat).totalPoints).toBe(5); // plain placement
   });
 });

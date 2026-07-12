@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import fc from "fast-check";
 import type { IrCatalogue } from "@muster/domain";
-import { evaluate, buildState, buildSymbolTable, resolveCosts, MAX_ITERATIONS } from "@muster/engine-eval";
+import { evaluate, buildState, resolveCosts, MAX_ITERATIONS } from "@muster/engine-eval";
 
 // Catalogue whose troop cost steps down by 2 at >=3 and by another 2 at >=6 troops.
 const cat: IrCatalogue = {
@@ -23,7 +23,7 @@ describe("modifier engine invariants", () => {
           id: "r", name: "R", gameSystemId: "gs", catalogueId: "c", catalogueRevision: 1, pointsLimit: limit,
           selections: Array.from({ length: n }, (_, i) => ({ id: `t${i}`, entryId: "e.troop", count: 1, selections: [] })),
         };
-        const state = buildState(roster, buildSymbolTable(cat));
+        const state = buildState(roster, cat);
         const res = resolveCosts(state);
         expect(res.iterations).toBeLessThanOrEqual(MAX_ITERATIONS);
         expect(res.converged).toBe(true); // monotone step-downs converge

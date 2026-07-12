@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { IrCatalogue, IrConstraint, Roster } from "@muster/domain";
-import { buildSymbolTable, buildState, checkConstraint, effectiveConstraintValue } from "@muster/engine-eval";
+import { buildState, checkConstraint, effectiveConstraintValue } from "@muster/engine-eval";
 
 const cat: IrCatalogue = {
   id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [],
@@ -22,7 +22,7 @@ const c = (over: Partial<IrConstraint>): IrConstraint => ({
 
 describe("checkConstraint", () => {
   it("returns an error Issue when a max is exceeded", () => {
-    const state = buildState(roster, buildSymbolTable(cat));
+    const state = buildState(roster, cat);
     const issue = checkConstraint(c({}), null, state);
     expect(issue?.severity).toBe("error");
     expect(issue?.code).toBe("constraint.max");
@@ -31,12 +31,12 @@ describe("checkConstraint", () => {
   });
 
   it("returns null when satisfied", () => {
-    const state = buildState(roster, buildSymbolTable(cat));
+    const state = buildState(roster, cat);
     expect(checkConstraint(c({ value: 4 }), null, state)).toBeNull();
   });
 
   it("flags a min violation", () => {
-    const state = buildState(roster, buildSymbolTable(cat));
+    const state = buildState(roster, cat);
     const issue = checkConstraint(c({ type: "min", value: 6 }), null, state);
     expect(issue?.code).toBe("constraint.min");
   });
@@ -61,19 +61,19 @@ describe("checkConstraint with a modified bound", () => {
   });
 
   it("effectiveConstraintValue reflects an applicable increment", () => {
-    const state = buildState(rosterN(2), buildSymbolTable(catMod));
+    const state = buildState(rosterN(2), catMod);
     const c = catMod.forceConstraints[0]!;
     expect(effectiveConstraintValue(c, null, state)).toBe(2); // base 1 + 1 (>=2 heavies)
   });
 
   it("2 heavies is legal because the bound became 2", () => {
-    const state = buildState(rosterN(2), buildSymbolTable(catMod));
+    const state = buildState(rosterN(2), catMod);
     const c = catMod.forceConstraints[0]!;
     expect(checkConstraint(c, null, state)).toBeNull();
   });
 
   it("3 heavies still violates the raised bound of 2", () => {
-    const state = buildState(rosterN(3), buildSymbolTable(catMod));
+    const state = buildState(rosterN(3), catMod);
     const c = catMod.forceConstraints[0]!;
     const issue = checkConstraint(c, null, state);
     expect(issue?.code).toBe("constraint.max");
@@ -102,20 +102,20 @@ describe("checkConstraint context/type scopes", () => {
   const unitMax1: IrConstraint = { id: "k", type: "max", value: 1, field: "selections", scope: "unit", targetType: "category", targetId: "cat.wpn", includeChildSelections: true };
 
   it("enforces a unit-scoped max within the enclosing unit", () => {
-    const state = buildState(uRoster, buildSymbolTable(uCat));
+    const state = buildState(uRoster, uCat);
     const sq = state.all.find((n) => n.selectionId === "sq")!;
     expect(checkConstraint(unitMax1, sq, state)?.code).toBe("constraint.max");
   });
 
   it("skips a unit-scoped constraint on a node with no unit ancestor (no false violation)", () => {
-    const state = buildState(uRoster, buildSymbolTable(uCat));
+    const state = buildState(uRoster, uCat);
     const loose = state.all.find((n) => n.selectionId === "loose")!;
     const unitMin1: IrConstraint = { ...unitMax1, type: "min", value: 1 };
     expect(checkConstraint(unitMin1, loose, state)).toBeNull();
   });
 
   it("still flags a min on a legitimate but unsatisfied non-type scope (roster)", () => {
-    const state = buildState(uRoster, buildSymbolTable(uCat));
+    const state = buildState(uRoster, uCat);
     const rosterMin: IrConstraint = { id: "k2", type: "min", value: 1, field: "selections", scope: "roster", targetType: "category", targetId: "cat.absent", includeChildSelections: false };
     expect(checkConstraint(rosterMin, null, state)?.code).toBe("constraint.min");
   });
@@ -124,7 +124,7 @@ describe("checkConstraint context/type scopes", () => {
     // A force-level constraint (node === null) carrying a scope that needs an owning
     // node would make scopeNodes throw and abort evaluate(). Each such scope must be
     // skipped (return null), never crash.
-    const state = buildState(uRoster, buildSymbolTable(uCat));
+    const state = buildState(uRoster, uCat);
     for (const scope of ["self", "parent", "root-entry", "ancestor", "unit", "model", "upgrade", "model-or-unit"] as const) {
       const fc: IrConstraint = { id: `fc.${scope}`, type: "max", value: 1, field: "selections", scope, targetType: "category", targetId: "cat.wpn", includeChildSelections: false };
       expect(() => checkConstraint(fc, null, state)).not.toThrow();
@@ -136,7 +136,7 @@ describe("checkConstraint context/type scopes", () => {
     // The constraint scope is force (node-independent, passes the guard), but its
     // modifier's condition gate is node-relative. At force level (node null) that
     // condition's aggregate must resolve to 0, not throw and abort evaluate().
-    const state = buildState(uRoster, buildSymbolTable(uCat));
+    const state = buildState(uRoster, uCat);
     const fc: IrConstraint = {
       id: "fc.mod", type: "max", value: 5, field: "selections", scope: "roster",
       targetType: "category", targetId: "cat.wpn", includeChildSelections: false,
