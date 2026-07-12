@@ -689,3 +689,66 @@ fn constraint_root_entry_scope_still_dropped() {
     assert!(e.constraints.is_empty());
     assert!(diags.iter().any(|d| d.code == "constraint.scope_unmapped"));
 }
+
+#[test]
+fn emits_entry_type_for_known_values() {
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <selectionEntries>
+    <selectionEntry id="e.unit" name="U" type="unit"/>
+    <selectionEntry id="e.up" name="G" type="upgrade"/>
+    <selectionEntry id="e.mo" name="M" type="model"/>
+  </selectionEntries>
+</catalogue>"#;
+    let (ir, _diags) = to_ir(&resolve(parse_raw(xml).unwrap()).unwrap());
+    let ty = |id: &str| ir.entries.iter().find(|e| e.id == id).unwrap().entry_type.clone();
+    assert_eq!(ty("e.unit"), Some("unit".to_string()));
+    assert_eq!(ty("e.up"), Some("upgrade".to_string()));
+    assert_eq!(ty("e.mo"), Some("model".to_string()));
+}
+
+#[test]
+fn unknown_entry_type_is_omitted_and_diagnosed() {
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <selectionEntries>
+    <selectionEntry id="e.weird" name="W" type="squad"/>
+  </selectionEntries>
+</catalogue>"#;
+    let (ir, diags) = to_ir(&resolve(parse_raw(xml).unwrap()).unwrap());
+    let e = ir.entries.iter().find(|e| e.id == "e.weird").unwrap();
+    assert!(e.entry_type.is_none());
+    assert!(diags.iter().any(|d| d.code == "entry.type_unmapped"));
+}
+
+#[test]
+fn cost_modifier_condition_type_scopes_map() {
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <costTypes><costType id="pts" name="Points"/></costTypes>
+  <selectionEntries>
+    <selectionEntry id="e.u" name="U" type="upgrade">
+      <costs><cost name="Points" typeId="pts" value="5"/></costs>
+      <modifiers>
+        <modifier type="increment" field="pts" value="3">
+          <conditions>
+            <condition type="atLeast" value="1" field="selections" scope="unit" childId="cat.a"/>
+            <condition type="atLeast" value="1" field="selections" scope="upgrade" childId="cat.b"/>
+            <condition type="atLeast" value="1" field="selections" scope="model" childId="cat.c"/>
+            <condition type="atLeast" value="1" field="selections" scope="model-or-unit" childId="cat.d"/>
+          </conditions>
+        </modifier>
+      </modifiers>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let (ir, diags) = to_ir(&resolve(parse_raw(xml).unwrap()).unwrap());
+    let e = ir.entries.iter().find(|e| e.id == "e.u").unwrap();
+    let m = e.costs.iter().find(|c| c.name == "points").unwrap().modifiers.as_ref().unwrap();
+    let scopes: Vec<&str> = m[0].conditions.as_ref().unwrap().iter().map(|c| c.scope.as_str()).collect();
+    assert_eq!(scopes, vec!["unit", "upgrade", "model", "model-or-unit"]);
+    assert!(!diags.iter().any(|d| d.code == "condition.scope_unmapped"));
+}

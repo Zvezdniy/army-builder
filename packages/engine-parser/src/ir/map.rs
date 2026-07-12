@@ -51,6 +51,21 @@ fn map_force_constraints(force: &crate::raw::RawForce, cat: &RawCatalogue, diags
     out
 }
 
+/// Normalize a raw selectionEntry `type` into the three IR-known values.
+/// Unknown/empty -> None + diagnostic (entry still emitted, just without a type).
+fn map_entry_type(raw: &str, entry_id: &str, diags: &mut Vec<Diagnostic>) -> Option<String> {
+    match raw {
+        "unit" | "upgrade" | "model" => Some(raw.to_string()),
+        other => {
+            diags.push(Diagnostic {
+                code: "entry.type_unmapped".to_string(),
+                message: format!("entry {} has unmappable type {:?}", entry_id, other),
+            });
+            None
+        }
+    }
+}
+
 fn map_entry(e: &RawEntry, cat: &RawCatalogue, diags: &mut Vec<Diagnostic>) -> IrEntry {
     let mut costs: Vec<IrCost> = e.costs.iter().map(|c| map_cost(c, cat)).collect();
     let mut constraints: Vec<IrConstraint> = e.constraints.iter()
@@ -109,6 +124,7 @@ fn map_entry(e: &RawEntry, cat: &RawCatalogue, diags: &mut Vec<Diagnostic>) -> I
     IrEntry {
         id: e.id.clone(),
         name: e.name.clone(),
+        entry_type: map_entry_type(&e.entry_type, &e.id, diags),
         costs,
         categories: e.category_links.iter().map(|l| l.target_id.clone()).collect(),
         constraints,
@@ -297,6 +313,7 @@ fn map_condition_scope(scope: &str, id_for_msg: &str, diags: &mut Vec<Diagnostic
     match scope {
         "self" | "parent" | "force" | "roster" => Some(scope.to_string()),
         "root-entry" | "ancestor" => Some(scope.to_string()),
+        "unit" | "upgrade" | "model" | "model-or-unit" => Some(scope.to_string()),
         "primary-catalogue" => Some("roster".to_string()),
         other => {
             diags.push(Diagnostic {
