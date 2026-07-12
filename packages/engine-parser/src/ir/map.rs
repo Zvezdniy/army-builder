@@ -117,7 +117,7 @@ fn map_entry(e: &RawEntry, cat: &RawCatalogue, diags: &mut Vec<Diagnostic>) -> I
     let mut groups: Vec<IrGroup> = Vec::new();
     for g in &e.groups {
         flatten_group_members(g, cat, diags, &mut children);
-        collect_groups(g, diags, &mut groups);
+        collect_groups(g, cat, diags, &mut groups);
     }
     let profiles: Vec<IrProfile> = e.profiles.iter().map(map_profile).collect();
 
@@ -164,11 +164,11 @@ fn flatten_group_members(g: &RawGroup, cat: &RawCatalogue, diags: &mut Vec<Diagn
 /// separately by `collect_groups`, not dropped. Returns None when the group
 /// has no mappable min/max selections limit (members are still flattened,
 /// just no IrGroup emitted for this group).
-fn map_group(g: &RawGroup, diags: &mut Vec<Diagnostic>) -> Option<IrGroup> {
+fn map_group(g: &RawGroup, cat: &RawCatalogue, diags: &mut Vec<Diagnostic>) -> Option<IrGroup> {
     let member_entry_ids: Vec<String> = g.entries.iter().map(|e| e.id.clone()).collect();
     let mut constraints: Vec<IrGroupConstraint> = Vec::new();
     for c in &g.constraints {
-        if let Some(gc) = map_group_constraint(c, g, diags) {
+        if let Some(gc) = map_group_constraint(c, g, cat, diags) {
             constraints.push(gc);
         }
     }
@@ -196,19 +196,19 @@ fn map_group(g: &RawGroup, diags: &mut Vec<Diagnostic>) -> Option<IrGroup> {
 /// selections made inside its sub-groups — an intentional, pre-existing modeling
 /// limitation, never a miscompile (the parent's own limit is still enforced over
 /// its direct members).
-fn collect_groups(g: &RawGroup, diags: &mut Vec<Diagnostic>, out: &mut Vec<IrGroup>) {
-    if let Some(ir_group) = map_group(g, diags) {
+fn collect_groups(g: &RawGroup, cat: &RawCatalogue, diags: &mut Vec<Diagnostic>, out: &mut Vec<IrGroup>) {
+    if let Some(ir_group) = map_group(g, cat, diags) {
         out.push(ir_group);
     }
     for sub in &g.groups {
-        collect_groups(sub, diags, out);
+        collect_groups(sub, cat, diags, out);
     }
 }
 
 /// A group choose-N limit maps only when it is a selections min/max with no
 /// modifier on the limit itself (a conditional limit we cannot yet model).
 /// Anything else is a loud drop — never a guessed static value.
-fn map_group_constraint(c: &RawConstraint, g: &RawGroup, diags: &mut Vec<Diagnostic>) -> Option<IrGroupConstraint> {
+fn map_group_constraint(c: &RawConstraint, g: &RawGroup, cat: &RawCatalogue, diags: &mut Vec<Diagnostic>) -> Option<IrGroupConstraint> {
     let drop = |why: String| Diagnostic {
         code: "group.constraint_dropped".to_string(),
         message: format!("selectionEntryGroup {} constraint {} {} (dropped)", g.id, c.id, why),
@@ -236,11 +236,30 @@ fn map_group_constraint(c: &RawConstraint, g: &RawGroup, diags: &mut Vec<Diagnos
         diags.push(drop(format!("has non-group-local scope {}", c.scope)));
         return None;
     };
-    if g.modifiers.iter().any(|m| m.field == c.id) {
-        diags.push(drop("has a modifier on its limit".to_string()));
-        return None;
-    }
-    Some(IrGroupConstraint { id: c.id.clone(), type_: c.kind.clone(), value: c.value, scope })
+    let has_limit_mod = g.modifiers.iter().any(|m| m.field == c.id);
+    let modifiers = if has_limit_mod {
+        if scope == "roster" {
+            diags.push(drop("roster-scope limit carries a modifier (unsupported)".to_string()));
+            return None;
+        }
+        let mut mapped: Vec<IrModifier> = Vec::new();
+        for (index, m) in g.modifiers.iter().enumerate() {
+            if m.field != c.id {
+                continue;
+            }
+            match map_modifier_strict(m, &g.id, index, cat) {
+                Some(im) => mapped.push(im),
+                None => {
+                    diags.push(drop("has an unmappable modifier on its limit".to_string()));
+                    return None;
+                }
+            }
+        }
+        Some(mapped)
+    } else {
+        None
+    };
+    Some(IrGroupConstraint { id: c.id.clone(), type_: c.kind.clone(), value: c.value, scope, modifiers })
 }
 
 /// Map a single raw constraint into its IR form. `target_type`/`target_id` are
@@ -360,6 +379,37 @@ fn map_modifier(m: &RawModifier, entry_id: &str, index: usize, cat: &RawCatalogu
         conditions: if conditions.is_empty() { None } else { Some(conditions) },
         condition_groups: if condition_groups.is_empty() { None } else { Some(condition_groups) },
     }
+}
+
+/// Strict all-or-nothing modifier mapping for constraint LIMIT modifiers.
+/// Returns None (so the caller drops the whole constraint) if the modifier has
+/// repeats, or if any of its conditions/condition-groups is unmappable — a
+/// conditional limit whose gate is only partially represented could over- or
+/// under-enforce, so we enforce it fully or not at all. Mirrors
+/// `map_condition_group_strict` for visibility. Inner diagnostics are discarded;
+/// the caller emits a single drop diagnostic.
+fn map_modifier_strict(m: &RawModifier, owner_id: &str, index: usize, cat: &RawCatalogue) -> Option<IrModifier> {
+    if m.has_repeats {
+        return None;
+    }
+    let mut sink: Vec<Diagnostic> = Vec::new();
+    let conditions: Vec<IrCondition> = m.conditions.iter()
+        .filter_map(|c| map_condition(c, cat, &mut sink))
+        .collect();
+    if conditions.len() != m.conditions.len() {
+        return None; // at least one condition was unmappable
+    }
+    let mut condition_groups: Vec<IrConditionGroup> = Vec::new();
+    for g in &m.condition_groups {
+        condition_groups.push(map_condition_group_strict(g, cat)?);
+    }
+    Some(IrModifier {
+        id: format!("mod.{}.{}", owner_id, index),
+        type_: m.kind.clone(),
+        value: m.value,
+        conditions: if conditions.is_empty() { None } else { Some(conditions) },
+        condition_groups: if condition_groups.is_empty() { None } else { Some(condition_groups) },
+    })
 }
 
 /// Map a single raw condition into its IR form. Unmappable comparator/field/
