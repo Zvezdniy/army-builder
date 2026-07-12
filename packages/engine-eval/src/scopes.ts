@@ -21,6 +21,8 @@ export interface AggregateSpec {
   includeChildSelections: boolean;
 }
 
+const ANCHOR_TYPE_SCOPES = new Set(["unit", "upgrade", "model", "model-or-unit"]);
+
 function subtree(node: EvalNode, includeChildren: boolean): EvalNode[] {
   if (!includeChildren) return [node];
   const acc: EvalNode[] = [];
@@ -51,22 +53,27 @@ function scopeNodes(
     case "force":
     case "roster":
       return state.all;
+    // Node-relative scopes resolve to nothing without an owning node. This happens
+    // only at force level (evaluate checks forceConstraints with node === null),
+    // where a node-relative scope — on the constraint or on a modifier's condition
+    // gate — is meaningless. Returning [] (never throwing) keeps evaluate() robust
+    // against adversarial catalogues instead of aborting the whole validation.
     case "self":
-      if (!node) throw new Error(`Spec ${spec.id} (scope=self) requires an owning node`);
+      if (!node) return [];
       return subtree(node, spec.includeChildSelections);
     case "parent": {
-      if (!node) throw new Error(`Spec ${spec.id} (scope=parent) requires an owning node`);
+      if (!node) return [];
       const anchor = node.parent ?? node;
       return subtree(anchor, spec.includeChildSelections);
     }
     case "root-entry": {
-      if (!node) throw new Error(`Spec ${spec.id} (scope=root-entry) requires an owning node`);
+      if (!node) return [];
       let top = node;
       while (top.parent) top = top.parent;
       return subtree(top, spec.includeChildSelections);
     }
     case "ancestor": {
-      if (!node) throw new Error(`Spec ${spec.id} (scope=ancestor) requires an owning node`);
+      if (!node) return [];
       const acc: EvalNode[] = [];
       for (let a = node.parent; a; a = a.parent) acc.push(a);
       return acc;
@@ -84,6 +91,15 @@ function scopeNodes(
       return anchor ? subtree(anchor, spec.includeChildSelections) : [];
     }
   }
+}
+
+// True only when a type scope (unit/upgrade/model/model-or-unit) resolves to no
+// node — the owning node has no ancestor of that type, so the scope cannot be
+// anchored and the spec does not apply here. Non-type scopes are never "unanchored"
+// (their empty result is legitimate, e.g. a roster-wide min on an empty roster).
+export function scopeUnanchored(node: EvalNode | null, spec: AggregateSpec, state: EvalState): boolean {
+  if (!ANCHOR_TYPE_SCOPES.has(spec.scope)) return false;
+  return scopeNodes(node, spec, state).length === 0;
 }
 
 function matchesTarget(node: EvalNode, spec: AggregateSpec): boolean {

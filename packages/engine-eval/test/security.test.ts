@@ -143,10 +143,13 @@ describe("cost / scope edge cases", () => {
     expect(nodePoints(state.all[0]!)).toBe(0);
   });
 
-  it("throws when a parent-scoped aggregate is evaluated with no owning node", () => {
+  it("resolves a node-relative aggregate to 0 (never throws) when evaluated with no owning node", () => {
+    // Force-level checks pass node === null; a node-relative scope there is meaningless.
+    // Returning 0 rather than throwing keeps evaluate() robust against adversarial
+    // catalogues (a thrown error would abort the entire validation).
     const symbols = buildSymbolTable(soloCatalogue);
     const state = buildState({ ...rosterMeta, selections: [{ id: "s", entryId: "e", count: 1, selections: [] }] }, symbols);
     const spec = { id: "p", field: "selections", scope: "parent", targetType: "category", targetId: "cat", includeChildSelections: false } as const;
-    expect(() => aggregate(null, spec, state)).toThrow(/scope=parent/);
+    expect(aggregate(null, spec, state)).toBe(0);
   });
 });

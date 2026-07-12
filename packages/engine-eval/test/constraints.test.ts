@@ -80,3 +80,71 @@ describe("checkConstraint with a modified bound", () => {
     expect(issue?.message).toMatch(/3 .*max 2/);
   });
 });
+
+describe("checkConstraint context/type scopes", () => {
+  const uCat: IrCatalogue = {
+    id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [],
+    entries: [
+      { id: "e.sqd", name: "Squad", type: "unit", costs: [], categories: [], constraints: [], children: [] },
+      { id: "e.wpn", name: "Weapon", costs: [], categories: ["cat.wpn"], constraints: [], children: [] },
+    ],
+  } as unknown as IrCatalogue;
+  const uRoster: Roster = {
+    id: "r", name: "R", gameSystemId: "gs", catalogueId: "c", catalogueRevision: 1, pointsLimit: 2000,
+    selections: [
+      { id: "sq", entryId: "e.sqd", count: 1, selections: [
+        { id: "w1", entryId: "e.wpn", count: 1, selections: [] },
+        { id: "w2", entryId: "e.wpn", count: 1, selections: [] },
+      ] },
+      { id: "loose", entryId: "e.wpn", count: 1, selections: [] },
+    ],
+  } as unknown as Roster;
+  const unitMax1: IrConstraint = { id: "k", type: "max", value: 1, field: "selections", scope: "unit", targetType: "category", targetId: "cat.wpn", includeChildSelections: true };
+
+  it("enforces a unit-scoped max within the enclosing unit", () => {
+    const state = buildState(uRoster, buildSymbolTable(uCat));
+    const sq = state.all.find((n) => n.selectionId === "sq")!;
+    expect(checkConstraint(unitMax1, sq, state)?.code).toBe("constraint.max");
+  });
+
+  it("skips a unit-scoped constraint on a node with no unit ancestor (no false violation)", () => {
+    const state = buildState(uRoster, buildSymbolTable(uCat));
+    const loose = state.all.find((n) => n.selectionId === "loose")!;
+    const unitMin1: IrConstraint = { ...unitMax1, type: "min", value: 1 };
+    expect(checkConstraint(unitMin1, loose, state)).toBeNull();
+  });
+
+  it("still flags a min on a legitimate but unsatisfied non-type scope (roster)", () => {
+    const state = buildState(uRoster, buildSymbolTable(uCat));
+    const rosterMin: IrConstraint = { id: "k2", type: "min", value: 1, field: "selections", scope: "roster", targetType: "category", targetId: "cat.absent", includeChildSelections: false };
+    expect(checkConstraint(rosterMin, null, state)?.code).toBe("constraint.min");
+  });
+
+  it("skips a node-relative scope at force level (node null) instead of throwing", () => {
+    // A force-level constraint (node === null) carrying a scope that needs an owning
+    // node would make scopeNodes throw and abort evaluate(). Each such scope must be
+    // skipped (return null), never crash.
+    const state = buildState(uRoster, buildSymbolTable(uCat));
+    for (const scope of ["self", "parent", "root-entry", "ancestor", "unit", "model", "upgrade", "model-or-unit"] as const) {
+      const fc: IrConstraint = { id: `fc.${scope}`, type: "max", value: 1, field: "selections", scope, targetType: "category", targetId: "cat.wpn", includeChildSelections: false };
+      expect(() => checkConstraint(fc, null, state)).not.toThrow();
+      expect(checkConstraint(fc, null, state)).toBeNull();
+    }
+  });
+
+  it("does not throw when a force constraint's modifier gate uses a node-relative condition scope", () => {
+    // The constraint scope is force (node-independent, passes the guard), but its
+    // modifier's condition gate is node-relative. At force level (node null) that
+    // condition's aggregate must resolve to 0, not throw and abort evaluate().
+    const state = buildState(uRoster, buildSymbolTable(uCat));
+    const fc: IrConstraint = {
+      id: "fc.mod", type: "max", value: 5, field: "selections", scope: "roster",
+      targetType: "category", targetId: "cat.wpn", includeChildSelections: false,
+      modifiers: [{
+        id: "m", type: "increment", field: "fc.mod", value: 1,
+        conditions: [{ id: "cond", comparator: "atLeast", value: 1, field: "selections", scope: "self", targetType: "category", targetId: "cat.wpn", includeChildSelections: false }],
+      }],
+    } as unknown as IrConstraint;
+    expect(() => checkConstraint(fc, null, state)).not.toThrow();
+  });
+});

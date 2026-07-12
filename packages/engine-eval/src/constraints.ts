@@ -1,6 +1,6 @@
 import type { IrConstraint, Issue } from "@muster/domain";
 import type { EvalNode, EvalState } from "./state";
-import { aggregate } from "./scopes";
+import { aggregate, scopeUnanchored } from "./scopes";
 import { applyModifiers } from "./modifiers";
 import { nodePoints, type CostFn } from "./cost";
 
@@ -19,6 +19,12 @@ export function checkConstraint(
   state: EvalState,
   costOf: CostFn = nodePoints,
 ): Issue | null {
+  // Force-level checks (node === null) can only evaluate node-independent scopes.
+  // A node-relative scope (self/parent/root-entry/ancestor/unit/…) has no owning
+  // node to anchor to and would make scopeNodes throw and abort evaluate(); such a
+  // constraint does not apply at force level — skip it.
+  if (node === null && constraint.scope !== "force" && constraint.scope !== "roster") return null;
+  if (scopeUnanchored(node, constraint, state)) return null;
   const actual = aggregate(node, constraint, state, costOf);
   const limit = effectiveConstraintValue(constraint, node, state, costOf);
   const violated = constraint.type === "max" ? actual > limit : actual < limit;

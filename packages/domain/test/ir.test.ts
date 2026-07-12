@@ -138,3 +138,12 @@ describe("IrGroup / IrGroupConstraint", () => {
     expect(IrGroupConstraint.safeParse({ id: "g", type: "exactly", value: 1 }).success).toBe(false);
   });
 });
+
+describe("IrConstraint.scope", () => {
+  it("accepts context/type scopes", () => {
+    for (const scope of ["unit", "upgrade", "model", "model-or-unit", "root-entry", "ancestor"] as const) {
+      const parsed = IrConstraint.parse({ id: "k", type: "max", value: 1, field: "selections", scope, targetType: "entry", targetId: "e.x" });
+      expect(parsed.scope).toBe(scope);
+    }
+  });
+});
