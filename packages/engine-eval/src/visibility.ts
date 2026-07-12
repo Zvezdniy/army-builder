@@ -5,7 +5,7 @@ import { passesGate } from "./conditions";
 
 // Scopes that need a real ancestor chain to resolve. Without one (no owner), a
 // modifier using them is skipped so it can never over-hide by collapsing to self.
-const CONTEXT_SCOPES = new Set(["parent", "root-entry", "ancestor"]);
+const CONTEXT_SCOPES = new Set(["parent", "root-entry", "ancestor", "unit", "upgrade", "model", "model-or-unit"]);
 
 function conditionUsesContext(c: IrCondition): boolean {
   return CONTEXT_SCOPES.has(c.scope);
