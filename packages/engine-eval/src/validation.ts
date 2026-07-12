@@ -13,7 +13,7 @@ export function validationIssues(node: EvalNode, state: EvalState): Issue[] {
       out.push({
         severity: "error",
         code: "selection.invalid",
-        message: rule.message.replaceAll("{this}", node.entry.name),
+        message: rule.message.replaceAll("{this}", () => node.entry.name),
         selectionId: node.selectionId,
         entryId: node.entry.id,
       });

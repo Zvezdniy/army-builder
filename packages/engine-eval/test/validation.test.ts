@@ -49,4 +49,29 @@ describe("conditional validation rules (field=error)", () => {
     const r = evaluate(roster(1), cat());
     expect(r.issues.some((i) => i.code === "selection.invalid")).toBe(false);
   });
+
+  it("entry name with $& replaces literally, not as regex replacement pattern", () => {
+    const catWithSpecialName: IrCatalogue = {
+      id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [],
+      entries: [{
+        id: "e.unit", name: "Squad", type: "unit", costs: [], categories: [], constraints: [], children: [
+          {
+            id: "e.w", name: "Weapon $& Name", costs: [], categories: [], constraints: [], children: [], groups: [],
+            validationRules: [{
+              message: "Cannot use {this}",
+              conditions: [{
+                id: "cond.atLeast.e.w", comparator: "atLeast", value: 1,
+                field: "selections", scope: "unit", targetType: "entry",
+                targetId: "e.w", includeChildSelections: true,
+              }],
+            }],
+          },
+        ],
+      }],
+    } as unknown as IrCatalogue;
+
+    const r = evaluate(roster(1), catWithSpecialName);
+    const issue = r.issues.find((i) => i.code === "selection.invalid");
+    expect(issue?.message).toBe("Cannot use Weapon $& Name");
+  });
 });
