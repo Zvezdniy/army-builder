@@ -226,3 +226,48 @@ describe("parser IR contract — conditional category membership", () => {
     expect(without.valid).toBe(true);
   });
 });
+
+describe("parser IR contract — per-placement link cost modifier", () => {
+  // Mirrors the parser output after routing a link's cost modifier onto the
+  // inlined instance: unit A's copy of the shared wargear is discounted by 2,
+  // unit B's copy is not. Proves per-placement pricing evaluates end-to-end.
+  const shaped = {
+    id: "c", name: "C", gameSystemId: "gs", revision: 1,
+    entries: [
+      {
+        id: "e.a", name: "A", type: "unit", costs: [], categories: [], constraints: [],
+        children: [{
+          id: "e.a.wargear", name: "Wargear", type: "upgrade", categories: [], constraints: [], children: [], groups: [],
+          costs: [{ name: "points", value: 5, modifiers: [{ id: "m0", type: "decrement", value: 2 }] }],
+        }],
+      },
+      {
+        id: "e.b", name: "B", type: "unit", costs: [], categories: [], constraints: [],
+        children: [{
+          id: "e.b.wargear", name: "Wargear", type: "upgrade", categories: [], constraints: [], children: [], groups: [],
+          costs: [{ name: "points", value: 5 }],
+        }],
+      },
+    ],
+  };
+
+  const roster = (host: "e.a" | "e.b"): Roster => ({
+    id: "r", name: "R", gameSystemId: "gs", catalogueId: "c", catalogueRevision: 1, pointsLimit: 2000,
+    selections: [{
+      id: "u", entryId: host, count: 1,
+      selections: [{ id: "w", entryId: host === "e.a" ? "e.a.wargear" : "e.b.wargear", count: 1, selections: [] }],
+    }],
+  });
+
+  it("validates against the domain schema", () => {
+    const parsed = IrCatalogue.safeParse(shaped);
+    if (!parsed.success) console.error(parsed.error);
+    expect(parsed.success).toBe(true);
+  });
+
+  it("prices the discounted placement at 3 and the plain placement at 5", () => {
+    const cat = IrCatalogue.parse(shaped);
+    expect(evaluate(roster("e.a"), cat).totalPoints).toBe(3);
+    expect(evaluate(roster("e.b"), cat).totalPoints).toBe(5);
+  });
+});
