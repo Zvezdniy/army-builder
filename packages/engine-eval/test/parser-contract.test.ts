@@ -174,3 +174,55 @@ describe("parser IR contract — validation rule", () => {
     expect(ok.issues.some((i) => i.code === "selection.invalid")).toBe(false);
   });
 });
+
+describe("parser IR contract — conditional category membership", () => {
+  // Mirrors the parser's serialized shape for a field="category" add modifier.
+  // Validated by Zod, then evaluated — proving parser output → domain → engine.
+  const shaped = {
+    id: "c", name: "C", gameSystemId: "gs", revision: 1,
+    forceConstraints: [
+      { id: "fc.elite.max", type: "max", value: 0, field: "selections", scope: "force",
+        targetType: "category", targetId: "cat.elite", includeChildSelections: true },
+    ],
+    entries: [
+      {
+        id: "e.u", name: "Unit", costs: [], categories: [], constraints: [], children: [],
+        categoryModifiers: [{
+          type: "add", categoryId: "cat.elite",
+          conditions: [{
+            comparator: "atLeast", value: 1, field: "selections", scope: "roster",
+            targetType: "entry", targetId: "e.det", includeChildSelections: true,
+            id: "cond.atLeast.e.det",
+          }],
+        }],
+      },
+      { id: "e.det", name: "Detachment", costs: [], categories: [], constraints: [], children: [] },
+    ],
+  };
+
+  const roster = (withDetachment: boolean): Roster => {
+    const selections = [{ id: "u", entryId: "e.u", count: 1, selections: [] as unknown[] }];
+    if (withDetachment) selections.push({ id: "d", entryId: "e.det", count: 1, selections: [] });
+    return {
+      id: "r", name: "R", gameSystemId: "gs", catalogueId: "c", catalogueRevision: 1, pointsLimit: 2000,
+      selections,
+    } as unknown as Roster;
+  };
+
+  it("validates against the domain schema", () => {
+    const parsed = IrCatalogue.safeParse(shaped);
+    if (!parsed.success) console.error(parsed.error);
+    expect(parsed.success).toBe(true);
+  });
+
+  it("the conditional category flips a force-limit outcome", () => {
+    const cat = IrCatalogue.parse(shaped);
+    const withDet = evaluate(roster(true), cat);
+    expect(withDet.issues.some((i) => i.constraintId === "fc.elite.max")).toBe(true);
+    expect(withDet.valid).toBe(false);
+
+    const without = evaluate(roster(false), cat);
+    expect(without.issues.some((i) => i.constraintId === "fc.elite.max")).toBe(false);
+    expect(without.valid).toBe(true);
+  });
+});
