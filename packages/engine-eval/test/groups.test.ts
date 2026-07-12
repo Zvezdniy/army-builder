@@ -16,7 +16,7 @@ function cat(gcType: "max" | "min", value: number): IrCatalogue {
         groups: [{
           id: "g.wargear", name: "Wargear",
           memberEntryIds: ["e.sword", "e.axe"],
-          constraints: [{ id: "g.wargear.limit", type: gcType, value }],
+          constraints: [{ id: "g.wargear.limit", type: gcType, value, scope: "self" }],
         }],
       },
     ],
@@ -111,8 +111,8 @@ describe("nested group emitted as a flat IrGroup enforces independently", () => 
           { id: "e.i2", name: "I2", costs: [], categories: [], constraints: [], children: [], groups: [] },
         ],
         groups: [
-          { id: "g.outer", name: "Outer", memberEntryIds: ["e.a", "e.b"], constraints: [{ id: "g.outer.max", type: "max", value: 2 }] },
-          { id: "g.inner", name: "Inner", memberEntryIds: ["e.i1", "e.i2"], constraints: [{ id: "g.inner.max", type: "max", value: 1 }] },
+          { id: "g.outer", name: "Outer", memberEntryIds: ["e.a", "e.b"], constraints: [{ id: "g.outer.max", type: "max", value: 2, scope: "self" }] },
+          { id: "g.inner", name: "Inner", memberEntryIds: ["e.i1", "e.i2"], constraints: [{ id: "g.inner.max", type: "max", value: 1, scope: "self" }] },
         ],
       },
     ],
@@ -131,5 +131,50 @@ describe("nested group emitted as a flat IrGroup enforces independently", () => 
   it("passes when each group is within its own limit", () => {
     const r = evaluate(roster(["e.a", "e.b", "e.i1"]), cat); // outer 2/2, inner 1/1
     expect(r.valid).toBe(true);
+  });
+});
+
+function rosterCat(gcType: "max" | "min", value: number): IrCatalogue {
+  return {
+    id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [],
+    entries: [
+      {
+        id: "e.hero", name: "Hero", costs: [], categories: [], constraints: [],
+        children: [{ id: "e.relic", name: "Relic", costs: [], categories: [], constraints: [], children: [], groups: [] }],
+        groups: [{ id: "g.relics", name: "Relics", memberEntryIds: ["e.relic"], constraints: [{ id: "g.relics.lim", type: gcType, value, scope: "roster" }] }],
+      },
+    ],
+  } as unknown as IrCatalogue;
+}
+const rosterTwoHeroes = (relicsEach: number): Roster => ({
+  id: "r", name: "R", gameSystemId: "gs", catalogueId: "c", catalogueRevision: 1, pointsLimit: 2000,
+  selections: [0, 1].map((h) => ({
+    id: `h${h}`, entryId: "e.hero", count: 1,
+    selections: Array.from({ length: relicsEach }, (_, i) => ({ id: `h${h}r${i}`, entryId: "e.relic", count: 1, selections: [] })),
+  })),
+});
+
+describe("roster-scope group constraints", () => {
+  it("counts group members across the whole roster (max 1, two selected) -> one army-level error", () => {
+    const r = evaluate(rosterTwoHeroes(1), rosterCat("max", 1));
+    const groupIssues = r.issues.filter((i) => i.constraintId === "g.relics.lim");
+    expect(groupIssues.length).toBe(1);
+    expect(groupIssues[0]!.code).toBe("group.max");
+    expect(groupIssues[0]!.selectionId).toBeUndefined();
+  });
+  it("roster-scope min flags when the whole roster is short", () => {
+    const r = evaluate(rosterTwoHeroes(0), rosterCat("min", 1));
+    expect(r.issues.some((i) => i.constraintId === "g.relics.lim" && i.code === "group.min")).toBe(true);
+  });
+  it("roster-scope max satisfied (1 total) -> no issue", () => {
+    const roster: Roster = {
+      id: "r", name: "R", gameSystemId: "gs", catalogueId: "c", catalogueRevision: 1, pointsLimit: 2000,
+      selections: [
+        { id: "h0", entryId: "e.hero", count: 1, selections: [{ id: "h0r0", entryId: "e.relic", count: 1, selections: [] }] },
+        { id: "h1", entryId: "e.hero", count: 1, selections: [] },
+      ],
+    } as unknown as Roster;
+    const r = evaluate(roster, rosterCat("max", 1));
+    expect(r.issues.some((i) => i.constraintId === "g.relics.lim")).toBe(false);
   });
 });
