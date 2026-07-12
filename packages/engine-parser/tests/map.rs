@@ -1116,3 +1116,71 @@ fn group_constraint_self_scope_omits_scope_field() {
     let v = serde_json::to_value(&g.constraints[0]).unwrap();
     assert!(v.get("scope").is_none(), "self scope must be skip-serialized: {:?}", v);
 }
+
+#[test]
+fn maps_error_modifier_to_validation_rule() {
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <selectionEntries>
+    <selectionEntry id="e.w" name="Weapon" type="upgrade">
+      <modifiers>
+        <modifier type="add" value="Max 1 {this} per 5 models" field="error">
+          <conditions>
+            <condition type="atLeast" value="2" field="selections" scope="self" childId="e.w"/>
+          </conditions>
+        </modifier>
+      </modifiers>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let (ir, diags) = to_ir(&resolve(parse_raw(xml).unwrap()).unwrap());
+    let w = ir.entries.iter().find(|e| e.id == "e.w").unwrap();
+    assert_eq!(w.validation_rules.len(), 1, "{:?}", diags);
+    assert_eq!(w.validation_rules[0].message, "Max 1 {this} per 5 models");
+    assert_eq!(w.validation_rules[0].conditions.as_ref().unwrap().len(), 1);
+    assert!(!diags.iter().any(|d| d.code == "modifier.target_unmapped"), "{:?}", diags);
+}
+
+#[test]
+fn drops_error_modifier_with_unmappable_condition() {
+    // GUID-scope condition is unmappable → the whole rule is dropped (never a false error).
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <selectionEntries>
+    <selectionEntry id="e.w" name="Weapon" type="upgrade">
+      <modifiers>
+        <modifier type="add" value="Nope" field="error">
+          <conditions>
+            <condition type="atLeast" value="1" field="selections" scope="8da0-4570-c3c-819f" childId="e.w"/>
+          </conditions>
+        </modifier>
+      </modifiers>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let (ir, diags) = to_ir(&resolve(parse_raw(xml).unwrap()).unwrap());
+    let w = ir.entries.iter().find(|e| e.id == "e.w").unwrap();
+    assert!(w.validation_rules.is_empty(), "unmappable-gate rule must be dropped");
+    assert!(diags.iter().any(|d| d.code == "modifier.error_condition_unmapped"), "{:?}", diags);
+}
+
+#[test]
+fn drops_error_modifier_with_unsupported_type() {
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <selectionEntries>
+    <selectionEntry id="e.w" name="Weapon" type="upgrade">
+      <modifiers>
+        <modifier type="set" value="Nope" field="error"/>
+      </modifiers>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let (ir, diags) = to_ir(&resolve(parse_raw(xml).unwrap()).unwrap());
+    let w = ir.entries.iter().find(|e| e.id == "e.w").unwrap();
+    assert!(w.validation_rules.is_empty());
+    assert!(diags.iter().any(|d| d.code == "modifier.error_type_unsupported"), "{:?}", diags);
+}

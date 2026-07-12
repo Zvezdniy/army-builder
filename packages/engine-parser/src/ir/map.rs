@@ -82,6 +82,7 @@ fn map_entry(e: &RawEntry, cat: &RawCatalogue, diags: &mut Vec<Diagnostic>) -> I
     // on where its `field` points: a known cost-type id is a cost modifier, a
     // matching constraint id is a bound modifier. Neither → diagnostic + drop.
     let mut visibility_modifiers: Vec<IrVisibilityModifier> = Vec::new();
+    let mut validation_rules: Vec<IrValidationRule> = Vec::new();
     for (index, m) in e.modifiers.iter().enumerate() {
         if m.field == "hidden" {
             match map_visibility_modifier(m, cat) {
@@ -90,6 +91,23 @@ fn map_entry(e: &RawEntry, cat: &RawCatalogue, diags: &mut Vec<Diagnostic>) -> I
                     code: "modifier.hidden_condition_unmapped".to_string(),
                     message: format!("hidden modifier on entry {} has an unmappable condition (dropped)", e.id),
                 }),
+            }
+            continue;
+        }
+        if m.field == "error" {
+            if m.kind == "add" {
+                match map_validation_rule(m, cat) {
+                    Some(vr) => validation_rules.push(vr),
+                    None => diags.push(Diagnostic {
+                        code: "modifier.error_condition_unmapped".to_string(),
+                        message: format!("error modifier on entry {} has an unmappable condition (dropped)", e.id),
+                    }),
+                }
+            } else {
+                diags.push(Diagnostic {
+                    code: "modifier.error_type_unsupported".to_string(),
+                    message: format!("error modifier on entry {} has unsupported type {} (dropped)", e.id, m.kind),
+                });
             }
             continue;
         }
@@ -133,6 +151,7 @@ fn map_entry(e: &RawEntry, cat: &RawCatalogue, diags: &mut Vec<Diagnostic>) -> I
         profiles,
         hidden: e.hidden,
         visibility_modifiers,
+        validation_rules,
     }
 }
 
@@ -529,6 +548,28 @@ fn map_visibility_modifier(m: &RawModifier, cat: &RawCatalogue) -> Option<IrVisi
     }
     Some(IrVisibilityModifier {
         set: m.value_raw == "true",
+        conditions: if conditions.is_empty() { None } else { Some(conditions) },
+        condition_groups: if condition_groups.is_empty() { None } else { Some(condition_groups) },
+    })
+}
+
+/// Map a `field="error"` `type="add"` modifier into a validation rule. Strict
+/// all-or-nothing on conditions (like map_visibility_modifier): returns None if
+/// any condition/condition-group is unmappable, so the caller drops the whole
+/// rule — a validation error rejects the army, so a partially-represented gate
+/// must never be enforced. The message is the raw string value.
+fn map_validation_rule(m: &RawModifier, cat: &RawCatalogue) -> Option<IrValidationRule> {
+    let mut sink = Vec::new();
+    let mut conditions = Vec::new();
+    for c in &m.conditions {
+        conditions.push(map_condition(c, cat, &mut sink)?);
+    }
+    let mut condition_groups = Vec::new();
+    for g in &m.condition_groups {
+        condition_groups.push(map_condition_group_strict(g, cat)?);
+    }
+    Some(IrValidationRule {
+        message: m.value_raw.clone(),
         conditions: if conditions.is_empty() { None } else { Some(conditions) },
         condition_groups: if condition_groups.is_empty() { None } else { Some(condition_groups) },
     })

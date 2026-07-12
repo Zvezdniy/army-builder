@@ -6,6 +6,7 @@ import { resolveCosts } from "./resolve";
 import { checkConstraint } from "./constraints";
 import { checkGroupConstraint } from "./groups";
 import { nodeHiddenByState } from "./visibility";
+import { validationIssues } from "./validation";
 
 export function evaluate(roster: Roster, catalogue: IrCatalogue): ValidationResult {
   const symbols = buildSymbolTable(catalogue);
@@ -68,6 +69,7 @@ export function evaluate(roster: Roster, catalogue: IrCatalogue): ValidationResu
         message: `${node.entry.name} is not available in the current army configuration`,
       });
     }
+    raw.push(...validationIssues(node, state));
   }
 
   const overrides = roster.overrides ?? [];
