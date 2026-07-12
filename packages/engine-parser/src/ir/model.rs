@@ -71,6 +71,8 @@ pub struct IrGroupConstraint {
     pub value: f64,
     #[serde(skip_serializing_if = "is_self")]
     pub scope: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub modifiers: Option<Vec<IrModifier>>,
 }
 
 #[derive(Debug, Serialize)]

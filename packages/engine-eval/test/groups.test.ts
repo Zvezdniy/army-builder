@@ -178,3 +178,67 @@ describe("roster-scope group constraints", () => {
     expect(r.issues.some((i) => i.constraintId === "g.relics.lim")).toBe(false);
   });
 });
+
+function modCat(): IrCatalogue {
+  return {
+    id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [],
+    entries: [
+      {
+        id: "e.captain", name: "Captain", costs: [{ name: "points", value: 90 }],
+        categories: ["cat.hq"], constraints: [], children: [
+          { id: "e.sword", name: "Sword", costs: [], categories: [], constraints: [], children: [], groups: [] },
+          { id: "e.axe", name: "Axe", costs: [], categories: [], constraints: [], children: [], groups: [] },
+          { id: "e.sgt", name: "Sergeant", costs: [], categories: [], constraints: [], children: [], groups: [] },
+        ],
+        groups: [{
+          id: "g.wargear", name: "Wargear",
+          memberEntryIds: ["e.sword", "e.axe"],
+          constraints: [{
+            id: "g.wargear.max", type: "max", value: 1, scope: "self",
+            modifiers: [{
+              id: "mod.g.0", type: "increment", value: 1,
+              conditions: [{
+                id: "cond.atLeast.e.sgt", comparator: "atLeast", value: 1,
+                field: "selections", scope: "self", targetType: "entry",
+                targetId: "e.sgt", includeChildSelections: true,
+              }],
+            }],
+          }],
+        }],
+      },
+    ],
+  } as unknown as IrCatalogue;
+}
+
+function capWith(members: string[]): Roster {
+  return {
+    id: "r", name: "R", gameSystemId: "gs", catalogueId: "c", catalogueRevision: 1, pointsLimit: 2000,
+    selections: [{
+      id: "cap", entryId: "e.captain", count: 1,
+      selections: members.map((m, i) => ({ id: `m${i}`, entryId: m, count: 1, selections: [] })),
+    }],
+  } as unknown as Roster;
+}
+
+describe("conditional group limits (modifier on the limit)", () => {
+  it("gate fails: base max=1 enforced (2 wargear → group.max exceeds max 1)", () => {
+    const r = evaluate(capWith(["e.sword", "e.axe"]), modCat());
+    const issue = r.issues.find((i) => i.constraintId === "g.wargear.max");
+    expect(issue?.code).toBe("group.max");
+    expect(issue?.message).toContain("exceeds max 1");
+    expect(r.valid).toBe(false);
+  });
+
+  it("gate passes: sergeant raises max to 2, so 2 wargear is legal", () => {
+    const r = evaluate(capWith(["e.sword", "e.axe", "e.sgt"]), modCat());
+    expect(r.issues.some((i) => i.constraintId === "g.wargear.max")).toBe(false);
+    expect(r.valid).toBe(true);
+  });
+
+  it("gate passes but limit still binds: 3 wargear exceeds the raised max 2", () => {
+    const r = evaluate(capWith(["e.sword", "e.axe", "e.axe", "e.sgt"]), modCat());
+    const issue = r.issues.find((i) => i.constraintId === "g.wargear.max");
+    expect(issue?.code).toBe("group.max");
+    expect(issue?.message).toContain("exceeds max 2");
+  });
+});

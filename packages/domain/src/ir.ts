@@ -27,6 +27,7 @@ export const IrGroupConstraint = z.object({
   type: z.enum(["min", "max"]),
   value: z.number().finite(),
   scope: z.enum(["self", "roster"]).default("self"),
+  modifiers: z.array(IrModifier).optional(),
 });
 export type IrGroupConstraint = z.infer<typeof IrGroupConstraint>;
 

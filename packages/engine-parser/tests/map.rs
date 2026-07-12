@@ -168,7 +168,7 @@ fn maps_group_choose_n_and_flattens_members() {
 }
 
 #[test]
-fn emits_nested_group_but_drops_points_field_and_modifier_limit() {
+fn emits_group_with_unconditional_limit_modifier_drops_only_points_field() {
     let xml = br#"<?xml version="1.0" encoding="utf-8"?>
 <catalogue id="c" name="C" revision="1" gameSystemId="gs"
            xmlns="http://www.battlescribe.net/schema/catalogueSchema">
@@ -200,20 +200,166 @@ fn emits_nested_group_but_drops_points_field_and_modifier_limit() {
     let raw = resolve(parse_raw(xml).unwrap()).unwrap();
     let (ir, diags) = to_ir(&raw);
     let u = ir.entries.iter().find(|e| e.id == "e.u").unwrap();
-    // The nested group's selections limit is now emitted (no longer dropped).
+    // nested inner group still emitted
     let inner = u.groups.iter().find(|g| g.id == "g.inner").expect("nested group must be emitted");
     assert_eq!(inner.member_entry_ids, vec!["e.c"]);
-    assert_eq!(inner.constraints.len(), 1);
-    assert_eq!((inner.constraints[0].type_.as_str(), inner.constraints[0].value), ("max", 1.0));
-    // g.pts (points field) and g.mod (modifier-on-limit) still produce no IrGroup.
-    assert!(u.groups.iter().all(|g| g.id != "g.pts" && g.id != "g.mod"));
+    // g.mod now emits WITH its unconditional increment modifier attached
+    let gmod = u.groups.iter().find(|g| g.id == "g.mod").expect("modifier-on-limit group now emitted");
+    let mods = gmod.constraints[0].modifiers.as_ref().expect("modifier attached");
+    assert_eq!((mods[0].type_.as_str(), mods[0].value), ("increment", 1.0));
+    // g.pts (points field) still dropped; g.outer (constraint-less) not emitted
+    assert!(u.groups.iter().all(|g| g.id != "g.pts"));
     assert!(u.groups.iter().all(|g| g.id != "g.outer"), "constraint-less outer group is not emitted");
-    // members still flattened
     for id in ["e.a", "e.b", "e.c"] {
         assert!(u.children.iter().any(|c| c.id == id), "member {} lost", id);
     }
-    // exactly two loud drops remain: points-field and modifier-on-limit
-    assert_eq!(diags.iter().filter(|d| d.code == "group.constraint_dropped").count(), 2, "{:?}", diags);
+    // exactly one loud drop remains: the points-field group
+    assert_eq!(diags.iter().filter(|d| d.code == "group.constraint_dropped").count(), 1, "{:?}", diags);
+}
+
+#[test]
+fn maps_group_limit_modifier_with_mappable_condition() {
+    // A group max=1 with an increment-by-1 modifier gated by "have >=1 of e.sgt".
+    // The condition (atLeast/selections/self) maps, so the whole rule is emitted.
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <selectionEntries>
+    <selectionEntry id="e.u" name="Unit" type="unit">
+      <selectionEntryGroups>
+        <selectionEntryGroup id="g" name="Wargear">
+          <constraints><constraint id="g.max" type="max" value="1" field="selections" scope="parent"/></constraints>
+          <modifiers>
+            <modifier type="increment" field="g.max" value="1">
+              <conditions>
+                <condition type="atLeast" value="1" field="selections" scope="self" childId="e.sgt"/>
+              </conditions>
+            </modifier>
+          </modifiers>
+          <selectionEntries>
+            <selectionEntry id="e.w" name="W" type="upgrade"/>
+            <selectionEntry id="e.sgt" name="Sgt" type="upgrade"/>
+          </selectionEntries>
+        </selectionEntryGroup>
+      </selectionEntryGroups>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let (ir, diags) = to_ir(&resolve(parse_raw(xml).unwrap()).unwrap());
+    let u = ir.entries.iter().find(|e| e.id == "e.u").unwrap();
+    let g = u.groups.iter().find(|g| g.id == "g").expect("group with limit modifier now emitted");
+    let c = &g.constraints[0];
+    assert_eq!((c.type_.as_str(), c.value), ("max", 1.0));
+    let mods = c.modifiers.as_ref().expect("limit modifier attached");
+    assert_eq!(mods.len(), 1);
+    assert_eq!((mods[0].type_.as_str(), mods[0].value), ("increment", 1.0));
+    assert_eq!(mods[0].conditions.as_ref().unwrap().len(), 1);
+    assert!(!diags.iter().any(|d| d.code == "group.constraint_dropped"), "unexpected drop: {:?}", diags);
+}
+
+#[test]
+fn drops_group_limit_modifier_with_unmappable_condition() {
+    // The modifier's condition uses an unmappable comparator ("childOf"), so the
+    // whole group constraint is dropped rather than enforced with a partial gate.
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <selectionEntries>
+    <selectionEntry id="e.u" name="Unit" type="unit">
+      <selectionEntryGroups>
+        <selectionEntryGroup id="g" name="Wargear">
+          <constraints><constraint id="g.max" type="max" value="1" field="selections" scope="parent"/></constraints>
+          <modifiers>
+            <modifier type="increment" field="g.max" value="1">
+              <conditions>
+                <condition type="childOf" value="1" field="selections" scope="self" childId="e.sgt"/>
+              </conditions>
+            </modifier>
+          </modifiers>
+          <selectionEntries><selectionEntry id="e.w" name="W" type="upgrade"/></selectionEntries>
+        </selectionEntryGroup>
+      </selectionEntryGroups>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let (ir, diags) = to_ir(&resolve(parse_raw(xml).unwrap()).unwrap());
+    let u = ir.entries.iter().find(|e| e.id == "e.u").unwrap();
+    assert!(u.groups.iter().all(|g| g.id != "g"), "constraint with unmappable modifier must be dropped");
+    assert_eq!(diags.iter().filter(|d| d.code == "group.constraint_dropped").count(), 1, "{:?}", diags);
+    assert!(
+        diags.iter().any(|d| d.code == "group.constraint_dropped" && d.message.contains("unmappable modifier")),
+        "{:?}", diags
+    );
+}
+
+#[test]
+fn drops_roster_scope_group_constraint_with_limit_modifier() {
+    // A roster-scope limit with an owner-relative gate cannot be anchored → drop.
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <selectionEntries>
+    <selectionEntry id="e.u" name="Unit" type="unit">
+      <selectionEntryGroups>
+        <selectionEntryGroup id="g" name="Relics">
+          <constraints><constraint id="g.max" type="max" value="1" field="selections" scope="roster"/></constraints>
+          <modifiers>
+            <modifier type="increment" field="g.max" value="1">
+              <conditions>
+                <condition type="atLeast" value="1" field="selections" scope="self" childId="e.sgt"/>
+              </conditions>
+            </modifier>
+          </modifiers>
+          <selectionEntries><selectionEntry id="e.w" name="W" type="upgrade"/></selectionEntries>
+        </selectionEntryGroup>
+      </selectionEntryGroups>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let (ir, diags) = to_ir(&resolve(parse_raw(xml).unwrap()).unwrap());
+    let u = ir.entries.iter().find(|e| e.id == "e.u").unwrap();
+    assert!(u.groups.iter().all(|g| g.id != "g"), "roster-scope + modifier must be dropped");
+    assert_eq!(diags.iter().filter(|d| d.code == "group.constraint_dropped").count(), 1, "{:?}", diags);
+    assert!(
+        diags.iter().any(|d| d.code == "group.constraint_dropped" && d.message.contains("roster-scope limit carries a modifier")),
+        "{:?}", diags
+    );
+}
+
+#[test]
+fn drops_group_limit_modifier_with_unknown_kind() {
+    // The limit-modifier's `type` is not a known kind (set/increment/decrement),
+    // so even though its condition is mappable, the whole group constraint must
+    // be dropped loudly rather than emitting an invalid modifier kind into the IR.
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <selectionEntries>
+    <selectionEntry id="e.u" name="Unit" type="unit">
+      <selectionEntryGroups>
+        <selectionEntryGroup id="g" name="Wargear">
+          <constraints><constraint id="g.max" type="max" value="1" field="selections" scope="parent"/></constraints>
+          <modifiers>
+            <modifier type="append" field="g.max" value="1">
+              <conditions>
+                <condition type="atLeast" value="1" field="selections" scope="self" childId="e.sgt"/>
+              </conditions>
+            </modifier>
+          </modifiers>
+          <selectionEntries><selectionEntry id="e.w" name="W" type="upgrade"/></selectionEntries>
+        </selectionEntryGroup>
+      </selectionEntryGroups>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let (ir, diags) = to_ir(&resolve(parse_raw(xml).unwrap()).unwrap());
+    let u = ir.entries.iter().find(|e| e.id == "e.u").unwrap();
+    assert!(u.groups.iter().all(|g| g.id != "g"), "constraint with unknown-kind modifier must be dropped");
+    assert_eq!(diags.iter().filter(|d| d.code == "group.constraint_dropped").count(), 1, "{:?}", diags);
+    assert!(
+        diags.iter().any(|d| d.code == "group.constraint_dropped" && d.message.contains("unmappable modifier")),
+        "{:?}", diags
+    );
 }
 
 #[test]
