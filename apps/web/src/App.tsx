@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import type { IrCatalogue } from "@muster/domain";
-import { IrCatalogue as IrCatalogueSchema } from "@muster/domain";
+import { loadCatalogue } from "@muster/domain";
 import { createRoster, addUnit, addOption, toggleGroupMember, setCount, remove } from "@muster/roster";
 import { evaluate, hiddenEntryIds, hiddenSelectionIds } from "@muster/engine-eval";
 import { RosterList } from "./components/RosterList";
@@ -9,7 +9,7 @@ import { AddUnitPicker } from "./components/AddUnitPicker";
 import mini40k from "./mini40k.ir.json";
 
 export function App() {
-  const [catalogue, setCatalogue] = useState<IrCatalogue>(() => IrCatalogueSchema.parse(mini40k));
+  const [catalogue, setCatalogue] = useState<IrCatalogue>(() => loadCatalogue(mini40k));
   const [roster, setRoster] = useState(() => createRoster(catalogue, 2000));
   const [selectedUnitId, setSelectedUnitId] = useState<string | undefined>(undefined);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -18,7 +18,7 @@ export function App() {
   const hiddenSelIds = useMemo(() => hiddenSelectionIds(roster, catalogue), [roster, catalogue]);
 
   const loadIr = async (file: File) => {
-    const parsed = IrCatalogueSchema.parse(JSON.parse(await file.text()));
+    const parsed = loadCatalogue(JSON.parse(await file.text()));
     setCatalogue(parsed);
     setRoster(createRoster(parsed, 2000));
     setSelectedUnitId(undefined);
