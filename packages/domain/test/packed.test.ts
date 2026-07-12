@@ -23,6 +23,14 @@ describe("canonicalKey", () => {
     expect(canonicalKey({ a: 1 })).not.toBe(canonicalKey({ a: 2 }));
     expect(canonicalKey([1, 2])).not.toBe(canonicalKey([2, 1]));
   });
+
+  it("distinguishes non-finite numbers instead of collapsing them (no false dedup)", () => {
+    // JSON.stringify renders NaN/Infinity/-Infinity all as null; a naive key
+    // would hash these equal and wrongly dedup distinct subtrees.
+    expect(canonicalKey({ v: NaN })).not.toBe(canonicalKey({ v: Infinity }));
+    expect(canonicalKey({ v: Infinity })).not.toBe(canonicalKey({ v: -Infinity }));
+    expect(canonicalKey({ v: NaN })).not.toBe(canonicalKey({ v: null }));
+  });
 });
 
 describe("packCatalogue", () => {
@@ -94,10 +102,25 @@ describe("rehydrateCatalogue", () => {
 
   it("round-trips: rehydrate(pack(c)) deep-equals c", () => {
     const shared = entry({ id: "w", name: "Bolter", costs: [{ name: "pts", value: 2 }] });
-    const a = entry({ id: "a", name: "A", children: [shared], categories: ["k"] });
+    const a = entry({ id: "a", name: "A", type: "unit", children: [shared], categories: ["k"] });
     const b = entry({ id: "b", name: "B", children: [shared] });
     const c = cat([a, b]);
     expect(rehydrateCatalogue(packCatalogue(c))).toEqual(c);
+    // guard the one entry field no other test populates: type must survive
+    expect(rehydrateCatalogue(packCatalogue(c)).entries[0]!.type).toBe("unit");
+  });
+
+  it("errors cleanly on a cyclic packed payload instead of overflowing the stack", () => {
+    const packed = PackedCatalogue.parse({
+      format: "packed-v1",
+      id: "c",
+      name: "c",
+      gameSystemId: "g",
+      revision: 1,
+      entryPool: [{ id: "a", name: "A", children: [0] }], // self-reference
+      entries: [0],
+    });
+    expect(() => rehydrateCatalogue(packed)).toThrow(/cyclic/);
   });
 
   it("produces a PackedCatalogue that its own schema accepts", () => {
