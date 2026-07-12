@@ -110,6 +110,18 @@ fn resolve_link(
         let resolved = resolve_group(target, symbols, path, budget, diags, depth + 1)?;
         path.remove(&link.target_id);
         groups.push(resolved);
+        if link.hidden || link.modifiers.iter().any(|m| m.field == "hidden") {
+            diags.push(Diagnostic {
+                code: "entryLink.group_hidden_unsupported".to_string(),
+                message: format!("entryLink to group {} carries hidden visibility; unsupported (dropped)", link.target_id),
+            });
+        }
+        for m in link.modifiers.iter().filter(|m| m.field != "hidden") {
+            diags.push(Diagnostic {
+                code: "entryLink.modifier_dropped".to_string(),
+                message: format!("entryLink to group {} has a non-hidden modifier (field {}); dropped", link.target_id, m.field),
+            });
+        }
     } else {
         let target = match symbols.entry(&link.target_id) {
             Some(t) => t,
@@ -119,11 +131,36 @@ fn resolve_link(
             return Err(ParseError::ReferenceCycle(link.target_id.clone()));
         }
         path.insert(link.target_id.clone());
-        let resolved = resolve_entry(target, symbols, path, budget, diags, depth + 1)?;
+        let mut resolved = resolve_entry(target, symbols, path, budget, diags, depth + 1)?;
         path.remove(&link.target_id);
+        apply_link_visibility(link, &mut resolved, diags);
         children.push(resolved);
     }
     Ok(())
+}
+
+/// Apply an entryLink's own visibility (static `hidden` + `field="hidden"`
+/// modifiers) onto the freshly-cloned inlined instance. `resolved` is unique
+/// per placement, so appended modifiers never leak to the shared target.
+/// Non-hidden modifiers on a link (cost/constraint) are a separate slice —
+/// dropped loudly here rather than silently.
+fn apply_link_visibility(link: &RawEntryLink, resolved: &mut RawEntry, diags: &mut Vec<Diagnostic>) {
+    if link.hidden {
+        resolved.hidden = true;
+    }
+    for m in &link.modifiers {
+        if m.field == "hidden" {
+            resolved.modifiers.push(m.clone());
+        } else {
+            diags.push(Diagnostic {
+                code: "entryLink.modifier_dropped".to_string(),
+                message: format!(
+                    "entryLink to {} has a non-hidden modifier (field {}); dropped",
+                    link.target_id, m.field
+                ),
+            });
+        }
+    }
 }
 
 fn resolve_entry(entry: &RawEntry, symbols: &SymbolTable, path: &mut HashSet<String>,
