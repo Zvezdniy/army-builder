@@ -235,6 +235,35 @@ describe("hiddenEntryIds context scopes", () => {
   });
 });
 
+// A foreign-id scoped hidden gate (scope = an ancestor unit's entry id) is ancestor-
+// relative like parent/ancestor, so the ownerless path must skip it too (never over-hide).
+describe("hiddenEntryIds with a foreign-id scoped gate", () => {
+  const fcat: IrCatalogue = {
+    id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [],
+    entries: [{
+      id: "e.owner", name: "Owner", costs: [], categories: [], constraints: [],
+      children: [{
+        id: "e.opt", name: "Opt", costs: [], categories: [], constraints: [], children: [],
+        // hide unless the ancestor unit "e.owner" holds >=1 of cat.x (it doesn't) — foreign-id lessThan 1.
+        visibilityModifiers: [{
+          set: true,
+          conditions: [{ id: "c", comparator: "lessThan", value: 1, field: "selections", scope: "e.owner", targetType: "category", targetId: "cat.x", includeChildSelections: true }],
+        }],
+      }],
+    }],
+  };
+  const fRoster: Roster = {
+    id: "r", name: "R", gameSystemId: "gs", catalogueId: "c", catalogueRevision: 1, pointsLimit: 2000,
+    selections: [{ id: "own", entryId: "e.owner", count: 1, selections: [] }],
+  };
+  it("skips a foreign-id scoped gate when no owner is given (never over-hides ownerless)", () => {
+    expect(hiddenEntryIds(fRoster, fcat).has("e.opt")).toBe(false);
+  });
+  it("resolves the foreign-id scope against the ancestor chain with an owner", () => {
+    expect(hiddenEntryIds(fRoster, fcat, "own").has("e.opt")).toBe(true); // owner lacks cat.x -> lessThan 1 -> hide
+  });
+});
+
 describe("hiddenSelectionIds", () => {
   it("flags a selected node hidden under current roster state", () => {
     const ids = hiddenSelectionIds(roster(["e.enh"]), cat());

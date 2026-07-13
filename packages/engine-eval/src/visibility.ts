@@ -4,12 +4,15 @@ import { buildState, type EvalNode, type EvalState } from "./state";
 import { passesGate } from "./conditions";
 import { resolveCategories } from "./categories";
 
-// Scopes that need a real ancestor chain to resolve. Without one (no owner), a
-// modifier using them is skipped so it can never over-hide by collapsing to self.
-const CONTEXT_SCOPES = new Set(["parent", "root-entry", "ancestor", "unit", "upgrade", "model", "model-or-unit"]);
+// Scopes that resolve WITHOUT an owner/ancestor chain: self (the synthetic candidate
+// node itself), force and roster (whole-roster). Every OTHER scope — the ancestor-relative
+// keywords AND any foreign-id (entry-id) scope — needs a real ancestor chain to resolve, so
+// an ownerless modifier using one is skipped: it can never over-hide by collapsing to
+// self/0 (a foreign-id `lessThan 1` gate would otherwise fire spuriously against 0).
+const OWNERLESS_SCOPES = new Set(["self", "force", "roster"]);
 
 function conditionUsesContext(c: IrCondition): boolean {
-  return CONTEXT_SCOPES.has(c.scope);
+  return !OWNERLESS_SCOPES.has(c.scope);
 }
 function groupUsesContext(g: IrConditionGroup): boolean {
   return (g.conditions ?? []).some(conditionUsesContext) || (g.conditionGroups ?? []).some(groupUsesContext);
