@@ -4,6 +4,7 @@ import {
   createRoster, availableUnits, addUnit, addOption, setCount, remove, optionsFor,
   selectedGroupMembers, toggleGroupMember, groupControl, optionControl, catalogueEntry,
   unitLoadout, availableDetachments, selectedDetachment, setDetachment, setPointsLimit,
+  unitsByRole,
 } from "./index";
 
 const catalogue: IrCatalogue = {
@@ -583,6 +584,22 @@ describe("detachment + points-limit API", () => {
     const base = createRoster(detCat, 2000);
     const r = { ...base, selections: [{ id: "x", entryId: "e.det", count: 1, selections: [] }] };
     expect(selectedDetachment(r, detCat)).toBeUndefined();
+  });
+
+  it("setDetachment stores the option as a bare selection (no seeded children)", () => {
+    const r = setDetachment(createRoster(detCat, 2000), "e.gladius", detCat);
+    const root = r.selections.find((s) => s.entryId === "e.det")!;
+    expect(root.selections).toHaveLength(1);
+    expect(root.selections[0]!.selections).toEqual([]);
+  });
+
+  it("unitsByRole excludes the detachment root (it is army-level, not a unit)", () => {
+    let r = addUnit(createRoster(detCat, 2000), "e.captain", detCat);
+    r = setDetachment(r, "e.gladius", detCat);
+    const roles = unitsByRole(r, detCat);
+    const allUnits = roles.flatMap((g) => g.units.map((u) => u.entryId));
+    expect(allUnits).toContain("e.captain");
+    expect(allUnits).not.toContain("e.det");
   });
 
   it("setPointsLimit changes the army's points limit", () => {
