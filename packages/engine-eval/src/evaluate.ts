@@ -1,9 +1,9 @@
-import type { Roster, IrCatalogue, ValidationResult, Issue } from "@muster/domain";
+import type { Roster, IrCatalogue, ValidationResult, Issue, LegalityCheck } from "@muster/domain";
 import { buildState } from "./state";
 import { resolveCategories } from "./categories";
 import { totalCost } from "./cost";
 import { resolveCosts } from "./resolve";
-import { checkConstraint } from "./constraints";
+import { checkConstraint, describeConstraint } from "./constraints";
 import { checkGroupConstraint } from "./groups";
 import { targetNamer } from "./names";
 import { nodeHiddenByState } from "./visibility";
@@ -22,6 +22,40 @@ export function evaluate(roster: Roster, catalogue: IrCatalogue): ValidationResu
       severity: "error",
       code: "points.over",
       message: `Over points limit: ${totalPoints} exceeds ${roster.pointsLimit}`,
+    });
+  }
+
+  // Positive enumeration of army-level rules for the legality checklist: the
+  // points limit, then one entry per applicable force-level constraint. This is
+  // additive reporting — it never feeds `valid` (that stays driven by `issues`).
+  // Built from raw rule state here; reconciled against house-rule overrides once
+  // the issue split is known (see `reconciledChecks` below).
+  const checks: LegalityCheck[] = [
+    {
+      id: "points",
+      kind: "points",
+      label: "Points",
+      actual: totalPoints,
+      limit: roster.pointsLimit,
+      satisfied: totalPoints <= roster.pointsLimit,
+    },
+  ];
+  for (const constraint of catalogue.forceConstraints) {
+    const described = describeConstraint(constraint, null, state, costOf);
+    if (!described) continue;
+    const target = `${constraint.targetType} "${nameOf(constraint.targetType, constraint.targetId)}"`;
+    const label =
+      constraint.type === "min"
+        ? `At least ${described.limit} ${target}`
+        : `At most ${described.limit} ${target}`;
+    checks.push({
+      id: constraint.id,
+      kind: "force",
+      label,
+      actual: described.actual,
+      limit: described.limit,
+      satisfied: described.satisfied,
+      constraintType: constraint.type,
     });
   }
 
@@ -93,5 +127,20 @@ export function evaluate(roster: Roster, catalogue: IrCatalogue): ValidationResu
 
   const hasHouseRules = dismissed.some((d) => matchingOverride(d)?.source === "user");
   const valid = !active.some((i) => i.severity === "error");
-  return { valid, totalPoints, pointsLimit: roster.pointsLimit, issues: active, dismissed, hasHouseRules };
+
+  // Reconcile the checklist with house-rule overrides: a failing force check whose
+  // paired violation was dismissed is marked `dismissed` (house-ruled) rather than a
+  // hard failure, so the checklist never shows a red ✗ while the verdict is LEGAL.
+  // Invariant restored: a force check is a hard failure (satisfied=false, not dismissed)
+  // iff its constraint has an active issue in `active`.
+  const dismissedConstraintIds = new Set(
+    dismissed.map((d) => d.constraintId).filter((id): id is string => id !== undefined),
+  );
+  const reconciledChecks = checks.map((c) =>
+    c.kind === "force" && !c.satisfied && dismissedConstraintIds.has(c.id)
+      ? { ...c, dismissed: true }
+      : c,
+  );
+
+  return { valid, totalPoints, pointsLimit: roster.pointsLimit, issues: active, dismissed, hasHouseRules, checks: reconciledChecks };
 }

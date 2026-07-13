@@ -9,6 +9,7 @@ import { UnitDetail } from "./components/UnitDetail";
 import { AddUnitPicker } from "./components/AddUnitPicker";
 import { SetupWizard } from "./components/SetupWizard";
 import { SetupBar } from "./components/SetupBar";
+import { LegalityPanel } from "./components/LegalityPanel";
 import mini40k from "./mini40k.ir.json";
 
 // The setup wizard auto-opens for a fresh army when the catalogue models detachments
@@ -61,27 +62,26 @@ export function App() {
     <main style={{ fontFamily: "system-ui, sans-serif", padding: 16 }}>
       <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
         <h1 style={{ margin: 0 }}>Muster — {catalogue.name}</h1>
-        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <span data-testid="points" style={{ fontWeight: 700, fontSize: 20 }}>
-            {result.totalPoints} / {result.pointsLimit} pts
-          </span>
-          <label style={{ fontSize: 13 }}>
-            load IR:{" "}
-            <input type="file" accept="application/json"
-              onChange={(e) => { const f = e.target.files?.[0]; if (f) void loadIr(f); }} />
-          </label>
-        </div>
+        <label style={{ fontSize: 13 }}>
+          load IR:{" "}
+          <input type="file" accept="application/json"
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) void loadIr(f); }} />
+        </label>
       </header>
       <SetupBar catalogue={catalogue} roster={roster} onEdit={openWizardAt} />
-      {result.issues.length > 0 && (
-        <ul style={{ margin: "4px 0" }}>
-          {result.issues.map((i, idx) => (
-            <li key={idx} style={{ color: i.severity === "error" ? "var(--error)" : "var(--warn)" }}>
-              {i.severity}: {i.message}
-            </li>
-          ))}
-        </ul>
-      )}
+      <LegalityPanel
+        result={result}
+        // Resolves the name of a TOP-LEVEL unit. Issues carrying a nested
+        // selection id (e.g. selection.hidden on a sub-selection) fall back to
+        // "Unit" and focus nothing actionable — an accepted v1 limitation, since
+        // UnitDetail also addresses only top-level selections.
+        unitNameOf={(selectionId) => {
+          const sel = roster.selections.find((s) => s.id === selectionId);
+          return sel ? catalogue.entries.find((e) => e.id === sel.entryId)?.name : undefined;
+        }}
+        onEditPoints={() => openWizardAt(0)}
+        onFocusUnit={setSelectedUnitId}
+      />
       <div className="builder" data-view={selectedUnitId ? "detail" : "list"}>
         <RosterList roster={roster} catalogue={catalogue} selectedUnitId={selectedUnitId}
           onSelect={setSelectedUnitId} onOpenPicker={() => setPickerOpen(true)} hiddenIds={hiddenSelIds} />

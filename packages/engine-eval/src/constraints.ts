@@ -14,6 +14,25 @@ export function effectiveConstraintValue(
   return applyModifiers(constraint.value, constraint.modifiers, node, state, costOf);
 }
 
+// Like checkConstraint, but reports a constraint's state whether or not it is
+// violated — for building a positive pass/fail legality checklist. Returns null
+// under the same inapplicability conditions checkConstraint short-circuits on
+// (a force-level node-relative scope, or a scope with no anchor); otherwise
+// always returns { actual, limit, satisfied }.
+export function describeConstraint(
+  constraint: IrConstraint,
+  node: EvalNode | null,
+  state: EvalState,
+  costOf: CostFn = nodePoints,
+): { actual: number; limit: number; satisfied: boolean } | null {
+  if (node === null && constraint.scope !== "force" && constraint.scope !== "roster") return null;
+  if (scopeUnanchored(node, constraint, state)) return null;
+  const actual = aggregate(node, constraint, state, costOf);
+  const limit = effectiveConstraintValue(constraint, node, state, costOf);
+  const satisfied = constraint.type === "max" ? actual <= limit : actual >= limit;
+  return { actual, limit, satisfied };
+}
+
 export function checkConstraint(
   constraint: IrConstraint,
   node: EvalNode | null,

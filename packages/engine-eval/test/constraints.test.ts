@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { IrCatalogue, IrConstraint, Roster } from "@muster/domain";
-import { buildState, checkConstraint, effectiveConstraintValue, targetNamer } from "@muster/engine-eval";
+import { buildState, checkConstraint, describeConstraint, effectiveConstraintValue, targetNamer } from "@muster/engine-eval";
 
 const cat: IrCatalogue = {
   id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [],
@@ -58,6 +58,53 @@ describe("checkConstraint", () => {
     );
     expect(issue?.message).toContain('entry "Heavy"');
     expect(issue?.message).not.toContain("e.heavy");
+  });
+});
+
+describe("describeConstraint", () => {
+  it("reports a satisfied max (actual <= limit)", () => {
+    const state = buildState(roster, cat);
+    expect(describeConstraint(c({ value: 4 }), null, state)).toEqual({ actual: 4, limit: 4, satisfied: true });
+  });
+
+  it("reports a violated max (actual > limit)", () => {
+    const state = buildState(roster, cat);
+    expect(describeConstraint(c({}), null, state)).toEqual({ actual: 4, limit: 3, satisfied: false });
+  });
+
+  it("reports a satisfied min (actual >= limit)", () => {
+    const state = buildState(roster, cat);
+    expect(describeConstraint(c({ type: "min", value: 4 }), null, state)).toEqual({ actual: 4, limit: 4, satisfied: true });
+  });
+
+  it("reports a violated min (actual < limit)", () => {
+    const state = buildState(roster, cat);
+    expect(describeConstraint(c({ type: "min", value: 6 }), null, state)?.satisfied).toBe(false);
+  });
+
+  it("returns null for a force-level node-relative scope", () => {
+    const state = buildState(roster, cat);
+    expect(describeConstraint(c({ scope: "unit" }), null, state)).toBeNull();
+  });
+
+  it("describes a roster-scope rule at force level (node null)", () => {
+    const state = buildState(roster, cat);
+    const d = describeConstraint(c({ scope: "roster", type: "min", value: 1, targetId: "cat.absent" }), null, state);
+    expect(d).toEqual({ actual: 0, limit: 1, satisfied: false });
+  });
+
+  it("describes a node-anchored (self-scope) rule when a node is supplied", () => {
+    const state = buildState(roster, cat);
+    const node = state.all.find((n) => n.selectionId === "h1")!;
+    const d = describeConstraint(c({ scope: "self", type: "min", value: 1 }), node, state);
+    expect(d).not.toBeNull();
+    expect(d?.satisfied).toBe(true);
+  });
+
+  it("returns null when a supplied node cannot anchor the scope (unanchored)", () => {
+    const state = buildState(roster, cat);
+    const node = state.all.find((n) => n.selectionId === "h1")!; // e.heavy has no unit ancestor
+    expect(describeConstraint(c({ scope: "unit", type: "min", value: 1 }), node, state)).toBeNull();
   });
 });
 

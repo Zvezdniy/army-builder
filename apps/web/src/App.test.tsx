@@ -9,6 +9,11 @@ describe("App", () => {
     expect(screen.getByTestId("points")).toHaveTextContent(/0\s*\/\s*2000/);
   });
 
+  it("renders the legality panel with a verdict", () => {
+    render(<App />);
+    expect(screen.getByTestId("verdict")).toBeTruthy();
+  });
+
   it("shows the setup bar and does not auto-open the wizard on the detachment-less mini fixture", () => {
     render(<App />);
     expect(screen.getByTestId("setup-bar")).toBeTruthy();
