@@ -593,6 +593,13 @@ describe("detachment + points-limit API", () => {
     expect(root.selections[0]!.selections).toEqual([]);
   });
 
+  it("availableUnits excludes the detachment root (added via the wizard, not the picker)", () => {
+    expect(availableDetachments(detCat)).not.toHaveLength(0); // sanity: this catalogue models detachments
+    const ids = availableUnits(detCat).map((e) => e.id);
+    expect(ids).toContain("e.captain");
+    expect(ids).not.toContain("e.det");
+  });
+
   it("unitsByRole excludes the detachment root (it is army-level, not a unit)", () => {
     let r = addUnit(createRoster(detCat, 2000), "e.captain", detCat);
     r = setDetachment(r, "e.gladius", detCat);

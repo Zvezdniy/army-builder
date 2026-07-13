@@ -13,9 +13,12 @@ export function createRoster(catalogue: IrCatalogue, pointsLimit: number, name =
   };
 }
 
-/** Units addable at the roster root (the catalogue's top-level entries). */
+/** Units addable at the roster root (the catalogue's top-level entries). The
+ *  detachment root is excluded — it is an army-level choice made in the setup
+ *  wizard (via setDetachment), not a unit to add through the picker. */
 export function availableUnits(catalogue: IrCatalogue): IrEntry[] {
-  return catalogue.entries;
+  const detId = detachmentRoot(catalogue)?.id;
+  return catalogue.entries.filter((e) => e.id !== detId);
 }
 
 /** Append a root unit selection, prepopulated with its default/required loadout. */
