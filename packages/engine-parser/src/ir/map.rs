@@ -425,21 +425,17 @@ fn map_field(field: &str, cat: &RawCatalogue, code_prefix: &str, id_for_msg: &st
 /// Broader than `map_constraint`'s own inline scope check (which stays limited to
 /// the four BattleScribe scopes engine-eval understands for constraints): adds the
 /// context-dependent scopes the engine resolves against a node's ancestor chain,
-/// and aliases `primary-catalogue` to `roster` (single-catalogue model).
-/// Constraints are unaffected — `map_constraint` still drops `root-entry`/`ancestor`.
-fn map_condition_scope(scope: &str, id_for_msg: &str, diags: &mut Vec<Diagnostic>) -> Option<String> {
+/// aliases `primary-catalogue` to `roster` (single-catalogue model), and passes any
+/// other value through as a FOREIGN-ID scope — the entry id of an ancestor-or-self node
+/// (e.g. a unit priced by its own model count carries scope = its own entry id). The
+/// engine resolves foreign-id scopes against the node's ancestor chain, so — unlike
+/// before — such conditions are no longer dropped. Constraints are unaffected;
+/// `map_constraint` still drops non-keyword scopes.
+fn map_condition_scope(scope: &str) -> String {
     match scope {
-        "self" | "parent" | "force" | "roster" => Some(scope.to_string()),
-        "root-entry" | "ancestor" => Some(scope.to_string()),
-        "unit" | "upgrade" | "model" | "model-or-unit" => Some(scope.to_string()),
-        "primary-catalogue" => Some("roster".to_string()),
-        other => {
-            diags.push(Diagnostic {
-                code: "condition.scope_unmapped".to_string(),
-                message: format!("{} has unmappable scope {}", id_for_msg, other),
-            });
-            None
-        }
+        "primary-catalogue" => "roster".to_string(),
+        // keyword scope, or a foreign-id (entry-id) scope — both pass through verbatim.
+        other => other.to_string(),
     }
 }
 
@@ -530,7 +526,7 @@ fn map_condition(c: &RawCondition, cat: &RawCatalogue, diags: &mut Vec<Diagnosti
 
     let id_for_msg = format!("condition on {}", c.child_id);
     let field = map_field(&c.field, cat, "condition", &id_for_msg, diags)?;
-    let scope = map_condition_scope(&c.scope, &id_for_msg, diags)?;
+    let scope = map_condition_scope(&c.scope);
 
     let target_type = if cat.categories.contains_key(&c.child_id) { "category" } else { "entry" }.to_string();
 

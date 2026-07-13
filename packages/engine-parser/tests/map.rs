@@ -687,7 +687,7 @@ fn maps_hidden_modifier_with_instance_of_roster_scope() {
 }
 
 #[test]
-fn drops_hidden_modifier_with_unsupported_scope() {
+fn drops_hidden_modifier_with_unmappable_condition() {
     let xml = br#"<?xml version="1.0" encoding="utf-8"?>
 <catalogue id="c" name="C" revision="1" gameSystemId="gs"
            xmlns="http://www.battlescribe.net/schema/catalogueSchema">
@@ -696,7 +696,7 @@ fn drops_hidden_modifier_with_unsupported_scope() {
       <modifiers>
         <modifier type="set" value="true" field="hidden">
           <conditionGroups><conditionGroup type="or"><conditions>
-            <condition type="instanceOf" value="1" field="selections" scope="bogus-scope" childId="cat.x"/>
+            <condition type="instanceOf" value="1" field="wibble" scope="roster" childId="cat.x"/>
           </conditions></conditionGroup></conditionGroups>
         </modifier>
       </modifiers>
@@ -765,7 +765,7 @@ fn hidden_modifier_partial_or_group_drops_whole_modifier() {
         <modifier type="set" value="true" field="hidden">
           <conditionGroups><conditionGroup type="or"><conditions>
             <condition type="instanceOf" value="1" field="selections" scope="roster" childId="cat.ok"/>
-            <condition type="instanceOf" value="1" field="selections" scope="bogus-scope" childId="cat.bad"/>
+            <condition type="instanceOf" value="1" field="wibble" scope="roster" childId="cat.bad"/>
           </conditions></conditionGroup></conditionGroups>
         </modifier>
       </modifiers>
@@ -1185,7 +1185,7 @@ fn drops_error_modifier_with_unmappable_condition() {
       <modifiers>
         <modifier type="add" value="Nope" field="error">
           <conditions>
-            <condition type="atLeast" value="1" field="selections" scope="8da0-4570-c3c-819f" childId="e.w"/>
+            <condition type="atLeast" value="1" field="wibble" scope="roster" childId="e.w"/>
           </conditions>
         </modifier>
       </modifiers>
@@ -1253,7 +1253,7 @@ fn drops_category_modifier_with_unmappable_condition() {
       <modifiers>
         <modifier type="add" value="cat.keyword" field="category">
           <conditions>
-            <condition type="atLeast" value="1" field="selections" scope="8da0-4570-c3c-819f" childId="e.det"/>
+            <condition type="atLeast" value="1" field="wibble" scope="roster" childId="e.det"/>
           </conditions>
         </modifier>
       </modifiers>
@@ -1558,4 +1558,37 @@ fn unmappable_group_hidden_gate_is_dropped_with_diagnostic() {
     assert!(enh.visibility_modifiers.is_empty(), "unmappable group gate dropped, member ungated");
     assert!(diags.iter().any(|d| d.code == "modifier.hidden_condition_unmapped" && d.message.contains("group g.enh")),
         "drop diagnosed: {:?}", diags);
+}
+
+#[test]
+fn foreign_id_condition_scope_is_emitted_not_dropped() {
+    // A cost modifier gated by a model-count condition whose scope is the unit's OWN entry
+    // id (a foreign-id scope). Previously dropped as unmappable; now it passes through so the
+    // modifier stays conditional (unit prices by its own model count).
+    let xml = br#"<?xml version="1.0"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <costTypes><costType id="pts" name="pts"/></costTypes>
+  <selectionEntries>
+    <selectionEntry type="unit" import="true" name="Squad" id="8da0-4570-c3c-819f">
+      <costs><cost name="pts" typeId="pts" value="80"/></costs>
+      <modifiers>
+        <modifier type="set" value="160" field="pts">
+          <conditions>
+            <condition type="atLeast" value="6" field="selections" scope="8da0-4570-c3c-819f" childId="e371-model" shared="true" includeChildSelections="true"/>
+          </conditions>
+        </modifier>
+      </modifiers>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let raw = resolve(parse_raw(xml).unwrap()).unwrap();
+    let (ir, diags) = to_ir(&raw);
+    assert!(!diags.iter().any(|d| d.code == "condition.scope_unmapped"),
+        "foreign-id scope no longer diagnosed as unmapped: {:?}", diags);
+    let squad = ir.entries.iter().find(|e| e.id == "8da0-4570-c3c-819f").unwrap();
+    let cost = squad.costs.iter().find(|c| c.name == "points").unwrap(); // parser canonicalizes "pts" -> "points"
+    let modi = cost.modifiers.as_ref().expect("cost carries the set modifier");
+    let cond = modi[0].conditions.as_ref().expect("modifier keeps its condition")[0].clone();
+    assert_eq!(cond.scope, "8da0-4570-c3c-819f", "foreign-id scope passed through verbatim");
 }
