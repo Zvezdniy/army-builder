@@ -87,4 +87,60 @@ describe("SetupWizard", () => {
     const finish = screen.getByText("Start building") as HTMLButtonElement;
     expect(finish.disabled).toBe(false);
   });
+
+  const registry = [
+    { id: "a", name: "Alpha", source: { kind: "bundled" as const, data: {} } },
+    { id: "b", name: "Beta", source: { kind: "manifest" as const, file: "b.ir.json" } },
+  ];
+
+  it("renders a card per registry faction and marks the active one", () => {
+    render(
+      <SetupWizard catalogue={cat} roster={createRoster(cat, 2000)} initialStep={1}
+        registry={registry} activeDescriptorId="a" onSelectFaction={noop}
+        onSetPoints={noop} onSetDetachment={noop} onClose={noop} />,
+    );
+    expect(screen.getByText("Alpha")).toBeTruthy();
+    expect(screen.getByText("Beta")).toBeTruthy();
+    expect((screen.getByText("Alpha").closest("button") as HTMLElement).className).toMatch(/chosen/);
+  });
+
+  it("calls onSelectFaction when a non-active faction is clicked", () => {
+    const onSelectFaction = vi.fn();
+    render(
+      <SetupWizard catalogue={cat} roster={createRoster(cat, 2000)} initialStep={1}
+        registry={registry} activeDescriptorId="a" onSelectFaction={onSelectFaction}
+        onSetPoints={noop} onSetDetachment={noop} onClose={noop} />,
+    );
+    fireEvent.click(screen.getByText("Beta"));
+    expect(onSelectFaction).toHaveBeenCalledWith("b");
+  });
+
+  it("does not call onSelectFaction when the active faction is clicked", () => {
+    const onSelectFaction = vi.fn();
+    render(
+      <SetupWizard catalogue={cat} roster={createRoster(cat, 2000)} initialStep={1}
+        registry={registry} activeDescriptorId="a" onSelectFaction={onSelectFaction}
+        onSetPoints={noop} onSetDetachment={noop} onClose={noop} />,
+    );
+    fireEvent.click(screen.getByText("Alpha"));
+    expect(onSelectFaction).not.toHaveBeenCalled();
+  });
+
+  it("shows a faction load error when provided", () => {
+    render(
+      <SetupWizard catalogue={cat} roster={createRoster(cat, 2000)} initialStep={1}
+        registry={[{ id: "a", name: "Alpha", source: { kind: "bundled" as const, data: {} } }]}
+        activeDescriptorId="a" onSelectFaction={noop} factionError="Couldn't load Beta"
+        onSetPoints={noop} onSetDetachment={noop} onClose={noop} />,
+    );
+    expect(screen.getByText(/Couldn't load Beta/)).toBeTruthy();
+  });
+
+  it("falls back to a single card for the current catalogue when no registry is passed", () => {
+    render(
+      <SetupWizard catalogue={cat} roster={createRoster(cat, 2000)} initialStep={1}
+        onSetPoints={noop} onSetDetachment={noop} onClose={noop} />,
+    );
+    expect(screen.getByText("Space Marines")).toBeTruthy();
+  });
 });

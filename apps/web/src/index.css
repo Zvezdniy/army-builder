@@ -276,6 +276,7 @@ section { background: var(--panel); border: 1px solid var(--line); border-radius
 .fmeta { font-size: 11px; color: var(--muted); }
 .soon-tag { font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted);
   border: 1px solid var(--line); border-radius: 10px; padding: 1px 6px; align-self: flex-start; margin-top: 2px; }
+.faction-error { color: var(--error); font-size: 13px; margin-top: 8px; }
 
 .det-layout { display: grid; grid-template-columns: 1fr 250px; gap: 14px; align-items: start; }
 .det-list { display: flex; flex-direction: column; gap: 8px; max-height: 46vh; overflow-y: auto; }

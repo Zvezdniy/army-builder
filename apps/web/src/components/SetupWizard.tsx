@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { IrCatalogue, IrEntry, IrGroup, Roster } from "@muster/domain";
 import { availableDetachments, selectedDetachment, catalogueEntry } from "@muster/roster";
 import { pointsCost } from "@muster/engine-eval";
+import type { CatalogueDescriptor } from "../registry/catalogueRegistry";
 
 const POINTS_PRESETS = [1000, 1500, 2000];
 
@@ -28,6 +29,7 @@ const STEPS = ["Points", "Faction", "Detachment"] as const;
  *  reads live roster/catalogue, applies each choice immediately via callbacks. */
 export function SetupWizard({
   catalogue, roster, initialStep = 0, onSetPoints, onSetDetachment, onClose,
+  registry, activeDescriptorId, onSelectFaction, factionError,
 }: {
   catalogue: IrCatalogue;
   roster: Roster;
@@ -35,6 +37,10 @@ export function SetupWizard({
   onSetPoints: (n: number) => void;
   onSetDetachment: (entryId: string) => void;
   onClose: () => void;
+  registry?: CatalogueDescriptor[];
+  activeDescriptorId?: string;
+  onSelectFaction?: (descriptorId: string) => void;
+  factionError?: string;
 }) {
   const detachments = availableDetachments(catalogue);
   const hasDetachmentStep = detachments.length > 0;
@@ -94,19 +100,24 @@ export function SetupWizard({
             <div data-testid="step-faction">
               <p className="wizard-lead">Choose the faction this army is built from.</p>
               <div className="faction-grid">
-                <button className="faction-card chosen">
-                  <span className="fname">{catalogue.name}</span>
-                  <span className="fmeta">Loaded catalogue</span>
-                </button>
-                {["Astra Militarum", "Necrons", "Orks"].map((f) => (
-                  <button key={f} className="faction-card soon" disabled>
-                    <span className="fname">{f}</span>
-                    <span className="soon-tag">Library soon</span>
-                  </button>
-                ))}
+                {registry
+                  ? registry.map((d) => (
+                      <button key={d.id}
+                        className={`faction-card${d.id === activeDescriptorId ? " chosen" : ""}`}
+                        aria-pressed={d.id === activeDescriptorId}
+                        onClick={() => { if (d.id !== activeDescriptorId) onSelectFaction?.(d.id); }}>
+                        <span className="fname">{d.name}</span>
+                        <span className="fmeta">{d.source.kind === "bundled" ? "Bundled" : "Local"}</span>
+                      </button>
+                    ))
+                  : (
+                      <button className="faction-card chosen">
+                        <span className="fname">{catalogue.name}</span>
+                        <span className="fmeta">Loaded catalogue</span>
+                      </button>
+                    )}
               </div>
-              <p className="wizard-note">Only the loaded catalogue is selectable today.
-                Faction switching lights up when the catalogue library ships.</p>
+              {factionError && <p className="faction-error">{factionError}</p>}
             </div>
           )}
 
