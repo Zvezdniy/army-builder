@@ -13,9 +13,12 @@ export function createRoster(catalogue: IrCatalogue, pointsLimit: number, name =
   };
 }
 
-/** Units addable at the roster root (the catalogue's top-level entries). */
+/** Units addable at the roster root (the catalogue's top-level entries). The
+ *  detachment root is excluded — it is an army-level choice made in the setup
+ *  wizard (via setDetachment), not a unit to add through the picker. */
 export function availableUnits(catalogue: IrCatalogue): IrEntry[] {
-  return catalogue.entries;
+  const detId = detachmentRoot(catalogue)?.id;
+  return catalogue.entries.filter((e) => e.id !== detId);
 }
 
 /** Append a root unit selection, prepopulated with its default/required loadout. */
@@ -45,6 +48,52 @@ export function setCount(roster: Roster, selectionId: string, count: number): Ro
 /** Remove a selection and its subtree. */
 export function remove(roster: Roster, selectionId: string): Roster {
   return { ...roster, selections: removeTree(roster.selections, selectionId) };
+}
+
+/**
+ * The root "Detachment" choice entry, if this catalogue models detachments. It is a
+ * top-level `upgrade` entry named "Detachment" whose children are the detachment options
+ * (matched-play requires exactly one). Absent in catalogues without detachments.
+ *
+ * NOTE: identification is by English name + type. A localized or differently-named
+ * detachment node would silently disable detachment support; revisit if we ingest
+ * catalogues that don't follow the BSData "Detachment" convention.
+ */
+function detachmentRoot(catalogue: IrCatalogue): IrEntry | undefined {
+  return catalogue.entries.find((e) => e.name === "Detachment" && e.type === "upgrade");
+}
+
+/** The detachment options available in this catalogue (empty if it models none). */
+export function availableDetachments(catalogue: IrCatalogue): IrEntry[] {
+  return detachmentRoot(catalogue)?.children ?? [];
+}
+
+/** The chosen detachment option's entryId, or undefined if none is selected. */
+export function selectedDetachment(roster: Roster, catalogue: IrCatalogue): string | undefined {
+  const root = detachmentRoot(catalogue);
+  if (!root) return undefined;
+  return roster.selections.find((s) => s.entryId === root.id)?.selections[0]?.entryId;
+}
+
+/**
+ * Set (or replace) the army's detachment: ensure exactly one "Detachment" root selection
+ * holding the single chosen option. Idempotent per option; changing detachment swaps the
+ * option without leaving a duplicate. The option is stored as a real roster selection so
+ * roster-scoped enhancement gates count it. No-op if the catalogue models no detachment.
+ */
+export function setDetachment(roster: Roster, detachmentEntryId: string, catalogue: IrCatalogue): Roster {
+  const root = detachmentRoot(catalogue);
+  if (!root) return roster;
+  // The detachment option is a leaf army-level choice: store it as a bare selection
+  // (no initialChildren seeding, which would nest counted selections under it).
+  const rootSel: RosterSelection = { ...freshSelection(root.id), selections: [freshSelection(detachmentEntryId)] };
+  const withoutOld = roster.selections.filter((s) => s.entryId !== root.id);
+  return { ...roster, selections: [...withoutOld, rootSel] };
+}
+
+/** Change the army's points limit. */
+export function setPointsLimit(roster: Roster, pointsLimit: number): Roster {
+  return { ...roster, pointsLimit };
 }
 
 /** Find an entry anywhere in the catalogue tree by id (roots and nested children). */
@@ -212,7 +261,11 @@ export interface RoleGroup {
 export function unitsByRole(roster: Roster, catalogue: IrCatalogue): RoleGroup[] {
   const groups: RoleGroup[] = [];
   const byRole = new Map<string, RoleGroup>();
+  // The detachment is an army-level choice shown in the setup bar, not a roster unit;
+  // exclude its root selection so it never surfaces as a clickable "Detachment" unit.
+  const detId = detachmentRoot(catalogue)?.id;
   for (const sel of roster.selections) {
+    if (sel.entryId === detId) continue;
     const entry = catalogueEntry(catalogue, sel.entryId);
     const catId = entry?.categories[0];
     const role = catId === undefined ? "Other" : (catalogue.categoryNames?.[catId] ?? catId);

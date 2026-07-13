@@ -256,6 +256,41 @@ describe("hiddenSelectionIds", () => {
   });
 });
 
+// The real-catalogue enhancement gate shape: a group hidden gate pushed onto the
+// member, `and(forces <CrusadeForce> < 1, selections <detachment> < 1)`. Because our
+// forceless roster counts `forces` as 0, the Crusade term is always true and the gate
+// reduces to "hidden unless the detachment is in the roster".
+function forcesGateCat(): IrCatalogue {
+  return {
+    id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [],
+    entries: [
+      { id: "e.det", name: "Detachment", costs: [], categories: [], constraints: [], children: [] },
+      {
+        id: "e.enh", name: "Enhancement", costs: [], categories: [], constraints: [], children: [],
+        visibilityModifiers: [{
+          set: true,
+          conditionGroups: [{
+            type: "and",
+            conditions: [
+              { id: "f", comparator: "lessThan", value: 1, field: "forces", scope: "roster", targetType: "entry", targetId: "force.crusade" },
+              { id: "d", comparator: "lessThan", value: 1, field: "selections", scope: "roster", targetType: "entry", targetId: "e.det" },
+            ],
+          }],
+        }],
+      },
+    ],
+  };
+}
+
+describe("visibility with a forces-bundled detachment gate (real shape)", () => {
+  it("hides the enhancement when the detachment is absent (forces term is vacuously true)", () => {
+    expect(hiddenEntryIds(roster([]), forcesGateCat()).has("e.enh")).toBe(true);
+  });
+  it("reveals the enhancement once the detachment is in the roster", () => {
+    expect(hiddenEntryIds(roster(["e.det"]), forcesGateCat()).has("e.enh")).toBe(false);
+  });
+});
+
 describe("visibility with conditional categories", () => {
   // A unit that conditionally GAINS a category when a detachment is present.
   // An option (child of unit) whose visibility gate checks for that category on parent.

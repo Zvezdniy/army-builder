@@ -11,7 +11,7 @@ export const IrCondition = z.object({
     "lessThan",
   ]),
   value: z.number().finite(),
-  field: z.enum(["selections", "points"]),
+  field: z.enum(["selections", "points", "forces"]),
   scope: z.enum(["self", "parent", "force", "roster", "root-entry", "ancestor", "unit", "upgrade", "model", "model-or-unit"]),
   targetType: z.enum(["category", "entry"]),
   targetId: z.string(),

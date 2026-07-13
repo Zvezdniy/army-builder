@@ -1,29 +1,45 @@
 import { useMemo, useState } from "react";
 import type { IrCatalogue } from "@muster/domain";
 import { loadCatalogue } from "@muster/domain";
-import { createRoster, addUnit, addOption, toggleGroupMember, setCount, remove } from "@muster/roster";
+import { createRoster, addUnit, addOption, toggleGroupMember, setCount, remove,
+  setDetachment, setPointsLimit, availableDetachments, selectedDetachment } from "@muster/roster";
 import { evaluate, hiddenEntryIds, hiddenSelectionIds } from "@muster/engine-eval";
 import { RosterList } from "./components/RosterList";
 import { UnitDetail } from "./components/UnitDetail";
 import { AddUnitPicker } from "./components/AddUnitPicker";
+import { SetupWizard } from "./components/SetupWizard";
+import { SetupBar } from "./components/SetupBar";
 import mini40k from "./mini40k.ir.json";
+
+// The setup wizard auto-opens for a fresh army when the catalogue models detachments
+// but none is chosen yet (matched-play requires a detachment).
+function needsSetup(catalogue: IrCatalogue, roster: ReturnType<typeof createRoster>): boolean {
+  return availableDetachments(catalogue).length > 0 && selectedDetachment(roster, catalogue) === undefined;
+}
 
 export function App() {
   const [catalogue, setCatalogue] = useState<IrCatalogue>(() => loadCatalogue(mini40k));
   const [roster, setRoster] = useState(() => createRoster(catalogue, 2000));
   const [selectedUnitId, setSelectedUnitId] = useState<string | undefined>(undefined);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [wizardStep, setWizardStep] = useState(0);
+  const [wizardOpen, setWizardOpen] = useState(() => needsSetup(catalogue, roster));
   const result = useMemo(() => evaluate(roster, catalogue), [roster, catalogue]);
   const hiddenIds = useMemo(() => hiddenEntryIds(roster, catalogue), [roster, catalogue]);
   const hiddenSelIds = useMemo(() => hiddenSelectionIds(roster, catalogue), [roster, catalogue]);
 
   const loadIr = async (file: File) => {
     const parsed = loadCatalogue(JSON.parse(await file.text()));
+    const nextRoster = createRoster(parsed, 2000);
     setCatalogue(parsed);
-    setRoster(createRoster(parsed, 2000));
+    setRoster(nextRoster);
     setSelectedUnitId(undefined);
     setPickerOpen(false);
+    setWizardStep(0);
+    setWizardOpen(needsSetup(parsed, nextRoster));
   };
+
+  const openWizardAt = (step: number) => { setWizardStep(step); setWizardOpen(true); };
 
   // Add a unit and focus it, so its config/datasheet render immediately.
   // addUnit is called once (not in an updater) so its fresh id is knowable and
@@ -56,6 +72,7 @@ export function App() {
           </label>
         </div>
       </header>
+      <SetupBar catalogue={catalogue} roster={roster} onEdit={openWizardAt} />
       {result.issues.length > 0 && (
         <ul style={{ margin: "4px 0" }}>
           {result.issues.map((i, idx) => (
@@ -77,6 +94,12 @@ export function App() {
       </div>
       {pickerOpen && (
         <AddUnitPicker catalogue={catalogue} hiddenIds={hiddenIds} onAdd={addAndSelect} onClose={() => setPickerOpen(false)} />
+      )}
+      {wizardOpen && (
+        <SetupWizard catalogue={catalogue} roster={roster} initialStep={wizardStep}
+          onSetPoints={(n) => setRoster((r) => setPointsLimit(r, n))}
+          onSetDetachment={(id) => setRoster((r) => setDetachment(r, id, catalogue))}
+          onClose={() => setWizardOpen(false)} />
       )}
     </main>
   );

@@ -35,6 +35,13 @@ function setup() {
 const base = { id: "c1", value: 0, includeChildSelections: false } as const;
 
 describe("aggregate", () => {
+  it("returns 0 for field=\"forces\" (no explicit force nodes in our roster model)", () => {
+    const { state, byId } = setup();
+    const c: IrConstraint = { ...base, type: "max", field: "forces", scope: "roster", targetType: "entry", targetId: "force.crusade" };
+    expect(aggregate(byId("s.hq1"), c, state)).toBe(0);
+    expect(aggregate(null, c, state)).toBe(0);
+  });
+
   it("force/roster scope counts selections by category across the whole roster", () => {
     const { state } = setup();
     const c: IrConstraint = { ...base, type: "max", field: "selections", scope: "force", targetType: "category", targetId: "cat.heavy" };

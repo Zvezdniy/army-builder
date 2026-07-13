@@ -4,7 +4,7 @@ import { nodePoints, type CostFn } from "./cost";
 // The shared shape aggregate() reads. Both IrConstraint and IrCondition satisfy it.
 export interface AggregateSpec {
   id: string;
-  field: "selections" | "points";
+  field: "selections" | "points" | "forces";
   scope:
     | "self"
     | "parent"
@@ -114,6 +114,12 @@ export function aggregate(
   state: EvalState,
   costOf: CostFn = nodePoints,
 ): number {
+  // `forces` counts sub-army forces of a given type. Our roster is a flat selection
+  // list under a single implicit (non-Crusade) force with no explicit force nodes, so
+  // the count of any specific forceEntry is 0. This makes matched-play gates of the
+  // form `forces <CrusadeForce> < 1` always true — the Crusade term drops out, leaving
+  // the detachment term. When explicit forces land, count real force nodes here.
+  if (spec.field === "forces") return 0;
   const matched = scopeNodes(node, spec, state).filter((n) => matchesTarget(n, spec));
   if (spec.field === "selections") {
     return matched.reduce((sum, n) => sum + n.effectiveCount, 0);

@@ -16,6 +16,14 @@ describe("IrCondition", () => {
     expect(c.includeChildSelections).toBe(false);
   });
 
+  it("accepts field=\"forces\" (force/detachment counting)", () => {
+    const c = IrCondition.parse({
+      id: "c", comparator: "lessThan", value: 1, field: "forces",
+      scope: "roster", targetType: "entry", targetId: "force.crusade",
+    });
+    expect(c.field).toBe("forces");
+  });
+
   it("rejects an unknown comparator", () => {
     expect(() =>
       IrCondition.parse({
