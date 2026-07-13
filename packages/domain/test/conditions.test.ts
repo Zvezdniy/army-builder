@@ -24,6 +24,14 @@ describe("IrCondition", () => {
     expect(c.field).toBe("forces");
   });
 
+  it("accepts a foreign-id scope (an ancestor entry id, not a keyword)", () => {
+    const c = IrCondition.parse({
+      id: "c", comparator: "atLeast", value: 6, field: "selections",
+      scope: "8da0-4570-c3c-819f", targetType: "entry", targetId: "e.model",
+    });
+    expect(c.scope).toBe("8da0-4570-c3c-819f");
+  });
+
   it("rejects an unknown comparator", () => {
     expect(() =>
       IrCondition.parse({

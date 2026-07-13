@@ -5,17 +5,9 @@ import { nodePoints, type CostFn } from "./cost";
 export interface AggregateSpec {
   id: string;
   field: "selections" | "points" | "forces";
-  scope:
-    | "self"
-    | "parent"
-    | "force"
-    | "roster"
-    | "root-entry"
-    | "ancestor"
-    | "unit"
-    | "upgrade"
-    | "model"
-    | "model-or-unit";
+  // A keyword scope (self/parent/force/roster/root-entry/ancestor/unit/upgrade/model/
+  // model-or-unit) or a foreign-id scope: the entry id of an ancestor-or-self node.
+  scope: string;
   targetType: "category" | "entry";
   targetId: string;
   includeChildSelections: boolean;
@@ -37,6 +29,15 @@ function subtree(node: EvalNode, includeChildren: boolean): EvalNode[] {
 function nearestByType(node: EvalNode, pred: (t: string | undefined) => boolean): EvalNode | null {
   for (let n: EvalNode | null = node; n; n = n.parent) {
     if (pred(n.entry.type)) return n;
+  }
+  return null;
+}
+
+// The nearest ancestor-or-self node whose entry has the given id — the anchor for a
+// foreign-id scope (scope = an entry id rather than a keyword).
+function nearestByEntryId(node: EvalNode, id: string): EvalNode | null {
+  for (let n: EvalNode | null = node; n; n = n.parent) {
+    if (n.entry.id === id) return n;
   }
   return null;
 }
@@ -88,6 +89,16 @@ function scopeNodes(
           ? (t: string | undefined) => t === "model" || t === "unit"
           : (t: string | undefined) => t === spec.scope;
       const anchor = nearestByType(node, pred);
+      return anchor ? subtree(anchor, spec.includeChildSelections) : [];
+    }
+    // A non-keyword scope is a foreign-id scope: the entry id of an ancestor-or-self node
+    // (e.g. a unit priced by its own model count carries scope = its own entry id). Resolve
+    // to that node's subtree; an unresolvable id yields [] (aggregates to 0 — never inflates
+    // a cost or over-hides). `primary-catalogue` never reaches here (the parser aliases it to
+    // roster), but would also degrade safely to [].
+    default: {
+      if (!node) return [];
+      const anchor = nearestByEntryId(node, spec.scope);
       return anchor ? subtree(anchor, spec.includeChildSelections) : [];
     }
   }

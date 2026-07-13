@@ -12,7 +12,11 @@ export const IrCondition = z.object({
   ]),
   value: z.number().finite(),
   field: z.enum(["selections", "points", "forces"]),
-  scope: z.enum(["self", "parent", "force", "roster", "root-entry", "ancestor", "unit", "upgrade", "model", "model-or-unit"]),
+  // Either a keyword scope — self | parent | force | roster | root-entry | ancestor |
+  // unit | upgrade | model | model-or-unit — or a foreign-id scope: the entry id of an
+  // ancestor-or-self node ("count within that entry's subtree"). engine-eval resolves the
+  // latter against the node's ancestor chain.
+  scope: z.string(),
   targetType: z.enum(["category", "entry"]),
   targetId: z.string(),
   includeChildSelections: z.boolean().default(false),
