@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { IrCatalogue } from "@muster/domain";
 import { loadCatalogue } from "@muster/domain";
 import { createRoster, addUnit, addOption, toggleGroupMember, setCount, remove,
@@ -10,6 +10,7 @@ import { AddUnitPicker } from "./components/AddUnitPicker";
 import { SetupWizard } from "./components/SetupWizard";
 import { SetupBar } from "./components/SetupBar";
 import { LegalityPanel } from "./components/LegalityPanel";
+import { bundledDescriptor, loadRegistry, loadCatalogueFor, type CatalogueDescriptor } from "./registry/catalogueRegistry";
 import mini40k from "./mini40k.ir.json";
 
 // The setup wizard auto-opens for a fresh army when the catalogue models detachments
@@ -18,6 +19,9 @@ function needsSetup(catalogue: IrCatalogue, roster: ReturnType<typeof createRost
   return availableDetachments(catalogue).length > 0 && selectedDetachment(roster, catalogue) === undefined;
 }
 
+// The bundled fixture is always the first, always-available faction. Built once.
+const bundled = bundledDescriptor(mini40k);
+
 export function App() {
   const [catalogue, setCatalogue] = useState<IrCatalogue>(() => loadCatalogue(mini40k));
   const [roster, setRoster] = useState(() => createRoster(catalogue, 2000));
@@ -25,19 +29,51 @@ export function App() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [wizardStep, setWizardStep] = useState(0);
   const [wizardOpen, setWizardOpen] = useState(() => needsSetup(catalogue, roster));
+  const [registry, setRegistry] = useState<CatalogueDescriptor[]>([bundled]);
+  const [activeDescriptorId, setActiveDescriptorId] = useState(bundled.id);
+  const [factionError, setFactionError] = useState<string | undefined>(undefined);
   const result = useMemo(() => evaluate(roster, catalogue), [roster, catalogue]);
   const hiddenIds = useMemo(() => hiddenEntryIds(roster, catalogue), [roster, catalogue]);
   const hiddenSelIds = useMemo(() => hiddenSelectionIds(roster, catalogue), [roster, catalogue]);
 
-  const loadIr = async (file: File) => {
-    const parsed = loadCatalogue(JSON.parse(await file.text()));
-    const nextRoster = createRoster(parsed, 2000);
-    setCatalogue(parsed);
+  // Discover the catalogue library from the local manifest on mount. Any failure
+  // degrades to bundled-only (loadRegistry never throws).
+  useEffect(() => {
+    const fetchFn = typeof fetch === "function" ? fetch.bind(globalThis) : undefined;
+    if (!fetchFn) return;
+    const base = import.meta.env.BASE_URL;
+    // Only replace the bundled-only default when the manifest actually adds factions,
+    // so a missing/empty manifest is a no-op (no needless re-render).
+    void loadRegistry(bundled, fetchFn, `${base}catalogues.json`).then((reg) => {
+      if (reg.length > 1) setRegistry(reg);
+    });
+  }, []);
+
+  // Shared swap of the active catalogue: fresh roster, cleared selection, wizard
+  // re-evaluated. Used by both file-import and faction switching.
+  const applyCatalogue = (next: IrCatalogue, descriptorId: string) => {
+    const nextRoster = createRoster(next, 2000);
+    setCatalogue(next);
     setRoster(nextRoster);
+    setActiveDescriptorId(descriptorId);
     setSelectedUnitId(undefined);
     setPickerOpen(false);
     setWizardStep(0);
-    setWizardOpen(needsSetup(parsed, nextRoster));
+    setWizardOpen(needsSetup(next, nextRoster));
+  };
+
+  const loadIr = async (file: File) => {
+    applyCatalogue(loadCatalogue(JSON.parse(await file.text())), "imported");
+  };
+
+  const onSelectFaction = (descriptorId: string) => {
+    const desc = registry.find((d) => d.id === descriptorId);
+    if (!desc) return;
+    setFactionError(undefined);
+    const fetchFn = typeof fetch === "function" ? fetch.bind(globalThis) : (undefined as unknown as typeof fetch);
+    void loadCatalogueFor(desc, fetchFn, import.meta.env.BASE_URL)
+      .then((next) => applyCatalogue(next, desc.id))
+      .catch(() => setFactionError(`Couldn't load ${desc.name}`));
   };
 
   const openWizardAt = (step: number) => { setWizardStep(step); setWizardOpen(true); };
@@ -97,6 +133,8 @@ export function App() {
       )}
       {wizardOpen && (
         <SetupWizard catalogue={catalogue} roster={roster} initialStep={wizardStep}
+          registry={registry} activeDescriptorId={activeDescriptorId}
+          onSelectFaction={onSelectFaction} factionError={factionError}
           onSetPoints={(n) => setRoster((r) => setPointsLimit(r, n))}
           onSetDetachment={(id) => setRoster((r) => setDetachment(r, id, catalogue))}
           onClose={() => setWizardOpen(false)} />
