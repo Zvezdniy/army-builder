@@ -22,6 +22,10 @@ function needsSetup(catalogue: IrCatalogue, roster: ReturnType<typeof createRost
 // The bundled fixture is always the first, always-available faction. Built once.
 const bundled = bundledDescriptor(mini40k);
 
+// A single fetch binding for registry/catalogue loading; undefined in environments
+// without a global fetch (both call sites handle that uniformly).
+const boundFetch: typeof fetch | undefined = typeof fetch === "function" ? fetch.bind(globalThis) : undefined;
+
 export function App() {
   const [catalogue, setCatalogue] = useState<IrCatalogue>(() => loadCatalogue(mini40k));
   const [roster, setRoster] = useState(() => createRoster(catalogue, 2000));
@@ -39,12 +43,11 @@ export function App() {
   // Discover the catalogue library from the local manifest on mount. Any failure
   // degrades to bundled-only (loadRegistry never throws).
   useEffect(() => {
-    const fetchFn = typeof fetch === "function" ? fetch.bind(globalThis) : undefined;
-    if (!fetchFn) return;
+    if (!boundFetch) return;
     const base = import.meta.env.BASE_URL;
     // Only replace the bundled-only default when the manifest actually adds factions,
     // so a missing/empty manifest is a no-op (no needless re-render).
-    void loadRegistry(bundled, fetchFn, `${base}catalogues.json`).then((reg) => {
+    void loadRegistry(bundled, boundFetch, `${base}catalogues.json`).then((reg) => {
       if (reg.length > 1) setRegistry(reg);
     });
   }, []);
@@ -70,8 +73,9 @@ export function App() {
     const desc = registry.find((d) => d.id === descriptorId);
     if (!desc) return;
     setFactionError(undefined);
-    const fetchFn = typeof fetch === "function" ? fetch.bind(globalThis) : (undefined as unknown as typeof fetch);
-    void loadCatalogueFor(desc, fetchFn, import.meta.env.BASE_URL)
+    // boundFetch may be undefined; loadCatalogueFor still resolves bundled sources and
+    // rejects a remote one without fetch → caught below as a load error.
+    void loadCatalogueFor(desc, boundFetch, import.meta.env.BASE_URL)
       .then((next) => applyCatalogue(next, desc.id))
       .catch(() => setFactionError(`Couldn't load ${desc.name}`));
   };

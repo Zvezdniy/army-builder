@@ -43,9 +43,13 @@ export async function loadRegistry(
 ): Promise<CatalogueDescriptor[]> {
   try {
     const res = await fetchFn(manifestUrl);
-    if (!res.ok) return [bundled];
+    if (!res.ok) return [bundled]; // no manifest present — the normal bundled-only case
     const manifest = parseManifest(await res.json());
-    if (!manifest) return [bundled];
+    if (!manifest) {
+      // A manifest exists but is malformed: warn so a typo doesn't silently hide the library.
+      console.warn(`Muster: ${manifestUrl} is malformed; ignoring the local catalogue library.`);
+      return [bundled];
+    }
     const seen = new Set([bundled.id]);
     const out = [bundled];
     for (const c of manifest.catalogues) {
@@ -55,17 +59,22 @@ export async function loadRegistry(
     }
     return out;
   } catch {
+    // Manifest unreachable (missing, network error, invalid URL in tests): the normal
+    // bundled-only degrade — stay silent, unlike the malformed-manifest case above.
     return [bundled];
   }
 }
 
-/** Lazily materialize the IrCatalogue for a descriptor through the shared load seam. */
+/** Lazily materialize the IrCatalogue for a descriptor through the shared load seam.
+ *  Bundled descriptors need no fetch; a manifest descriptor without a `fetchFn`
+ *  (no global fetch available) throws, which callers surface as a load error. */
 export async function loadCatalogueFor(
   descriptor: CatalogueDescriptor,
-  fetchFn: typeof fetch,
+  fetchFn: typeof fetch | undefined,
   baseUrl: string,
 ): Promise<IrCatalogue> {
   if (descriptor.source.kind === "bundled") return loadCatalogue(descriptor.source.data);
+  if (!fetchFn) throw new Error(`Cannot load catalogue "${descriptor.name}": no fetch available`);
   const url = `${baseUrl}${descriptor.source.file}`;
   const res = await fetchFn(url);
   if (!res.ok) throw new Error(`Failed to load catalogue "${descriptor.name}" (${res.status})`);

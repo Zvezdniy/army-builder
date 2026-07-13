@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { bundledDescriptor, loadRegistry, loadCatalogueFor, type CatalogueDescriptor } from "./catalogueRegistry";
 import mini40k from "../mini40k.ir.json";
 
@@ -56,11 +56,42 @@ describe("loadRegistry", () => {
     expect(await loadRegistry(bundled, f, manifestUrl)).toEqual([bundled]);
   });
 
+  it("degrades to bundled-only when an entry is missing a required field", async () => {
+    const f = fakeFetch({
+      [manifestUrl]: { ok: true, body: { version: 1, catalogues: [{ id: "sm", name: "SM" /* no file */ }] } },
+    });
+    expect(await loadRegistry(bundled, f, manifestUrl)).toEqual([bundled]);
+  });
+
+  it("keeps the first of two manifest entries sharing a non-bundled id", async () => {
+    const f = fakeFetch({
+      [manifestUrl]: { ok: true, body: { version: 1, catalogues: [
+        { id: "dup", name: "First", file: "a.ir.json" },
+        { id: "dup", name: "Second", file: "b.ir.json" },
+      ] } },
+    });
+    const reg = await loadRegistry(bundled, f, manifestUrl);
+    expect(reg.map((d) => d.name)).toEqual(["Mini 40k", "First"]);
+  });
+
   it("degrades to bundled-only when fetch throws", async () => {
     const throwing = (async () => {
       throw new Error("network down");
     }) as unknown as typeof fetch;
     expect(await loadRegistry(bundled, throwing, manifestUrl)).toEqual([bundled]);
+  });
+
+  it("warns on a malformed manifest but stays silent when none is present", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      await loadRegistry(bundled, fakeFetch({ [manifestUrl]: { ok: true, body: { nonsense: true } } }), manifestUrl);
+      expect(warn).toHaveBeenCalledTimes(1); // malformed → one warning
+      warn.mockClear();
+      await loadRegistry(bundled, fakeFetch({}), manifestUrl); // 404 → normal, silent
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
   });
 });
 
