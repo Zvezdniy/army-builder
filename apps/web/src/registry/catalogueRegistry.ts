@@ -46,8 +46,9 @@ export async function loadRegistry(
     if (!res.ok) return [bundled]; // no manifest present — the normal bundled-only case
     const manifest = parseManifest(await res.json());
     if (!manifest) {
-      // A manifest exists but is malformed: warn so a typo doesn't silently hide the library.
-      console.warn(`Muster: ${manifestUrl} is malformed; ignoring the local catalogue library.`);
+      // A manifest exists but isn't a valid v1 library (bad shape or unsupported version):
+      // warn so a typo or version mismatch doesn't silently hide the whole library.
+      console.warn(`Muster: ${manifestUrl} is not a valid v1 catalogue library; ignoring it.`);
       return [bundled];
     }
     const seen = new Set([bundled.id]);
