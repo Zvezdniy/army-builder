@@ -8,6 +8,7 @@
   --accent-ink: #ffffff;
   --error: #b00020;
   --warn: #9a6a00;
+  --ok: #1a7f4b;
   --head-bg: #33333d;
   --head-ink: #f2f2f5;
   color-scheme: light dark;
@@ -24,6 +25,7 @@
     --accent-ink: #0d0d10;
     --error: #ff6b6b;
     --warn: #e0a94a;
+    --ok: #4ec98a;
     --head-bg: #3a3a46;
     --head-ink: #f2f2f5;
   }
@@ -299,3 +301,35 @@ section { background: var(--panel); border: 1px solid var(--line); border-radius
   .det-list { max-height: none; }
   .setup-chip { flex: 1 1 45%; min-width: 0; }
 }
+
+/* Army legality panel */
+.legality { margin: 8px 0; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+.legality-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.verdict { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; padding: 3px 10px; border-radius: 6px; }
+.verdict.legal { color: var(--accent-ink); background: var(--ok); }
+.verdict.illegal { color: var(--accent-ink); background: var(--error); }
+.pts { flex: 1 1 220px; min-width: 180px; display: flex; flex-direction: column; gap: 4px; }
+.pts-bar { height: 8px; border-radius: 5px; background: var(--line); overflow: hidden; }
+.pts-fill { height: 100%; background: var(--accent); transition: width 120ms ease; }
+.pts-bar.over .pts-fill { background: var(--error); }
+.pts-label { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.pts-remain { color: var(--muted); font-weight: 400; }
+.pts-remain.over { color: var(--error); font-weight: 600; }
+.pts-edit { align-self: center; font-size: 12px; padding: 4px 10px; }
+
+.checklist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.check { display: flex; align-items: center; gap: 8px; padding: 5px 10px; font-size: 13px; }
+.check + .check { border-top: 1px solid var(--line); }
+.check-glyph { font-weight: 700; width: 14px; text-align: center; }
+.check.ok .check-glyph { color: var(--ok); }
+.check.bad .check-glyph { color: var(--error); }
+.check.bad .check-label { color: var(--error); }
+.check-label { flex: 1; }
+.tabnum { font-variant-numeric: tabular-nums; color: var(--muted); }
+
+.issue-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.issue { font-size: 13px; }
+.issue.error { color: var(--error); }
+.issue.warning { color: var(--warn); }
+.issue-link { border: none; background: none; padding: 0; font: inherit; color: inherit; cursor: pointer; text-align: left; text-decoration: underline dotted; }
+.issue-link:hover { text-decoration: underline; }
