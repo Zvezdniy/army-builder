@@ -28,7 +28,8 @@ export function evaluate(roster: Roster, catalogue: IrCatalogue): ValidationResu
   // Positive enumeration of army-level rules for the legality checklist: the
   // points limit, then one entry per applicable force-level constraint. This is
   // additive reporting — it never feeds `valid` (that stays driven by `issues`).
-  // A force check's `satisfied === false` mirrors a paired constraint issue.
+  // Built from raw rule state here; reconciled against house-rule overrides once
+  // the issue split is known (see `reconciledChecks` below).
   const checks: LegalityCheck[] = [
     {
       id: "points",
@@ -126,5 +127,20 @@ export function evaluate(roster: Roster, catalogue: IrCatalogue): ValidationResu
 
   const hasHouseRules = dismissed.some((d) => matchingOverride(d)?.source === "user");
   const valid = !active.some((i) => i.severity === "error");
-  return { valid, totalPoints, pointsLimit: roster.pointsLimit, issues: active, dismissed, hasHouseRules, checks };
+
+  // Reconcile the checklist with house-rule overrides: a failing force check whose
+  // paired violation was dismissed is marked `dismissed` (house-ruled) rather than a
+  // hard failure, so the checklist never shows a red ✗ while the verdict is LEGAL.
+  // Invariant restored: a force check is a hard failure (satisfied=false, not dismissed)
+  // iff its constraint has an active issue in `active`.
+  const dismissedConstraintIds = new Set(
+    dismissed.map((d) => d.constraintId).filter((id): id is string => id !== undefined),
+  );
+  const reconciledChecks = checks.map((c) =>
+    c.kind === "force" && !c.satisfied && dismissedConstraintIds.has(c.id)
+      ? { ...c, dismissed: true }
+      : c,
+  );
+
+  return { valid, totalPoints, pointsLimit: roster.pointsLimit, issues: active, dismissed, hasHouseRules, checks: reconciledChecks };
 }

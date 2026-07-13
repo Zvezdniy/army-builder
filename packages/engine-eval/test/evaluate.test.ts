@@ -73,6 +73,25 @@ describe("evaluate legality checks", () => {
     expect(result.issues.some((i) => i.constraintId === "fc.hq.min")).toBe(false);
   });
 
+  it("marks a house-ruled force check dismissed, keeping the checklist consistent with the LEGAL verdict", () => {
+    const base = rosterWith([sel("e.troops")]); // no HQ → fc.hq.min fails
+    const roster = { ...base, overrides: [{ constraintId: "fc.hq.min", source: "user" as const }] };
+    const result = evaluate(roster, mini40kCatalogue);
+    // Verdict is LEGAL because the violation is house-ruled away…
+    expect(result.valid).toBe(true);
+    expect(result.issues.some((i) => i.constraintId === "fc.hq.min")).toBe(false);
+    // …and the failing check is flagged dismissed rather than a hard failure.
+    const hq = result.checks.find((c) => c.id === "fc.hq.min");
+    expect(hq?.satisfied).toBe(false);
+    expect(hq?.dismissed).toBe(true);
+  });
+
+  it("does not mark satisfied force checks dismissed", () => {
+    const roster = { ...legalRoster, overrides: [{ constraintId: "fc.hq.min", source: "user" as const }] };
+    const result = evaluate(roster, mini40kCatalogue);
+    expect(result.checks.find((c) => c.id === "fc.hq.min")?.dismissed).toBeUndefined();
+  });
+
   it("skips a force constraint that cannot anchor at army level (no force check)", () => {
     // A force constraint carrying a node-relative scope has no army-level anchor;
     // describeConstraint returns null and it is omitted from checks (still just the points check).

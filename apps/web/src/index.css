@@ -324,8 +324,12 @@ section { background: var(--panel); border: 1px solid var(--line); border-radius
 .check.ok .check-glyph { color: var(--ok); }
 .check.bad .check-glyph { color: var(--error); }
 .check.bad .check-label { color: var(--error); }
+.check.ruled .check-glyph { color: var(--warn); }
+.check.ruled .check-label { color: var(--warn); }
 .check-label { flex: 1; }
+.check-note { color: var(--warn); font-size: 12px; }
 .tabnum { font-variant-numeric: tabular-nums; color: var(--muted); }
+.vh { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 
 .issue-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
 .issue { font-size: 13px; }

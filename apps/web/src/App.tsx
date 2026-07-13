@@ -71,6 +71,10 @@ export function App() {
       <SetupBar catalogue={catalogue} roster={roster} onEdit={openWizardAt} />
       <LegalityPanel
         result={result}
+        // Resolves the name of a TOP-LEVEL unit. Issues carrying a nested
+        // selection id (e.g. selection.hidden on a sub-selection) fall back to
+        // "Unit" and focus nothing actionable — an accepted v1 limitation, since
+        // UnitDetail also addresses only top-level selections.
         unitNameOf={(selectionId) => {
           const sel = roster.selections.find((s) => s.id === selectionId);
           return sel ? catalogue.entries.find((e) => e.id === sel.entryId)?.name : undefined;

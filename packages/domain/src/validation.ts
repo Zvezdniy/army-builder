@@ -23,6 +23,11 @@ export const LegalityCheck = z.object({
   limit: z.number(),
   satisfied: z.boolean(),
   constraintType: z.enum(["min", "max"]).optional(),
+  // True when the rule fails on the raw roster but the matching violation has been
+  // house-ruled away by an override — so the verdict is LEGAL while the check still
+  // fails. The UI renders these as house-ruled rather than a hard failure, keeping
+  // the checklist consistent with `valid`/`issues`.
+  dismissed: z.boolean().optional(),
 });
 export type LegalityCheck = z.infer<typeof LegalityCheck>;
 

@@ -25,7 +25,7 @@ export function LegalityPanel({ result, unitNameOf, onEditPoints, onFocusUnit }:
   return (
     <section className="legality" aria-label="Army legality">
       <div className="legality-head">
-        <span data-testid="verdict" className={valid ? "verdict legal" : "verdict illegal"}>
+        <span role="status" data-testid="verdict" className={valid ? "verdict legal" : "verdict illegal"}>
           {valid ? "LEGAL" : "ILLEGAL"}
         </span>
         <div className="pts">
@@ -46,17 +46,28 @@ export function LegalityPanel({ result, unitNameOf, onEditPoints, onFocusUnit }:
 
       {checks.length > 0 && (
         <ul data-testid="army-checks" className="checklist">
-          {checks.map((c) => (
-            <li key={c.id} data-satisfied={String(c.satisfied)} className={c.satisfied ? "check ok" : "check bad"}>
-              <span className="check-glyph" aria-hidden="true">
-                {c.satisfied ? "✓" : "✗"}
-              </span>
-              <span className="check-label">{c.label}</span>
-              <span className="tabnum">
-                {c.actual} / {c.limit}
-              </span>
-            </li>
-          ))}
+          {checks.map((c) => {
+            // Three states: satisfied (pass), house-ruled (fails on paper but
+            // dismissed by an override → not a hard failure), and hard failure.
+            const houseRuled = !c.satisfied && c.dismissed === true;
+            const state = c.satisfied ? "ok" : houseRuled ? "ruled" : "bad";
+            const status = c.satisfied ? "passed" : houseRuled ? "house-ruled" : "failed";
+            return (
+              <li key={c.id} data-satisfied={String(c.satisfied)} data-state={state} className={`check ${state}`}>
+                <span className="check-glyph" aria-hidden="true">
+                  {c.satisfied ? "✓" : houseRuled ? "≈" : "✗"}
+                </span>
+                <span className="vh">{status}: </span>
+                <span className="check-label">
+                  {c.label}
+                  {houseRuled && <span className="check-note"> · house-ruled</span>}
+                </span>
+                <span className="tabnum">
+                  {c.actual} / {c.limit}
+                </span>
+              </li>
+            );
+          })}
         </ul>
       )}
 

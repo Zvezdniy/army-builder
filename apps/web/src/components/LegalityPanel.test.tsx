@@ -65,6 +65,22 @@ describe("LegalityPanel", () => {
     expect(checks.querySelectorAll("[data-satisfied='true']").length).toBe(1);
   });
 
+  it("renders a house-ruled failing check distinctly (not a hard failure)", () => {
+    const result = baseResult({
+      checks: [
+        { id: "points", kind: "points", label: "Points", actual: 90, limit: 2000, satisfied: true },
+        { id: "f1", kind: "force", label: 'At least 1 category "HQ"', actual: 0, limit: 1, satisfied: false, constraintType: "min", dismissed: true },
+      ],
+    });
+    render(<LegalityPanel result={result} unitNameOf={() => undefined} onEditPoints={noop} onFocusUnit={noop} />);
+    const checks = screen.getByTestId("army-checks");
+    const ruled = checks.querySelector("[data-state='ruled']");
+    expect(ruled).not.toBeNull();
+    expect(ruled).toHaveTextContent(/house-ruled/);
+    // A house-ruled check must not read as a hard failure.
+    expect(checks.querySelectorAll("[data-state='bad']").length).toBe(0);
+  });
+
   it("does not render the checklist when there are no checks", () => {
     render(<LegalityPanel result={baseResult({ checks: [] })} unitNameOf={() => undefined} onEditPoints={noop} onFocusUnit={noop} />);
     expect(screen.queryByTestId("army-checks")).toBeNull();
