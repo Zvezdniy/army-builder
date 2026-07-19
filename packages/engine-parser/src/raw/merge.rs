@@ -84,32 +84,76 @@ pub fn merge_supporting(
     // Append the supporting file's force-org.
     primary.force_entries.extend(supporting.force_entries);
 
-    // Diagnose dropped top-level roots that we don't surface.
-    if !supporting.entries.is_empty() {
+    // Root import: when the primary declares `catalogueLink importRootEntries="true"`
+    // for THIS supporting file (matched by target_id == the supporting catalogue's
+    // id), adopt the supporting file's top-level roots — its root entries and its
+    // catalogue-level entryLinks — as our own, so resolve surfaces them. The shared
+    // entries those roots reference were merged above. This is scoped naturally to
+    // the libraries we actually pass: a link to a catalogue we didn't supply never
+    // matches, so ally links (Titans, Unaligned) are not pulled in. Dedup against
+    // roots we already have (entry id / entryLink target id) so a faction that both
+    // imports and re-declares a root never surfaces it twice.
+    let import_roots = primary
+        .catalogue_links
+        .iter()
+        .any(|cl| cl.import_root_entries && cl.target_id == supporting.id);
+    if import_roots {
+        let mut seen: HashSet<String> = primary
+            .entries
+            .iter()
+            .map(|e| e.id.clone())
+            .chain(primary.entry_links.iter().map(|l| l.target_id.clone()))
+            .collect();
+        let (mut entries_n, mut links_n) = (0usize, 0usize);
+        for e in supporting.entries {
+            if seen.insert(e.id.clone()) {
+                primary.entries.push(e);
+                entries_n += 1;
+            }
+        }
+        for l in supporting.entry_links {
+            if seen.insert(l.target_id.clone()) {
+                primary.entry_links.push(l);
+                links_n += 1;
+            }
+        }
         diags.push(Diagnostic {
-            code: "gameSystem.entries_dropped".to_string(),
+            code: "catalogueLink.roots_imported".to_string(),
             message: format!(
-                "supporting file {}: {} top-level entries dropped (only shared entries are merged)",
-                supporting.id,
-                supporting.entries.len()
+                "imported {} root entries + {} entryLinks from {} (importRootEntries)",
+                entries_n, links_n, supporting.id
             ),
         });
+    } else {
+        // Not root-imported: diagnose the top-level roots we drop (e.g. the game
+        // system's own entries, or a library merged only for its shared pool).
+        if !supporting.entries.is_empty() {
+            diags.push(Diagnostic {
+                code: "gameSystem.entries_dropped".to_string(),
+                message: format!(
+                    "supporting file {}: {} top-level entries dropped (only shared entries are merged)",
+                    supporting.id,
+                    supporting.entries.len()
+                ),
+            });
+        }
+        if !supporting.entry_links.is_empty() {
+            diags.push(Diagnostic {
+                code: "gameSystem.entry_links_dropped".to_string(),
+                message: format!(
+                    "supporting file {}: {} top-level entryLinks dropped (system-level roots not surfaced)",
+                    supporting.id,
+                    supporting.entry_links.len()
+                ),
+            });
+        }
     }
-    if !supporting.entry_links.is_empty() {
-        diags.push(Diagnostic {
-            code: "gameSystem.entry_links_dropped".to_string(),
-            message: format!(
-                "supporting file {}: {} top-level entryLinks dropped (system-level roots not surfaced)",
-                supporting.id,
-                supporting.entry_links.len()
-            ),
-        });
-    }
+    // The supporting file's own catalogueLinks are never followed transitively.
     if !supporting.catalogue_links.is_empty() {
         diags.push(Diagnostic {
             code: "gameSystem.catalogue_links_dropped".to_string(),
             message: format!(
-                "supporting file {}: {} catalogueLinks dropped (sibling libraries are out of scope)",
+                "supporting file {}: {} catalogueLinks dropped (transitive sibling libraries are out of scope)",
                 supporting.id,
                 supporting.catalogue_links.len()
             ),
@@ -130,11 +174,62 @@ fn duplicate_cross_file_diag(id: &str) -> Diagnostic {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::raw::{RawEntry, RawEntryLink, RawForce};
+    use crate::raw::{RawCatalogueLink, RawEntry, RawEntryLink, RawForce};
     use std::collections::HashMap;
 
     fn shared_entry(id: &str) -> RawEntry {
         RawEntry { id: id.to_string(), entry_type: "upgrade".into(), ..Default::default() }
+    }
+
+    fn link_to(target: &str) -> RawEntryLink {
+        RawEntryLink { target_id: target.to_string(), ..Default::default() }
+    }
+
+    #[test]
+    fn imports_target_roots_when_import_root_entries_declared() {
+        // Primary declares importRootEntries for the library (matched by target id),
+        // and already carries one root the library also exposes (to prove dedup).
+        let mut primary = RawCatalogue {
+            id: "cat".into(),
+            game_system_id: Some("lib".into()),
+            catalogue_links: vec![RawCatalogueLink { target_id: "lib".into(), import_root_entries: true }],
+            entry_links: vec![link_to("dup.root")],
+            ..Default::default()
+        };
+        let supporting = RawCatalogue {
+            id: "lib".into(),
+            shared_entries: vec![shared_entry("s.unit")],
+            entries: vec![shared_entry("root.a")],
+            entry_links: vec![link_to("s.unit"), link_to("dup.root")],
+            ..Default::default()
+        };
+        let mut diags = Vec::new();
+        merge_supporting(&mut primary, supporting, &mut diags);
+        // Root entry and the fresh entryLink are adopted; the duplicate is not re-added.
+        assert!(primary.entries.iter().any(|e| e.id == "root.a"), "root entry imported");
+        assert_eq!(primary.entry_links.iter().filter(|l| l.target_id == "s.unit").count(), 1);
+        assert_eq!(primary.entry_links.iter().filter(|l| l.target_id == "dup.root").count(), 1, "no duplicate root");
+        assert!(diags.iter().any(|d| d.code == "catalogueLink.roots_imported"));
+        assert!(!diags.iter().any(|d| d.code == "gameSystem.entries_dropped"), "adopted, not dropped");
+    }
+
+    #[test]
+    fn does_not_import_roots_without_the_flag() {
+        // No matching importRootEntries link → the supporting file's roots are dropped,
+        // only its shared pool merges (the game-system / shared-library case).
+        let mut primary = RawCatalogue { id: "cat".into(), game_system_id: Some("sys".into()), ..Default::default() };
+        let supporting = RawCatalogue {
+            id: "sys".into(),
+            entries: vec![shared_entry("root.x")],
+            entry_links: vec![link_to("t")],
+            ..Default::default()
+        };
+        let mut diags = Vec::new();
+        merge_supporting(&mut primary, supporting, &mut diags);
+        assert!(!primary.entries.iter().any(|e| e.id == "root.x"), "roots not imported without the flag");
+        assert!(diags.iter().any(|d| d.code == "gameSystem.entries_dropped"));
+        assert!(diags.iter().any(|d| d.code == "gameSystem.entry_links_dropped"));
+        assert!(!diags.iter().any(|d| d.code == "catalogueLink.roots_imported"));
     }
 
     #[test]
