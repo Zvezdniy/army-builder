@@ -316,8 +316,8 @@ fn collect_rules_group(g: &JsonGroup, out: &mut BTreeMap<String, String>) {
 }
 
 /// Maps BS-JSON profiles to `RawProfile`s, taking each characteristic's value
-/// from the `$text` field. Not yet wired into `RawCatalogue` entries — Task 5
-/// calls this from `map_entry`.
+/// from the `$text` field. Used for entry/group profiles (via `map_entry`/
+/// `map_group`) and the catalogue's shared-profile pool (via `map_cat`).
 fn map_profiles(ps: &[JsonProfile]) -> Vec<RawProfile> {
     ps.iter().map(|p| RawProfile {
         id: p.id.clone(), name: p.name.clone(), type_name: p.type_name.clone(),
