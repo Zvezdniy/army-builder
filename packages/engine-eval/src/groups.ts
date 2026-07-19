@@ -23,7 +23,11 @@ export function checkGroupConstraint(
         0,
       );
   const limit = applyModifiers(gc.value, gc.modifiers, node, state);
-  const violated = gc.type === "max" ? actual > limit : actual < limit;
+  // BattleScribe's convention: a negative max is "no limit" (commonly a modifier
+  // setting the cap to -1 to lift it, e.g. relics/enhancements unlimited under a
+  // Crusade gate). A negative min is always met (counts are >= 0), so only max
+  // needs guarding here.
+  const violated = gc.type === "max" ? limit >= 0 && actual > limit : actual < limit;
   if (!violated) return null;
 
   const message =

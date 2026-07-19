@@ -29,7 +29,9 @@ export function describeConstraint(
   if (scopeUnanchored(node, constraint, state)) return null;
   const actual = aggregate(node, constraint, state, costOf);
   const limit = effectiveConstraintValue(constraint, node, state, costOf);
-  const satisfied = constraint.type === "max" ? actual <= limit : actual >= limit;
+  // A negative max is BattleScribe's "no limit" sentinel → always satisfied (see
+  // checkConstraint). A negative min is trivially met (counts are >= 0).
+  const satisfied = constraint.type === "max" ? limit < 0 || actual <= limit : actual >= limit;
   return { actual, limit, satisfied };
 }
 
@@ -48,7 +50,10 @@ export function checkConstraint(
   if (scopeUnanchored(node, constraint, state)) return null;
   const actual = aggregate(node, constraint, state, costOf);
   const limit = effectiveConstraintValue(constraint, node, state, costOf);
-  const violated = constraint.type === "max" ? actual > limit : actual < limit;
+  // A negative max is BattleScribe's "no limit" sentinel (e.g. a modifier setting
+  // the cap to -1 to lift it). Treat it as unbounded rather than flagging every
+  // selection as "exceeds max -1". A negative min is trivially met (counts >= 0).
+  const violated = constraint.type === "max" ? limit >= 0 && actual > limit : actual < limit;
   if (!violated) return null;
 
   // Prefer a resolved human name; without a resolver fall back to the raw id.
