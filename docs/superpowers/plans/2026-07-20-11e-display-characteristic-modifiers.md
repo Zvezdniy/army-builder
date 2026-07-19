@@ -28,7 +28,7 @@
 - Tests: `packages/engine-parser/tests/map.rs` (+ a new fixture), the XML/JSON parity twin
 
 **Interfaces:**
-- Produces `IrCharacteristicModifier { characteristic, profileType, kind: "set"|"increment"|"decrement", value: string, targetScope, targetEntryId?, recursive, conditions?, conditionGroups? }` and `IrEntry.characteristicModifiers`.
+- Produces `IrCharacteristicModifier { characteristic, profileType, kind: "set"|"increment"|"decrement", value: string, targetScope, targetId?, recursive, conditions?, conditionGroups? }` and `IrEntry.characteristicModifiers`.
 
 - [ ] **Step 1 (raw):** confirm/extend `RawModifier` to capture `scope` and `affects` strings; read them in `parse.rs` (XML attributes on `<modifier>`) and `parse_json.rs` (JSON `scope`/`affects` keys). Add a raw-parse test asserting both are captured. (`field`/`type`/`value`/`conditions` already captured.)
 - [ ] **Step 2 (domain):** add `IrCharacteristicModifier` (Zod) and `IrEntry.characteristicModifiers: z.array(...).optional()`. Typecheck + domain tests.
@@ -50,7 +50,7 @@
 - Consumes B1’s `IrEntry.characteristicModifiers`; the datasheet section shape from `@muster/roster` (`DatasheetSection`/`IrProfile`). Produces `effectiveDatasheet(catalogue: IrCatalogue, roster: Roster, selectionId: string): DatasheetSection[]`.
 
 - [ ] **Step 1 (TDD):** failing tests for the algorithm (spec §3 / §Testing): `set` swaps a Unit char; `increment` on a weapon char reformats keeping suffix (`"10\""`+2→`"12\""`); a condition-gated modifier applies only when the gate passes; a cross-entry modifier (owning upgrade → parent model Unit profile) reaches the target; a non-numeric value (`"D6"` increment) is unchanged + diagnosed; a recursive broadcast hits every matching profile; a unit with NO characteristic modifiers returns values identical to `datasheet()`. Run `pnpm --filter @muster/engine-eval test` → FAIL.
-- [ ] **Step 2 (impl):** implement `effectiveDatasheet`: build `EvalState` (`buildState`); collect all `characteristicModifiers` in the selection subtree keyed by owning `EvalNode`; gate each via existing condition machinery; resolve `targetScope`→anchor (reuse `scopes.ts` anchor-walk), take self-or-subtree per `recursive`, filter by `profileType` + optional `targetEntryId`; apply set/inc/dec with a leading-integer parse/reformat (`^(\d+)(.*)$`), leaving unparseable values unchanged + pushing a diagnostic; return the datasheet sections with effective values. Keep 100% coverage.
+- [ ] **Step 2 (impl):** implement `effectiveDatasheet`: build `EvalState` (`buildState`); collect all `characteristicModifiers` in the selection subtree keyed by owning `EvalNode`; gate each via existing condition machinery; resolve `targetScope`→anchor (reuse `scopes.ts` anchor-walk), take self-or-subtree per `recursive`, filter by `profileType` + optional `targetId`; apply set/inc/dec with a leading-integer parse/reformat (`^(\d+)(.*)$`), leaving unparseable values unchanged + pushing a diagnostic; return the datasheet sections with effective values. Keep 100% coverage.
 - [ ] **Step 3: commit** — `feat(11e): effectiveDatasheet applies characteristic modifiers`.
 
 ---

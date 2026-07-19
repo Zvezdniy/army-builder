@@ -40,7 +40,10 @@ New `IrCharacteristicModifier`:
   kind: "set" | "increment" | "decrement",   // first slice: numeric only
   value: string,               // display-string value ("2+", "10\"", "1") — characteristics are strings in IR
   targetScope: string,         // reuse IrCondition scope keywords: self|parent|model|upgrade|root-entry|ancestor|model-or-unit|roster|force|<entry-id>
-  targetEntryId?: string,      // optional: restrict the resolved subtree to this specific descendant entry id
+  targetId?: string,           // optional filter the target node must match. REAL DATA: this is a
+                               // CATEGORY id (SM 11e: 1148 of 1306 resolve to a category — Character,
+                               // Psychic Weapon, Extra Attacks Weapon; ZERO resolve to an entry id).
+                               // Eval matches node.entry.id === targetId OR node.categories.includes(targetId).
   recursive: boolean,          // whole subtree vs direct children only
   conditions?: IrCondition[],
   conditionGroups?: IrConditionGroup[],
@@ -58,7 +61,12 @@ skip-if-empty → zero golden churn). Mirror in Rust `model.rs` (strings/bool/f-
   cost type, not a constraint id) AND whose `kind` ∈ {set,increment,decrement} is captured
   as an `IrCharacteristicModifier` on the owning entry instead of dropped as
   `target_unmapped`. The `affects` path (`self.entries[.recursive][.<id>].profiles.<TypeName>`)
-  is parsed into `targetScope`/`targetEntryId`/`recursive`/`profileType`; `field`→
+  is parsed into `targetScope`/`targetId`/`recursive`/`profileType`. NOTE (found in real-data
+  verification): the `affects` path also occurs in two BARE forms — `profiles.<TypeName>` (the
+  target is whatever the modifier's own `scope` attribute anchors to — e.g. Heavy Jump Pack uses
+  `scope="root-entry"`, `affects="profiles.Unit"`) and `<id>.profiles.<TypeName>`. The bare forms
+  MUST keep the modifier's own `scope` as the anchor (falling back to `self` only when absent);
+  hardcoding `self` silently breaks the whole wargear-swap-changes-the-statline case. `field`→
   `characteristic` name (via the catalogue/gamesystem characteristicType id→name map, the
   same decode `map` already has access to). Faithful capture, light structuring — no
   resolution in Rust. `append`/`replace`/`floor`/`ceil` on characteristics remain dropped
@@ -79,7 +87,7 @@ values:
 3. **Resolve target** for each passing modifier: from the owning node, resolve `targetScope`
    to an anchor `EvalNode` (reuse `scopes.ts` `nearestByType`/anchor-walk), take anchor
    self-or-subtree per `recursive`, filter to nodes whose entry has a profile with
-   `typeName === profileType`, and to `targetEntryId` if set.
+   `typeName === profileType`, and to `targetId` if set.
 4. **Apply** in modifier-declaration order, per matching profile+characteristic:
    - `set` → replace the value string.
    - `increment`/`decrement` → parse a leading integer from the current value string
