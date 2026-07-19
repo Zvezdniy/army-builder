@@ -3,7 +3,7 @@ use quick_xml::events::{BytesStart, Event};
 use crate::error::ParseError;
 use crate::xml::SafeXmlReader;
 use super::model::{
-    RawCatalogue, RawCategoryLink, RawCharacteristic, RawCondition, RawConditionGroup,
+    RawCatalogue, RawCatalogueLink, RawCategoryLink, RawCharacteristic, RawCondition, RawConditionGroup,
     RawConstraint, RawCost, RawEntry, RawEntryLink, RawForce, RawGroup, RawModifier, RawProfile,
 };
 
@@ -55,7 +55,7 @@ pub fn parse_raw(bytes: &[u8]) -> Result<RawCatalogue, ParseError> {
                 }
                 b"selectionEntries" => read_entries_into(&mut cat.entries, &mut r, b"selectionEntries")?,
                 b"forceEntries" => read_forces_into(&mut cat.force_entries, &mut r, b"forceEntries")?,
-                b"catalogueLinks" => skip_element(&mut r, b"catalogueLinks")?,
+                b"catalogueLinks" => read_cataloguelinks_into(&mut cat.catalogue_links, &mut r)?,
                 b"entryLinks" => read_entrylinks_into(&mut cat.entry_links, &mut r)?,
                 other => {
                     let name = other.to_vec();
@@ -671,6 +671,43 @@ fn read_entrylinks_into(
             None => {
                 return Err(ParseError::MalformedXml(
                     "unexpected EOF in entryLinks".to_string(),
+                ))
+            }
+        }
+    }
+}
+
+/// Read a catalogue-level `<catalogueLinks>` block. We keep only what root-import
+/// needs: the link's `targetId` (which equals the target catalogue's `id`) and its
+/// `importRootEntries` flag. A link is normally self-closing; a rare one with
+/// children (e.g. its own modifiers) has them skipped.
+fn read_cataloguelinks_into(
+    dst: &mut Vec<RawCatalogueLink>,
+    r: &mut SafeXmlReader,
+) -> Result<(), ParseError> {
+    loop {
+        match r.read_event()? {
+            Some(ev) => match ev.event {
+                Event::Empty(e) if e.local_name().as_ref() == b"catalogueLink" => {
+                    dst.push(RawCatalogueLink {
+                        target_id: attr(&e, b"targetId").unwrap_or_default(),
+                        import_root_entries: attr_bool(&e, b"importRootEntries"),
+                    });
+                }
+                Event::Start(e) if e.local_name().as_ref() == b"catalogueLink" => {
+                    dst.push(RawCatalogueLink {
+                        target_id: attr(&e, b"targetId").unwrap_or_default(),
+                        import_root_entries: attr_bool(&e, b"importRootEntries"),
+                    });
+                    skip_element(r, b"catalogueLink")?;
+                }
+                Event::End(end) if end.local_name().as_ref() == b"catalogueLinks" => return Ok(()),
+                Event::Start(e) => skip_element(r, e.local_name().as_ref())?,
+                _ => {}
+            },
+            None => {
+                return Err(ParseError::MalformedXml(
+                    "unexpected EOF in catalogueLinks".to_string(),
                 ))
             }
         }

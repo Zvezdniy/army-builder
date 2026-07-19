@@ -260,3 +260,24 @@ fn empty_entrylink_has_hidden_attr_no_modifiers() {
     assert!(lk.hidden);
     assert!(lk.modifiers.is_empty());
 }
+
+#[test]
+fn reads_catalogue_level_catalogue_links() {
+    // Catalogue-level <catalogueLinks> feed root import: we keep targetId and the
+    // importRootEntries flag (absent => false, per BattleScribe).
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <catalogueLinks>
+    <catalogueLink id="l1" name="Base" targetId="base-id" type="catalogue" importRootEntries="true"/>
+    <catalogueLink id="l2" name="Ally" targetId="ally-id" type="catalogue" importRootEntries="false"/>
+    <catalogueLink id="l3" name="Plain" targetId="plain-id" type="catalogue"/>
+  </catalogueLinks>
+</catalogue>"#;
+    let raw = parse_raw(xml).unwrap();
+    assert_eq!(raw.catalogue_links.len(), 3);
+    let base = raw.catalogue_links.iter().find(|l| l.target_id == "base-id").unwrap();
+    assert!(base.import_root_entries);
+    assert!(!raw.catalogue_links.iter().find(|l| l.target_id == "ally-id").unwrap().import_root_entries);
+    assert!(!raw.catalogue_links.iter().find(|l| l.target_id == "plain-id").unwrap().import_root_entries);
+}
