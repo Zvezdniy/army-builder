@@ -51,11 +51,14 @@ jobs:
           echo "BSData $REPO@$REF is at $SHA"
 
       - id: marker
-        name: Already published this revision + config?
+        name: Already published this revision + config + pipeline code?
         uses: actions/cache/restore@v4
         with:
+          # Rebuild when the upstream data (SHA) OR anything that shapes our output
+          # changes: the faction config + pipeline scripts + the Rust parser source.
+          # Keying on config alone let a parser/pipeline fix land without a rebuild.
           path: .bsdata-built
-          key: bsdata-${{ steps.upstream.outputs.sha }}-${{ hashFiles('scripts/catalogues.config.json') }}
+          key: bsdata-${{ steps.upstream.outputs.sha }}-${{ hashFiles('scripts/**', 'packages/engine-parser/src/**/*.rs', 'packages/engine-parser/Cargo.toml') }}
           lookup-only: true
 
       - if: steps.marker.outputs.cache-hit == 'true'
@@ -129,5 +132,6 @@ jobs:
       - run: echo "${{ needs.check.outputs.sha }}" > .bsdata-built
       - uses: actions/cache/save@v4
         with:
+          # Must match the check job's restore key exactly.
           path: .bsdata-built
-          key: bsdata-${{ needs.check.outputs.sha }}-${{ hashFiles('scripts/catalogues.config.json') }}
+          key: bsdata-${{ needs.check.outputs.sha }}-${{ hashFiles('scripts/**', 'packages/engine-parser/src/**/*.rs', 'packages/engine-parser/Cargo.toml') }}
