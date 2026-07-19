@@ -1,59 +1,12 @@
 import { Fragment, useState } from "react";
 import type { IrCatalogue, RosterSelection } from "@muster/domain";
-import { datasheet, unitLoadout, type DatasheetSection } from "@muster/roster";
+import { datasheet, unitLoadout, invulnSave, type DatasheetSection } from "@muster/roster";
 
 /** Devices that can hover (desktop) show rule popups on hover; touch shows on tap. */
 const canHover =
   typeof window !== "undefined" && !!window.matchMedia && window.matchMedia("(hover: hover)").matches;
 
 const WEAPON_TYPES = new Set(["Ranged Weapons", "Melee Weapons"]);
-
-/** The invulnerable save resolved for the statline chip: its value ("4+"), the
- *  source profile's name, and whether the source text is a BARE save (just "N+",
- *  nothing else) — a bare one is redundant with the chip and dropped from the
- *  Abilities list, while a qualified one ("5+ against ranged attacks", or a
- *  footnoted "4+\n* …melee…") stays so its condition remains visible. */
-interface InvulnInfo {
-  value: string;
-  sourceName: string;
-  bare: boolean;
-}
-
-/** First "N+" save token in a string, or undefined. Handles a bare "4+", a
- *  sentence ("This model has a 5+ invulnerable save…"), and a footnoted
- *  "4+\n* …". First-match: in every real invuln-ability form the save is the
- *  leading "N+" token, and the caller only runs this on invuln-named abilities,
- *  so an unrelated earlier "N+" in prose is not a concern in practice. */
-function extractSavePlus(text: string): string | undefined {
-  const m = text.match(/(\d+)\+/);
-  return m ? `${m[1]}+` : undefined;
-}
-
-/**
- * Resolve a unit's invulnerable save from its datasheet sections. Real BSData
- * encodes it as an "Abilities" profile named "Invulnerable Save" (sometimes with a
- * trailing "*"), the value in its Description characteristic. Synthetic/legacy data
- * uses a dedicated "Invulnerable Save" typeName. Returns undefined when there is no
- * invuln or no parseable save value (so a broken chip never shows).
- */
-function findInvuln(sections: DatasheetSection[]): InvulnInfo | undefined {
-  // Legacy/synthetic: a dedicated section whose single characteristic is the save.
-  const dedicated = sections.find((s) => s.typeName === "Invulnerable Save")?.profiles[0];
-  if (dedicated) {
-    const raw = dedicated.characteristics[0]?.value ?? "";
-    const value = extractSavePlus(raw) ?? raw.trim();
-    return value ? { value, sourceName: dedicated.name, bare: true } : undefined;
-  }
-  // Real data: an "Invulnerable Save[*]" ability inside the Abilities section.
-  const abilities = sections.find((s) => s.typeName === "Abilities");
-  const inv = abilities?.profiles.find((p) => /^invulnerable save/i.test(p.name));
-  if (!inv) return undefined;
-  const raw = inv.characteristics.find((c) => c.name === "Description")?.value ?? "";
-  const value = extractSavePlus(raw);
-  if (!value) return undefined;
-  // Bare = the description is exactly the save value (no qualifying prose/footnote).
-  return { value, sourceName: inv.name, bare: raw.trim() === value };
-}
 
 /** The Unit statline as a prominent, evenly-divided stat bar. */
 function Statline({ section }: { section: DatasheetSection }) {
@@ -76,7 +29,7 @@ function Statline({ section }: { section: DatasheetSection }) {
 export function UnitStatline({ catalogue, selection }: { catalogue: IrCatalogue; selection: RosterSelection }) {
   const sections = datasheet(catalogue, selection);
   const unit = sections.find((s) => s.typeName === "Unit");
-  const invuln = findInvuln(sections);
+  const invuln = invulnSave(catalogue, selection);
   if (!unit) return null;
   const chars = unit.profiles[0]?.characteristics ?? [];
   const tIndex = chars.findIndex((c) => c.name === "T");
@@ -227,7 +180,7 @@ export function Datasheet({
   // The invuln chip (in UnitStatline) already shows a bare "N+"; drop that same
   // ability line here to avoid showing it twice. A qualified invuln (extra prose or
   // a footnote) stays, so its condition — e.g. "against ranged attacks" — is visible.
-  const invuln = findInvuln(all);
+  const invuln = invulnSave(catalogue, selection);
   const abilitiesRaw = all.find((s) => s.typeName === "Abilities");
   const abilities = abilitiesRaw && invuln?.bare
     ? { ...abilitiesRaw, profiles: abilitiesRaw.profiles.filter((p) => p.name !== invuln.sourceName) }
