@@ -1939,3 +1939,245 @@ fn foreign_id_condition_scope_is_emitted_not_dropped() {
     let cond = modi[0].conditions.as_ref().expect("modifier keeps its condition")[0].clone();
     assert_eq!(cond.scope, "8da0-4570-c3c-819f", "foreign-id scope passed through verbatim");
 }
+
+/// B1: a numeric characteristic (set/increment/decrement) modifier whose `field`
+/// resolves to a characteristicType id (via <profileTypes><profileType>
+/// <characteristicTypes>) is captured on the OWNING entry as an
+/// IrCharacteristicModifier, with a faithfully-parsed (not resolved) target spec —
+/// mirrors the real "Artificer Armour" Enhancement: an upgrade entry with a `set`
+/// modifier whose `affects` reaches "up" to reach its parent model's Unit profile.
+#[test]
+fn maps_cross_entry_set_characteristic_modifier() {
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <costTypes><costType id="pts" name="Points"/></costTypes>
+  <profileTypes>
+    <profileType id="pt.unit" name="Unit">
+      <characteristicTypes>
+        <characteristicType id="ct.sv" name="Sv"/>
+      </characteristicTypes>
+    </profileType>
+  </profileTypes>
+  <selectionEntries>
+    <selectionEntry id="e.model" name="Captain" type="model">
+      <costs><cost name="pts" typeId="pts" value="90"/></costs>
+      <profiles>
+        <profile id="p.unit" name="Captain" typeName="Unit">
+          <characteristics><characteristic name="Sv">3+</characteristic></characteristics>
+        </profile>
+      </profiles>
+      <selectionEntryGroups>
+        <selectionEntryGroup id="g.enh" name="Enhancements">
+          <selectionEntries>
+            <selectionEntry id="e.artificer" name="Artificer Armour" type="upgrade">
+              <costs><cost name="pts" typeId="pts" value="10"/></costs>
+              <modifiers>
+                <modifier type="set" field="ct.sv" value="2+" scope="model"
+                          affects="self.entries.recursive.e.model.profiles.Unit"/>
+                <modifier type="append" field="ct.sv" value="+0" scope="model"
+                          affects="self.entries.recursive.e.model.profiles.Unit"/>
+              </modifiers>
+            </selectionEntry>
+          </selectionEntries>
+        </selectionEntryGroup>
+      </selectionEntryGroups>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let raw = resolve(parse_raw(xml).unwrap()).unwrap();
+    let (ir, diags) = to_ir(&raw);
+    let model = ir.entries.iter().find(|e| e.id == "e.model").unwrap();
+    let artificer = model.children.iter().find(|e| e.id == "e.artificer")
+        .unwrap_or_else(|| panic!("e.artificer missing from e.model's flattened children"));
+
+    assert_eq!(artificer.characteristic_modifiers.len(), 1,
+        "only the set modifier is captured; the append modifier is dropped (unsupported), unchanged");
+    let cm = &artificer.characteristic_modifiers[0];
+    assert_eq!(cm.characteristic, "Sv");
+    assert_eq!(cm.profile_type, "Unit");
+    assert_eq!(cm.kind, "set");
+    assert_eq!(cm.value, "2+");
+    assert_eq!(cm.target_scope, "model");
+    assert_eq!(cm.target_entry_id.as_deref(), Some("e.model"));
+    assert!(cm.recursive);
+    assert!(cm.conditions.is_none());
+    assert!(cm.condition_groups.is_none());
+
+    // The set modifier is captured, not dropped as target_unmapped.
+    assert!(
+        !diags.iter().any(|d| d.code == "modifier.target_unmapped" && d.message.contains("e.artificer")),
+        "set characteristic modifier should not be diagnosed as target_unmapped: {:?}", diags
+    );
+    // The append modifier is STILL dropped (unchanged) — via the existing
+    // value_type_unsupported kind filter in map_modifier.
+    assert!(
+        diags.iter().any(|d| d.code == "modifier.value_type_unsupported"),
+        "append modifier on a characteristic should still be dropped as unsupported: {:?}", diags
+    );
+}
+
+/// A recursive broadcast with no specific target entry id (the "whole subtree,
+/// any descendant, profile-type filter only" shape — the single most common
+/// real pattern per the investigation).
+#[test]
+fn maps_recursive_broadcast_characteristic_modifier_without_target_id() {
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <profileTypes>
+    <profileType id="pt.mw" name="Melee Weapons">
+      <characteristicTypes>
+        <characteristicType id="ct.s" name="S"/>
+      </characteristicTypes>
+    </profileType>
+  </profileTypes>
+  <selectionEntries>
+    <selectionEntry id="e.enh" name="The Honour Vehement" type="upgrade">
+      <modifiers>
+        <modifier type="increment" field="ct.s" value="1" scope="model"
+                  affects="self.entries.recursive.profiles.Melee Weapons"/>
+      </modifiers>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let raw = resolve(parse_raw(xml).unwrap()).unwrap();
+    let (ir, _diags) = to_ir(&raw);
+    let enh = ir.entries.iter().find(|e| e.id == "e.enh").unwrap();
+    let cm = &enh.characteristic_modifiers[0];
+    assert_eq!(cm.characteristic, "S");
+    assert_eq!(cm.profile_type, "Melee Weapons");
+    assert_eq!(cm.kind, "increment");
+    assert_eq!(cm.value, "1");
+    assert_eq!(cm.target_scope, "model");
+    assert!(cm.target_entry_id.is_none());
+    assert!(cm.recursive);
+}
+
+/// A direct-children-only (non-recursive) broadcast with no specific target id.
+#[test]
+fn maps_direct_children_characteristic_modifier() {
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <profileTypes>
+    <profileType id="pt.unit" name="Unit">
+      <characteristicTypes>
+        <characteristicType id="ct.t" name="T"/>
+      </characteristicTypes>
+    </profileType>
+  </profileTypes>
+  <selectionEntries>
+    <selectionEntry id="e.enh" name="Enh" type="upgrade">
+      <modifiers>
+        <modifier type="decrement" field="ct.t" value="1" scope="parent"
+                  affects="self.entries.profiles.Unit"/>
+      </modifiers>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let raw = resolve(parse_raw(xml).unwrap()).unwrap();
+    let (ir, _diags) = to_ir(&raw);
+    let enh = ir.entries.iter().find(|e| e.id == "e.enh").unwrap();
+    let cm = &enh.characteristic_modifiers[0];
+    assert_eq!(cm.kind, "decrement");
+    assert_eq!(cm.target_scope, "parent");
+    assert!(cm.target_entry_id.is_none());
+    assert!(!cm.recursive, "self.entries.profiles.X (no `recursive` keyword) means direct children only");
+}
+
+/// A conditional characteristic modifier keeps its gating condition (reusing
+/// the existing non-strict condition-mapping helpers).
+#[test]
+fn maps_conditional_characteristic_modifier_with_condition() {
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <categoryEntries><categoryEntry id="cat.x" name="X"/></categoryEntries>
+  <profileTypes>
+    <profileType id="pt.unit" name="Unit">
+      <characteristicTypes>
+        <characteristicType id="ct.m" name="M"/>
+      </characteristicTypes>
+    </profileType>
+  </profileTypes>
+  <selectionEntries>
+    <selectionEntry id="e.enh" name="Enh" type="upgrade">
+      <modifiers>
+        <modifier type="increment" field="ct.m" value="2" scope="self" affects="self.entries.profiles.Unit">
+          <conditions>
+            <condition type="atLeast" field="selections" scope="roster" value="1" childId="cat.x"/>
+          </conditions>
+        </modifier>
+      </modifiers>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let raw = resolve(parse_raw(xml).unwrap()).unwrap();
+    let (ir, _diags) = to_ir(&raw);
+    let enh = ir.entries.iter().find(|e| e.id == "e.enh").unwrap();
+    let cm = &enh.characteristic_modifiers[0];
+    let conds = cm.conditions.as_ref().expect("condition mapped");
+    assert_eq!(conds[0].comparator, "atLeast");
+    assert_eq!(conds[0].target_id, "cat.x");
+    assert_eq!(conds[0].scope, "roster");
+}
+
+/// A divide/multiply modifier on a characteristic field is NOT captured (those
+/// kinds are cost-modifier-only) — it still falls through to target_unmapped.
+#[test]
+fn divide_multiply_on_characteristic_field_stays_target_unmapped() {
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <profileTypes>
+    <profileType id="pt.unit" name="Unit">
+      <characteristicTypes>
+        <characteristicType id="ct.t" name="T"/>
+      </characteristicTypes>
+    </profileType>
+  </profileTypes>
+  <selectionEntries>
+    <selectionEntry id="e.enh" name="Enh" type="upgrade">
+      <modifiers>
+        <modifier type="divide" field="ct.t" value="2" scope="self" affects="self.entries.profiles.Unit"/>
+      </modifiers>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let raw = resolve(parse_raw(xml).unwrap()).unwrap();
+    let (ir, diags) = to_ir(&raw);
+    let enh = ir.entries.iter().find(|e| e.id == "e.enh").unwrap();
+    assert!(enh.characteristic_modifiers.is_empty());
+    assert!(diags.iter().any(|d| d.code == "modifier.target_unmapped" && d.message.contains("e.enh")));
+}
+
+/// An `affects` path that does not match the documented grammar (no leading
+/// "self.entries") is faithfully NOT captured — falls through to
+/// target_unmapped unchanged, rather than guessing a target.
+#[test]
+fn unrecognized_affects_grammar_stays_target_unmapped() {
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <profileTypes>
+    <profileType id="pt.rw" name="Ranged Weapons">
+      <characteristicTypes>
+        <characteristicType id="ct.a" name="A"/>
+      </characteristicTypes>
+    </profileType>
+  </profileTypes>
+  <selectionEntries>
+    <selectionEntry id="e.enh" name="Enh" type="upgrade">
+      <modifiers>
+        <modifier type="set" field="ct.a" value="1" scope="upgrade" affects="profiles.Ranged Weapons"/>
+      </modifiers>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let raw = resolve(parse_raw(xml).unwrap()).unwrap();
+    let (ir, diags) = to_ir(&raw);
+    let enh = ir.entries.iter().find(|e| e.id == "e.enh").unwrap();
+    assert!(enh.characteristic_modifiers.is_empty(), "bare `profiles.X` affects (no self.entries prefix) not yet handled");
+    assert!(diags.iter().any(|d| d.code == "modifier.target_unmapped" && d.message.contains("e.enh")));
+}

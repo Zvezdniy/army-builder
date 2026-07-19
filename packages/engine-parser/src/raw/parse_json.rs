@@ -13,6 +13,7 @@ struct JsonCat {
     id: String, name: String, revision: i64, game_system_id: Option<String>,
     cost_types: Vec<JsonCostType>,
     category_entries: Vec<JsonCategoryEntry>,
+    profile_types: Vec<JsonProfileType>,
     rules: Vec<JsonRule>, shared_rules: Vec<JsonRule>,
     shared_selection_entries: Vec<JsonEntry>,
     shared_selection_entry_groups: Vec<JsonGroup>,
@@ -30,6 +31,17 @@ struct JsonCostType { id: String, name: String }
 #[derive(Deserialize, Default)]
 #[serde(default, rename_all = "camelCase")]
 struct JsonCategoryEntry { id: String, name: String }
+
+/// Mirrors the XML `<profileType><characteristicTypes><characteristicType/>`
+/// nesting: each profileType carries its own list of characteristicType
+/// id->name pairs, flattened into RawCatalogue.characteristic_types by `map_cat`.
+#[derive(Deserialize, Default)]
+#[serde(default, rename_all = "camelCase")]
+struct JsonProfileType { id: String, name: String, characteristic_types: Vec<JsonCharacteristicType> }
+
+#[derive(Deserialize, Default)]
+#[serde(default, rename_all = "camelCase")]
+struct JsonCharacteristicType { id: String, name: String }
 
 #[derive(Deserialize, Default)]
 #[serde(default, rename_all = "camelCase")]
@@ -140,6 +152,7 @@ struct JsonConstraint {
 struct JsonModifier {
     #[serde(rename = "type")] kind: String, field: String,
     value: serde_json::Value,
+    scope: String, affects: String,
     conditions: Vec<JsonCondition>, condition_groups: Vec<JsonConditionGroup>,
     repeats: Vec<serde_json::Value>,
 }
@@ -210,12 +223,19 @@ fn map_cat(c: JsonCat, diags: &mut Vec<Diagnostic>) -> RawCatalogue {
         if ce.id.is_empty() { continue; }
         categories.insert(ce.id.clone(), ce.name.clone());
     }
+    let mut characteristic_types = HashMap::new();
+    for pt in &c.profile_types {
+        for ct in &pt.characteristic_types {
+            if ct.id.is_empty() { continue; }
+            characteristic_types.insert(ct.id.clone(), ct.name.clone());
+        }
+    }
     let mut rules = BTreeMap::new();
     collect_rules(&c, &mut rules);
     RawCatalogue {
         id: c.id.clone(), name: c.name.clone(), revision: c.revision,
         game_system_id: c.game_system_id.clone(),
-        cost_types, categories, rules,
+        cost_types, categories, characteristic_types, rules,
         shared_entries: c.shared_selection_entries.iter().map(|e| map_entry(e, diags)).collect(),
         shared_groups: c.shared_selection_entry_groups.iter().map(|g| map_group(g, diags)).collect(),
         entries: c.selection_entries.iter().map(|e| map_entry(e, diags)).collect(),
@@ -371,6 +391,7 @@ fn map_one_modifier(m: &JsonModifier) -> RawModifier {
     let (value, value_raw) = modifier_value(&m.value);
     RawModifier {
         kind: m.kind.clone(), field: m.field.clone(), value, value_raw,
+        scope: m.scope.clone(), affects: m.affects.clone(),
         conditions: map_conditions(&m.conditions),
         condition_groups: map_condition_groups(&m.condition_groups),
         has_repeats: !m.repeats.is_empty(),
@@ -451,6 +472,7 @@ mod tests {
             conditions: vec![JsonCondition { comparator: "instanceOf".into(), field: "selections".into(),
                 scope: "roster".into(), value: 1.0, child_id: "x".into(), include_child_selections: true }],
             condition_groups: vec![], repeats: vec![serde_json::json!({})],
+            ..Default::default()
         };
         let out = map_modifiers(std::slice::from_ref(&m), &[], &mut Vec::new());
         assert_eq!((out[0].kind.as_str(), out[0].value, out[0].value_raw.as_str()), ("set", 0.0, "true"));

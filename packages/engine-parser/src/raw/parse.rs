@@ -47,6 +47,9 @@ pub fn parse_raw(bytes: &[u8]) -> Result<RawCatalogue, ParseError> {
                         cat.categories.insert(id, name);
                     }
                 }
+                b"profileTypes" => {
+                    read_profile_types_into(&mut cat.characteristic_types, &mut r)?
+                }
                 b"sharedSelectionEntries" => {
                     read_entries_into(&mut cat.shared_entries, &mut r, b"sharedSelectionEntries")?
                 }
@@ -389,6 +392,97 @@ fn read_profiles_into(
             },
             None => {
                 return Err(ParseError::MalformedXml("unexpected EOF in profiles".to_string()))
+            }
+        }
+    }
+}
+
+/// Read a `<profileTypes>` block: each `<profileType>` nests its own
+/// `<characteristicTypes>` list of `<characteristicType id name/>` — the
+/// id->name decode a characteristic-modifier's `field` is looked up against.
+/// Flattened across every profileType into one map (see RawCatalogue's field doc).
+fn read_profile_types_into(
+    dst: &mut std::collections::HashMap<String, String>,
+    r: &mut SafeXmlReader,
+) -> Result<(), ParseError> {
+    loop {
+        match r.read_event()? {
+            Some(ev) => match ev.event {
+                Event::Start(e) if e.local_name().as_ref() == b"profileType" => {
+                    read_profile_type_into(dst, r)?;
+                }
+                Event::Empty(e) if e.local_name().as_ref() == b"profileType" => {}
+                Event::End(end) if end.local_name().as_ref() == b"profileTypes" => return Ok(()),
+                Event::Start(e) => {
+                    skip_element(r, e.local_name().as_ref())?;
+                }
+                _ => {}
+            },
+            None => {
+                return Err(ParseError::MalformedXml(
+                    "unexpected EOF in profileTypes".to_string(),
+                ))
+            }
+        }
+    }
+}
+
+fn read_profile_type_into(
+    dst: &mut std::collections::HashMap<String, String>,
+    r: &mut SafeXmlReader,
+) -> Result<(), ParseError> {
+    loop {
+        match r.read_event()? {
+            Some(ev) => match ev.event {
+                Event::Start(e) if e.local_name().as_ref() == b"characteristicTypes" => {
+                    read_characteristic_types_into(dst, r)?;
+                }
+                Event::Empty(_) => {}
+                Event::End(end) if end.local_name().as_ref() == b"profileType" => return Ok(()),
+                Event::Start(e) => {
+                    skip_element(r, e.local_name().as_ref())?;
+                }
+                _ => {}
+            },
+            None => {
+                return Err(ParseError::MalformedXml(
+                    "unexpected EOF in profileType".to_string(),
+                ))
+            }
+        }
+    }
+}
+
+fn read_characteristic_types_into(
+    dst: &mut std::collections::HashMap<String, String>,
+    r: &mut SafeXmlReader,
+) -> Result<(), ParseError> {
+    loop {
+        match r.read_event()? {
+            Some(ev) => match ev.event {
+                Event::Start(e) if e.local_name().as_ref() == b"characteristicType" => {
+                    if let (Some(id), Some(name)) = (attr(&e, b"id"), attr(&e, b"name")) {
+                        dst.insert(id, name);
+                    }
+                    skip_element(r, b"characteristicType")?;
+                }
+                Event::Empty(e) if e.local_name().as_ref() == b"characteristicType" => {
+                    if let (Some(id), Some(name)) = (attr(&e, b"id"), attr(&e, b"name")) {
+                        dst.insert(id, name);
+                    }
+                }
+                Event::End(end) if end.local_name().as_ref() == b"characteristicTypes" => {
+                    return Ok(())
+                }
+                Event::Start(e) => {
+                    skip_element(r, e.local_name().as_ref())?;
+                }
+                _ => {}
+            },
+            None => {
+                return Err(ParseError::MalformedXml(
+                    "unexpected EOF in characteristicTypes".to_string(),
+                ))
             }
         }
     }
@@ -804,6 +898,8 @@ fn read_modifiers_into(
                         field: attr(&e, b"field").unwrap_or_default(),
                         value: attr_f64(&e, b"value").unwrap_or(0.0),
                         value_raw: attr(&e, b"value").unwrap_or_default(),
+                        scope: attr(&e, b"scope").unwrap_or_default(),
+                        affects: attr(&e, b"affects").unwrap_or_default(),
                         ..Default::default()
                     });
                 }
@@ -828,6 +924,8 @@ fn read_modifier(start: &BytesStart, r: &mut SafeXmlReader) -> Result<RawModifie
         field: attr(start, b"field").unwrap_or_default(),
         value: attr_f64(start, b"value").unwrap_or(0.0),
         value_raw: attr(start, b"value").unwrap_or_default(),
+        scope: attr(start, b"scope").unwrap_or_default(),
+        affects: attr(start, b"affects").unwrap_or_default(),
         ..Default::default()
     };
     loop {

@@ -109,6 +109,7 @@ fn map_entry(e: &RawEntry, cat: &RawCatalogue, diags: &mut Vec<Diagnostic>) -> I
     let mut visibility_modifiers: Vec<IrVisibilityModifier> = Vec::new();
     let mut validation_rules: Vec<IrValidationRule> = Vec::new();
     let mut category_modifiers: Vec<IrCategoryModifier> = Vec::new();
+    let mut characteristic_modifiers: Vec<IrCharacteristicModifier> = Vec::new();
     for (index, m) in e.modifiers.iter().enumerate() {
         if m.field == "hidden" {
             match map_visibility_modifier(m, cat) {
@@ -180,6 +181,25 @@ fn map_entry(e: &RawEntry, cat: &RawCatalogue, diags: &mut Vec<Diagnostic>) -> I
             // selectionEntryGroup rather than the entry itself — attach to
             // that IrGroupConstraint instead of dropping.
             gc.modifiers.get_or_insert_with(Vec::new).push(ir_mod);
+        } else if let Some(characteristic) = cat.characteristic_types.get(&m.field).cloned() {
+            // B1: field resolves to a characteristicType (not a cost type or
+            // constraint id) — a numeric set/increment/decrement modifier with a
+            // parseable `affects` path is captured as an IrCharacteristicModifier
+            // on this (owning) entry, faithfully carrying its UNRESOLVED target
+            // spec (engine-eval resolves it against the live roster). Any other
+            // kind (divide/multiply) or an unparseable/absent `affects` path
+            // falls through to the same target_unmapped diagnostic as before —
+            // this branch never guesses a target.
+            match map_characteristic_modifier(m, &characteristic, cat, diags) {
+                Some(cm) => characteristic_modifiers.push(cm),
+                None => diags.push(Diagnostic {
+                    code: "modifier.target_unmapped".to_string(),
+                    message: format!(
+                        "modifier field {} matches characteristic {} on entry {} but its kind ({}) or affects path ({:?}) is unsupported",
+                        m.field, characteristic, e.id, m.kind, m.affects
+                    ),
+                }),
+            }
         } else {
             diags.push(Diagnostic {
                 code: "modifier.target_unmapped".to_string(),
@@ -204,6 +224,7 @@ fn map_entry(e: &RawEntry, cat: &RawCatalogue, diags: &mut Vec<Diagnostic>) -> I
         visibility_modifiers,
         validation_rules,
         category_modifiers,
+        characteristic_modifiers,
     }
 }
 
@@ -770,6 +791,87 @@ fn map_category_modifier(m: &RawModifier, cat: &RawCatalogue) -> Option<IrCatego
     Some(IrCategoryModifier {
         type_: m.kind.clone(),
         category_id: m.value_raw.clone(),
+        conditions: if conditions.is_empty() { None } else { Some(conditions) },
+        condition_groups: if condition_groups.is_empty() { None } else { Some(condition_groups) },
+    })
+}
+
+/// Parse a characteristic modifier's `affects` BattleScribe addressing path
+/// into the pieces `IrCharacteristicModifier` needs: whether the target is the
+/// scope anchor's whole subtree or just its direct children (`recursive`), an
+/// optional specific descendant entry id to restrict to, and the profile
+/// typeName the target profile must have. Only the documented grammar
+/// `self.entries[.recursive][.<entryId>].profiles.<TypeName>` is understood
+/// (per the design doc / investigation report); anything else — a bare
+/// `profiles.<TypeName>` (no `self.entries` prefix, "this entry's own profile,
+/// explicit" shape), a bare `<entryId>.profiles.<TypeName>`, or no `affects` at
+/// all ("implicit self") — returns None. This is a deliberate first-slice
+/// restriction, not a resolution step: an unparseable/unrecognized path is
+/// faithfully left uncaptured (the caller drops it as `target_unmapped`, the
+/// same diagnostic every characteristic modifier got before this channel
+/// existed) rather than guessed.
+fn parse_affects(affects: &str) -> Option<(bool, Option<String>, String)> {
+    let rest = affects.strip_prefix("self.entries")?;
+    let rest = rest.strip_prefix('.')?;
+    let (recursive, rest) = match rest.strip_prefix("recursive.") {
+        Some(r) => (true, r),
+        None => (false, rest),
+    };
+    let (target_entry_id, profile_type) = match rest.strip_prefix("profiles.") {
+        Some(type_name) => (None, type_name),
+        None => {
+            let idx = rest.find(".profiles.")?;
+            let id = &rest[..idx];
+            let type_name = &rest[idx + ".profiles.".len()..];
+            (Some(id.to_string()), type_name)
+        }
+    };
+    if profile_type.is_empty() {
+        return None;
+    }
+    Some((recursive, target_entry_id, profile_type.to_string()))
+}
+
+/// Build a captured (UNRESOLVED — no tree-walking here) characteristic
+/// modifier for a numeric `set`/`increment`/`decrement` modifier whose `field`
+/// already matched a characteristicType (checked by the caller). Returns None
+/// when the kind is unsupported for characteristics (`divide`/`multiply` are
+/// cost-modifier-only — see `map_modifier`'s doc comment) or the `affects` path
+/// doesn't match the documented grammar (`parse_affects`); the caller then
+/// diagnoses the whole thing as `modifier.target_unmapped`, exactly as it did
+/// before this channel existed. `append`/`replace`/`floor`/`ceil` never reach
+/// here at all — `map_modifier`'s kind whitelist already drops them earlier
+/// (as `modifier.value_type_unsupported`) before the caller's branching logic
+/// runs. Conditions/condition-groups are mapped with the existing non-strict
+/// helpers (an individually-unmappable condition is dropped, not the whole
+/// modifier — mirrors `map_modifier`'s own gate handling, not the constraint-
+/// limit strict path).
+fn map_characteristic_modifier(
+    m: &RawModifier,
+    characteristic: &str,
+    cat: &RawCatalogue,
+    diags: &mut Vec<Diagnostic>,
+) -> Option<IrCharacteristicModifier> {
+    if !matches!(m.kind.as_str(), "set" | "increment" | "decrement") {
+        return None;
+    }
+    let (recursive, target_entry_id, profile_type) = parse_affects(&m.affects)?;
+
+    let conditions: Vec<IrCondition> = m.conditions.iter()
+        .filter_map(|c| map_condition(c, cat, diags))
+        .collect();
+    let condition_groups: Vec<IrConditionGroup> = m.condition_groups.iter()
+        .filter_map(|g| map_condition_group(g, cat, diags))
+        .collect();
+
+    Some(IrCharacteristicModifier {
+        characteristic: characteristic.to_string(),
+        profile_type,
+        kind: m.kind.clone(),
+        value: m.value_raw.clone(),
+        target_scope: map_condition_scope(&m.scope),
+        target_entry_id,
+        recursive,
         conditions: if conditions.is_empty() { None } else { Some(conditions) },
         condition_groups: if condition_groups.is_empty() { None } else { Some(condition_groups) },
     })

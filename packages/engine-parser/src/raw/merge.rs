@@ -87,6 +87,9 @@ pub fn merge_supporting(
     for (k, v) in supporting.categories {
         primary.categories.entry(k).or_insert(v);
     }
+    for (k, v) in supporting.characteristic_types {
+        primary.characteristic_types.entry(k).or_insert(v);
+    }
     for (k, v) in supporting.rules {
         primary.rules.entry(k).or_insert(v);
     }
