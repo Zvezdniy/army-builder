@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import type { IrCatalogue } from "@muster/domain";
 import { loadCatalogue } from "@muster/domain";
 import { createRoster, addUnit, addOption, toggleGroupMember, setCount, remove,
-  setDetachment, setPointsLimit, availableDetachments, selectedDetachment } from "@muster/roster";
+  setDetachment, setPointsLimit, availableDetachments, selectedDetachment,
+  detachmentSelectionIds } from "@muster/roster";
 import { evaluate, hiddenEntryIds, hiddenSelectionIds } from "@muster/engine-eval";
 import { RosterList } from "./components/RosterList";
 import { UnitDetail } from "./components/UnitDetail";
@@ -41,7 +42,18 @@ export function App() {
   const [registry, setRegistry] = useState<CatalogueDescriptor[]>([bundled]);
   const [activeDescriptorId, setActiveDescriptorId] = useState(bundled.id);
   const [factionError, setFactionError] = useState<string | undefined>(undefined);
-  const result = useMemo(() => evaluate(roster, catalogue), [roster, catalogue]);
+  const result = useMemo(() => {
+    const r = evaluate(roster, catalogue);
+    // The detachment is an army-level choice made in the wizard, not a roster unit,
+    // so drop the "not available in the current army configuration" warning on it and
+    // its subtree — its own availability gate is not a unit problem.
+    const detSel = detachmentSelectionIds(roster, catalogue);
+    if (detSel.size === 0) return r;
+    const issues = r.issues.filter(
+      (i) => !(i.code === "selection.hidden" && i.selectionId !== undefined && detSel.has(i.selectionId)),
+    );
+    return issues.length === r.issues.length ? r : { ...r, issues };
+  }, [roster, catalogue]);
   const hiddenIds = useMemo(() => hiddenEntryIds(roster, catalogue), [roster, catalogue]);
   const hiddenSelIds = useMemo(() => hiddenSelectionIds(roster, catalogue), [roster, catalogue]);
 

@@ -132,14 +132,25 @@ describe("aggregate", () => {
     expect(aggregate(squad, c, state)).toBe(2);
   });
 
-  it("parent scope without includeChildSelections sees only the parent node", () => {
+  it("parent scope without includeChildSelections counts the parent and its direct children", () => {
     const { state, byId } = setup();
     const special = byId("s.sp");
     const troops: IrConstraint = { ...base, type: "max", field: "selections", scope: "parent", targetType: "category", targetId: "cat.troops" };
-    expect(aggregate(special, troops, state)).toBe(1); // just the squad
+    expect(aggregate(special, troops, state)).toBe(1); // the squad (parent) itself
 
+    // The parent's direct child selections ARE counted (BattleScribe "direct
+    // selections"), so a "N of this weapon in the parent" constraint sees them —
+    // the fix for Land Raider Redeemer's 2× Flamestorm Cannon min not resolving.
     const specials: IrConstraint = { ...base, type: "max", field: "selections", scope: "parent", targetType: "category", targetId: "cat.special" };
-    expect(aggregate(special, specials, state)).toBe(0); // the squad alone is not special
+    expect(aggregate(special, specials, state)).toBe(2); // the two special weapons under the squad
+  });
+
+  it("foreign-id scope without includeChildSelections counts the anchor's direct children", () => {
+    const { state, byId } = setup();
+    const special = byId("s.sp");
+    // scope = the squad's entry id (an ancestor) → a container, same as parent.
+    const c: IrConstraint = { ...base, type: "max", field: "selections", scope: "e.squad", targetType: "category", targetId: "cat.special" };
+    expect(aggregate(special, c, state)).toBe(2);
   });
 
   it("self scope resolves entry targets through descendants", () => {

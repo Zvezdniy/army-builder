@@ -76,6 +76,25 @@ export function selectedDetachment(roster: Roster, catalogue: IrCatalogue): stri
   return roster.selections.find((s) => s.entryId === root.id)?.selections[0]?.entryId;
 }
 
+/** Selection ids of the detachment root subtree — the army-level detachment choice
+ *  and everything under it. Callers exclude these from unit-facing signals (like the
+ *  "became unavailable" warning): the detachment is picked in the setup wizard, not a
+ *  roster unit, and its options carry their own availability gates, so surfacing that
+ *  as a unit warning is noise. Empty if the catalogue models no detachment or none is
+ *  chosen. */
+export function detachmentSelectionIds(roster: Roster, catalogue: IrCatalogue): Set<string> {
+  const ids = new Set<string>();
+  const root = detachmentRoot(catalogue);
+  if (!root) return ids;
+  const rootSel = roster.selections.find((s) => s.entryId === root.id);
+  const walk = (s: RosterSelection): void => {
+    ids.add(s.id);
+    s.selections.forEach(walk);
+  };
+  if (rootSel) walk(rootSel);
+  return ids;
+}
+
 /**
  * Set (or replace) the army's detachment: ensure exactly one "Detachment" root selection
  * holding the single chosen option. Idempotent per option; changing detachment swaps the
