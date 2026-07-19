@@ -2183,11 +2183,18 @@ fn missing_affects_stays_target_unmapped() {
 }
 
 /// Fix 2, shape 1: a bare `profiles.<TypeName>` `affects` (no `self.entries`
-/// prefix at all) targets the OWNING entry's own profile — confirmed as the
-/// ~24.5%/~6.7% real-data shape (e.g. `scope: upgrade, affects: profiles.Ranged
-/// Weapons` in real 11e BSData). `target_scope` is hardcoded to "self"
-/// regardless of the modifier's own `scope` attribute (the bare-profile shape
-/// already unambiguously means "this entry," no anchor walk needed).
+/// prefix at all) says "the `<TypeName>` profile of whatever the modifier's
+/// own `scope` attribute anchors to" — confirmed as the ~24.5%/~6.7%
+/// real-data shape (e.g. `scope: upgrade, affects: profiles.Ranged Weapons`
+/// in real 11e BSData). `target_scope` is carried through from the
+/// modifier's own `scope` attribute (via `map_condition_scope`), mirroring
+/// the `<id>.profiles.<TypeName>` arm below — it is NOT hardcoded to "self".
+/// Real 11e BSData (Space Marines) proves this matters: the flagship
+/// wargear-swap example (`Heavy Jump Pack and Mk X Gravis Armour`) carries
+/// `scope="root-entry"`, `affects="profiles.Unit"` to change the bearer
+/// model's statline — anchoring at the option entry itself (hardcoded
+/// "self") would silently drop the modifier, since the option entry has no
+/// `Unit` profile of its own.
 #[test]
 fn maps_own_entry_bare_profiles_characteristic_modifier() {
     let xml = br#"<?xml version="1.0" encoding="utf-8"?>
@@ -2203,7 +2210,7 @@ fn maps_own_entry_bare_profiles_characteristic_modifier() {
   <selectionEntries>
     <selectionEntry id="e.enh" name="Enh" type="upgrade">
       <modifiers>
-        <modifier type="set" field="ct.sv" value="2+" scope="upgrade" affects="profiles.Unit"/>
+        <modifier type="set" field="ct.sv" value="2+" scope="root-entry" affects="profiles.Unit"/>
       </modifiers>
     </selectionEntry>
   </selectionEntries>
@@ -2217,7 +2224,45 @@ fn maps_own_entry_bare_profiles_characteristic_modifier() {
     assert_eq!(cm.profile_type, "Unit");
     assert_eq!(cm.kind, "set");
     assert_eq!(cm.value, "2+");
-    assert_eq!(cm.target_scope, "self", "bare profiles.X hardcodes target_scope=self, ignoring the modifier's own `scope` attribute");
+    assert_eq!(cm.target_scope, "root-entry", "bare profiles.X must carry through the modifier's own `scope` attribute, not hardcode target_scope=self");
+    assert!(cm.target_id.is_none());
+    assert!(!cm.recursive);
+    assert!(
+        !diags.iter().any(|d| d.code == "modifier.target_unmapped" && d.message.contains("e.enh")),
+        "bare profiles.X should now be captured, not target_unmapped: {:?}", diags
+    );
+}
+
+/// Fix 2, shape 1 continued: when the modifier's `scope` attribute is
+/// empty/absent, the bare `profiles.<TypeName>` shape falls back to
+/// `target_scope = "self"` (real data always has `scope` populated for this
+/// shape, but the fallback keeps the arm from emitting an empty string).
+#[test]
+fn maps_own_entry_bare_profiles_characteristic_modifier_empty_scope_falls_back_to_self() {
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <profileTypes>
+    <profileType id="pt.unit" name="Unit">
+      <characteristicTypes>
+        <characteristicType id="ct.sv" name="Sv"/>
+      </characteristicTypes>
+    </profileType>
+  </profileTypes>
+  <selectionEntries>
+    <selectionEntry id="e.enh" name="Enh" type="upgrade">
+      <modifiers>
+        <modifier type="set" field="ct.sv" value="2+" affects="profiles.Unit"/>
+      </modifiers>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let raw = resolve(parse_raw(xml).unwrap()).unwrap();
+    let (ir, diags) = to_ir(&raw);
+    let enh = ir.entries.iter().find(|e| e.id == "e.enh").unwrap();
+    assert_eq!(enh.characteristic_modifiers.len(), 1);
+    let cm = &enh.characteristic_modifiers[0];
+    assert_eq!(cm.target_scope, "self", "bare profiles.X with no scope attribute falls back to self");
     assert!(cm.target_id.is_none());
     assert!(!cm.recursive);
     assert!(

@@ -818,13 +818,18 @@ fn map_category_modifier(m: &RawModifier, cat: &RawCatalogue) -> Option<IrCatego
 ///   shape, ~1435 raw occurrences sampled) — `target_scope` comes from the
 ///   modifier's own `scope` attribute (`map_condition_scope`), unchanged from
 ///   before this function grew the two shapes below.
-/// - bare `profiles.<TypeName>` (no prefix at all — the modifier targets its
-///   OWN entry's profile; ~305 raw occurrences, e.g. `scope: upgrade, affects:
-///   profiles.Ranged Weapons`) — `target_scope` is hardcoded to `"self"`
-///   regardless of the modifier's `scope` attribute: the bare-profile shape
-///   already unambiguously means "this entry, no anchor walk needed," so the
-///   `scope` attribute (which real data shows can independently be `upgrade`
-///   etc. on this shape) is not the target anchor here.
+/// - bare `profiles.<TypeName>` (no prefix at all — just says "the
+///   `<TypeName>` profile of whatever the modifier's `scope` attribute
+///   anchors to"; ~305 raw occurrences, e.g. `scope: upgrade, affects:
+///   profiles.Ranged Weapons`) — `target_scope` comes from the modifier's own
+///   `scope` attribute (`map_condition_scope`), falling back to `"self"` only
+///   when `scope` is empty/absent. Real 11e BSData (Space Marines) proves
+///   `scope` is NOT always `self` here: the flagship wargear-swap example
+///   (`Heavy Jump Pack and Mk X Gravis Armour`) carries `scope="root-entry"`,
+///   `affects="profiles.Unit"` — anchoring at the option entry itself (which
+///   has no `Unit` profile) would silently drop the statline change.
+///   `target_id` stays `None` and `recursive` stays `false` for this arm —
+///   only the scope is affected.
 /// - bare `<entryId>.profiles.<TypeName>` (leading token is neither `self` nor
 ///   `profiles` — a specific foreign entry id, non-recursive; ~28 raw
 ///   occurrences, e.g. `affects: 982b-de77-dd2d-d9bd.profiles.Ranged
@@ -866,7 +871,8 @@ fn parse_affects(affects: &str, scope: &str) -> Option<(bool, Option<String>, St
         if type_name.is_empty() {
             return None;
         }
-        return Some((false, None, type_name.to_string(), "self".to_string()));
+        let target_scope = if scope.is_empty() { "self".to_string() } else { map_condition_scope(scope) };
+        return Some((false, None, type_name.to_string(), target_scope));
     }
 
     // `<entryId>.profiles.<TypeName>` — the leading token up to the first
