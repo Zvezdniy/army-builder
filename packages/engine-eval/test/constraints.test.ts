@@ -41,6 +41,12 @@ describe("checkConstraint", () => {
     expect(issue?.code).toBe("constraint.min");
   });
 
+  it("treats a negative max as unbounded (BattleScribe's -1 = no limit)", () => {
+    const state = buildState(roster, cat);
+    // 4 selected against a -1 cap must NOT flag "exceeds max -1".
+    expect(checkConstraint(c({ value: -1 }), null, state)).toBeNull();
+  });
+
   it("uses the resolved category name in the message when a namer is supplied", () => {
     const named: IrCatalogue = { ...cat, categoryNames: { "cat.heavy": "Heavy Support" } };
     const state = buildState(roster, named);
@@ -70,6 +76,11 @@ describe("describeConstraint", () => {
   it("reports a violated max (actual > limit)", () => {
     const state = buildState(roster, cat);
     expect(describeConstraint(c({}), null, state)).toEqual({ actual: 4, limit: 3, satisfied: false });
+  });
+
+  it("reports a negative max as satisfied (no limit)", () => {
+    const state = buildState(roster, cat);
+    expect(describeConstraint(c({ value: -1 }), null, state)).toEqual({ actual: 4, limit: -1, satisfied: true });
   });
 
   it("reports a satisfied min (actual >= limit)", () => {

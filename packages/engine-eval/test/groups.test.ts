@@ -177,6 +177,101 @@ describe("roster-scope group constraints", () => {
     const r = evaluate(roster, rosterCat("max", 1));
     expect(r.issues.some((i) => i.constraintId === "g.relics.lim")).toBe(false);
   });
+
+  it("applies an army-wide modifier to a roster-scope limit, evaluated once", () => {
+    // The relic cap is base max 1, raised to 3 by an army-wide gate (roster has >=1
+    // hero). This mirrors what the parser now emits for roster-scope group limits
+    // carrying an army-wide modifier. Two heroes with 2 relics each = 4 > 3 → a
+    // single army-level error citing the MODIFIED limit (3, not the base 1),
+    // proving the modifier fires at roster scope and the rule is evaluated once.
+    const cat: IrCatalogue = {
+      id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [],
+      entries: [{
+        id: "e.hero", name: "Hero", costs: [], categories: [], constraints: [],
+        children: [{ id: "e.relic", name: "Relic", costs: [], categories: [], constraints: [], children: [], groups: [] }],
+        groups: [{
+          id: "g.relics", name: "Relics", memberEntryIds: ["e.relic"],
+          constraints: [{
+            id: "g.relics.lim", type: "max", value: 1, scope: "roster",
+            modifiers: [{
+              id: "mod.g.relics.0", type: "set", value: 3,
+              conditions: [{
+                id: "cond.atLeast.e.hero", comparator: "atLeast", value: 1,
+                field: "selections", scope: "roster", targetType: "entry",
+                targetId: "e.hero", includeChildSelections: true,
+              }],
+            }],
+          }],
+        }],
+      }],
+    } as unknown as IrCatalogue;
+    const r = evaluate(rosterTwoHeroes(2), cat);
+    const groupIssues = r.issues.filter((i) => i.constraintId === "g.relics.lim");
+    expect(groupIssues.length).toBe(1);
+    expect(groupIssues[0]!.code).toBe("group.max");
+    expect(groupIssues[0]!.message).toContain("max 3"); // modified limit, not base 1
+    expect(groupIssues[0]!.selectionId).toBeUndefined();
+  });
+
+  it("an army-wide modifier that does not fire leaves the base roster-scope limit", () => {
+    // Same modifier gated on forces>=1 (Crusade). A flat matched-play roster has no
+    // forces → the gate is false → the base limit (max 1) holds. Two relics → error
+    // citing max 1, confirming the modifier is inert when its army-wide gate is unmet.
+    const cat: IrCatalogue = {
+      id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [],
+      entries: [{
+        id: "e.hero", name: "Hero", costs: [], categories: [], constraints: [],
+        children: [{ id: "e.relic", name: "Relic", costs: [], categories: [], constraints: [], children: [], groups: [] }],
+        groups: [{
+          id: "g.relics", name: "Relics", memberEntryIds: ["e.relic"],
+          constraints: [{
+            id: "g.relics.lim", type: "max", value: 1, scope: "roster",
+            modifiers: [{
+              id: "mod.g.relics.0", type: "set", value: 3,
+              conditions: [{
+                id: "cond.atLeast.crusade", comparator: "atLeast", value: 1,
+                field: "forces", scope: "roster", targetType: "entry",
+                targetId: "e.crusade", includeChildSelections: true,
+              }],
+            }],
+          }],
+        }],
+      }],
+    } as unknown as IrCatalogue;
+    const r = evaluate(rosterTwoHeroes(1), cat);
+    const groupIssues = r.issues.filter((i) => i.constraintId === "g.relics.lim");
+    expect(groupIssues.length).toBe(1);
+    expect(groupIssues[0]!.message).toContain("max 1"); // base limit; forces gate never fires
+  });
+
+  it("a modifier lifting the cap to -1 makes the roster-scope limit unbounded", () => {
+    // BattleScribe's "unlimited" convention: a fired gate sets the cap to -1. Here the
+    // army-wide gate (roster has >=1 hero) fires, so the relic cap becomes -1 = no
+    // limit; four relics must NOT flag, rather than "exceeds max -1".
+    const cat: IrCatalogue = {
+      id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [],
+      entries: [{
+        id: "e.hero", name: "Hero", costs: [], categories: [], constraints: [],
+        children: [{ id: "e.relic", name: "Relic", costs: [], categories: [], constraints: [], children: [], groups: [] }],
+        groups: [{
+          id: "g.relics", name: "Relics", memberEntryIds: ["e.relic"],
+          constraints: [{
+            id: "g.relics.lim", type: "max", value: 1, scope: "roster",
+            modifiers: [{
+              id: "mod.g.relics.0", type: "set", value: -1,
+              conditions: [{
+                id: "cond.atLeast.e.hero", comparator: "atLeast", value: 1,
+                field: "selections", scope: "roster", targetType: "entry",
+                targetId: "e.hero", includeChildSelections: true,
+              }],
+            }],
+          }],
+        }],
+      }],
+    } as unknown as IrCatalogue;
+    const r = evaluate(rosterTwoHeroes(2), cat);
+    expect(r.issues.some((i) => i.constraintId === "g.relics.lim")).toBe(false);
+  });
 });
 
 function modCat(): IrCatalogue {
