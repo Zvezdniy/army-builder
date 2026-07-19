@@ -143,8 +143,8 @@ export function App() {
           onSelect={setSelectedUnitId} onOpenPicker={() => setPickerOpen(true)} hiddenIds={hiddenSelIds} />
         <UnitDetail roster={roster} catalogue={catalogue} selectedUnitId={selectedUnitId}
           onBack={() => setSelectedUnitId(undefined)}
-          onAddOption={(pid, eid) => setRoster((r) => addOption(r, pid, eid))}
-          onToggleGroupMember={(pid, group, eid) => setRoster((r) => toggleGroupMember(r, pid, group, eid))}
+          onAddOption={(pid, eid) => setRoster((r) => addOption(r, pid, eid, catalogue))}
+          onToggleGroupMember={(pid, group, eid) => setRoster((r) => toggleGroupMember(r, pid, group, eid, catalogue))}
           onSetGroupMemberCount={(pid, group, eid, count) => setRoster((r) => setGroupMemberCount(r, pid, group, eid, count, catalogue))}
           onRemove={handleRemove}
           onSetCount={(id, c) => setRoster((r) => setCount(r, id, c))} />

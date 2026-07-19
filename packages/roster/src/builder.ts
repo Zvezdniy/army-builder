@@ -30,13 +30,24 @@ export function addUnit(roster: Roster, entryId: string, catalogue?: IrCatalogue
   return { ...roster, selections: [...roster.selections, selection] };
 }
 
-/** Nest an option (child selection) under the selection with `parentSelectionId`. */
-export function addOption(roster: Roster, parentSelectionId: string, entryId: string): Roster {
+/** Nest an option (child selection) under `parentSelectionId`. With a `catalogue`, the
+ *  option is prepopulated with its default/required loadout (`initialChildren`), the way
+ *  `addUnit` seeds a root unit — so a picked option arrives with its mandatory sub-parts
+ *  (weapons, shields, abilities). Without a catalogue it is added bare (legacy callers). */
+export function addOption(
+  roster: Roster,
+  parentSelectionId: string,
+  entryId: string,
+  catalogue?: IrCatalogue,
+): Roster {
+  const seed = freshSelection(entryId);
+  const entry = catalogue ? catalogueEntry(catalogue, entryId) : undefined;
+  const selection = entry ? { ...seed, selections: initialChildren(entry) } : seed;
   return {
     ...roster,
     selections: mapTree(roster.selections, parentSelectionId, (s) => ({
       ...s,
-      selections: [...s.selections, freshSelection(entryId)],
+      selections: [...s.selections, selection],
     })),
   };
 }
@@ -428,12 +439,15 @@ export function setGroupMemberCount(
  * The group's `min` is intentionally NOT enforced for multi/counted groups — the
  * engine reports it; enforcing it here only traps the user below a min they cannot
  * reach through the UI (the original "can't deselect a below-min group" bug).
+ * With a `catalogue`, a newly added member is seeded with its required loadout
+ * (see `addOption`); without one it is added bare (legacy callers).
  */
 export function toggleGroupMember(
   roster: Roster,
   parentSelectionId: string,
   group: IrGroup,
   entryId: string,
+  catalogue?: IrCatalogue,
 ): Roster {
   const parent = findTree(roster.selections, parentSelectionId);
   if (!parent) return roster;
@@ -448,8 +462,8 @@ export function toggleGroupMember(
     return required ? roster : remove(roster, already.id);
   }
 
-  if (members.length < max) return addOption(roster, parentSelectionId, entryId);
-  if (max === 1) return addOption(remove(roster, members[0]!.id), parentSelectionId, entryId);
+  if (members.length < max) return addOption(roster, parentSelectionId, entryId, catalogue);
+  if (max === 1) return addOption(remove(roster, members[0]!.id), parentSelectionId, entryId, catalogue);
   return roster;
 }
 

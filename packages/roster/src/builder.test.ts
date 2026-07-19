@@ -917,3 +917,96 @@ describe("invulnSave", () => {
     expect(invulnSave(catalogue, selection)).toBeUndefined();
   });
 });
+
+describe("addOption/toggleGroupMember seed required children", () => {
+  // Option "mount" has a mandatory child "shield" (min:1). "shield" itself has a
+  // mandatory grandchild "gem" (min:1). Option "plain" has an optional child only.
+  // A choose-1 required group under "banner" seeds its default member.
+  const req = (id: string, extra: any = {}) => ({
+    id, name: id, costs: [], categories: [],
+    constraints: [{ id: `${id}.min`, type: "min", value: 1, field: "selections", scope: "parent" },
+                  { id: `${id}.max`, type: "max", value: 1, field: "selections", scope: "parent" }],
+    children: [], ...extra,
+  });
+  const opt = (id: string, extra: any = {}) => ({
+    id, name: id, costs: [], categories: [], constraints: [], children: [], ...extra,
+  });
+
+  const cat: IrCatalogue = {
+    id: "cat", name: "Cat", gameSystemId: "gs", revision: 1, forceConstraints: [], categoryNames: {},
+    entries: [
+      {
+        id: "hero", name: "Hero", costs: [], categories: [], constraints: [],
+        children: [
+          // pickable option carrying a required child, which carries a required grandchild
+          opt("mount", { children: [ req("shield", { children: [ req("gem") ] }) ] }),
+          // pickable option with only an OPTIONAL child (no min) → seeds nothing
+          opt("plain", { children: [ opt("trinket") ] }),
+          // pickable option with a required choose-1 group (default member seeded)
+          opt("banner", {
+            children: [ opt("gold"), opt("silver") ],
+            groups: [{ id: "g.col", name: "Colour", memberEntryIds: ["gold", "silver"],
+                       defaultMemberEntryId: "gold",
+                       constraints: [{ id: "gc.min", type: "min", value: 1, scope: "self" },
+                                     { id: "gc.max", type: "max", value: 1, scope: "self" }] }],
+          }),
+        ],
+        groups: [{ id: "g.mount", name: "Mount", memberEntryIds: ["mount"],
+                   constraints: [{ id: "gm.max", type: "max", value: 1, scope: "self" }] }],
+      },
+    ],
+  };
+  const mountGroup = cat.entries[0]!.groups![0]!;
+
+  const withHero = () => {
+    const r = addUnit(createRoster(cat, 2000), "hero", cat);
+    return { r, heroId: r.selections[r.selections.length - 1]!.id };
+  };
+  const childrenOf = (sel: any, entryId: string) =>
+    sel.selections.find((c: any) => c.entryId === entryId)?.selections ?? [];
+
+  it("addOption seeds a picked option's required child (and recurses to the grandchild)", () => {
+    const { r, heroId } = withHero();
+    const r2 = addOption(r, heroId, "mount", cat);
+    const hero = r2.selections[r2.selections.length - 1]!;
+    const shield = childrenOf(hero, "mount");
+    expect(shield.map((c: any) => c.entryId)).toEqual(["shield"]);
+    expect(shield[0].selections.map((c: any) => c.entryId)).toEqual(["gem"]); // grandchild seeded
+  });
+
+  it("addOption seeds a required choose-1 group's default member", () => {
+    const { r, heroId } = withHero();
+    const r2 = addOption(r, heroId, "banner", cat);
+    const hero = r2.selections[r2.selections.length - 1]!;
+    expect(childrenOf(hero, "banner").map((c: any) => c.entryId)).toEqual(["gold"]);
+  });
+
+  it("addOption seeds nothing for an option with only optional children", () => {
+    const { r, heroId } = withHero();
+    const r2 = addOption(r, heroId, "plain", cat);
+    const hero = r2.selections[r2.selections.length - 1]!;
+    expect(childrenOf(hero, "plain")).toEqual([]);
+    expect(childrenOf(hero, "nonexistent")).toEqual([]); // exercises the "no such child" fallback
+  });
+
+  it("toggleGroupMember seeds the added member's required children", () => {
+    const { r, heroId } = withHero();
+    const r2 = toggleGroupMember(r, heroId, mountGroup, "mount", cat);
+    const hero = r2.selections[r2.selections.length - 1]!;
+    expect(childrenOf(hero, "mount").map((c: any) => c.entryId)).toEqual(["shield"]);
+  });
+
+  it("backward-compat: addOption WITHOUT a catalogue seeds nothing", () => {
+    const { r, heroId } = withHero();
+    const r2 = addOption(r, heroId, "mount"); // no catalogue arg
+    const hero = r2.selections[r2.selections.length - 1]!;
+    expect(childrenOf(hero, "mount")).toEqual([]);
+  });
+
+  it("backward-compat: toggleGroupMember WITHOUT a catalogue seeds nothing", () => {
+    const { r, heroId } = withHero();
+    const r2 = toggleGroupMember(r, heroId, mountGroup, "mount"); // no catalogue arg
+    const hero = r2.selections[r2.selections.length - 1]!;
+    expect(childrenOf(hero, "mount")).toEqual([]);
+  });
+});
