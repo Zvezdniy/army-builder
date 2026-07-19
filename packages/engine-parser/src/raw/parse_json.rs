@@ -84,6 +84,7 @@ struct JsonEntry {
     selection_entries: Vec<JsonEntry>, selection_entry_groups: Vec<JsonGroup>,
     entry_links: Vec<JsonEntryLink>, profiles: Vec<JsonProfile>,
     rules: Vec<JsonRule>, associations: Vec<serde_json::Value>,
+    info_links: Vec<JsonInfoLink>,
 }
 
 #[derive(Deserialize, Default)]
@@ -94,7 +95,12 @@ struct JsonGroup {
     entry_links: Vec<JsonEntryLink>, constraints: Vec<JsonConstraint>,
     modifiers: Vec<JsonModifier>, modifier_groups: Vec<JsonModifierGroup>,
     profiles: Vec<JsonProfile>, rules: Vec<JsonRule>,
+    info_links: Vec<JsonInfoLink>,
 }
+
+#[derive(Deserialize, Default)]
+#[serde(default, rename_all = "camelCase")]
+struct JsonInfoLink { target_id: String, #[serde(rename = "type")] link_type: String, hidden: bool }
 
 #[derive(Deserialize, Default)]
 #[serde(default, rename_all = "camelCase")]
@@ -218,7 +224,7 @@ fn map_cat(c: JsonCat, diags: &mut Vec<Diagnostic>) -> RawCatalogue {
             .map(|l| RawCatalogueLink { target_id: l.target_id.clone(), import_root_entries: l.import_root_entries })
             .collect(),
         entry_links: c.entry_links.iter().map(|l| map_entry_link(l, diags)).collect(),
-        shared_profiles: Vec::new(),
+        shared_profiles: map_profiles(&c.shared_profiles),
     }
 }
 
@@ -239,7 +245,7 @@ fn map_entry(e: &JsonEntry, diags: &mut Vec<Diagnostic>) -> RawEntry {
         groups: e.selection_entry_groups.iter().map(|g| map_group(g, diags)).collect(),
         entry_links: e.entry_links.iter().map(|l| map_entry_link(l, diags)).collect(),
         profiles: map_profiles(&e.profiles),
-        info_links: Vec::new(),
+        info_links: map_info_links(&e.info_links),
     }
 }
 
@@ -253,7 +259,7 @@ fn map_group(g: &JsonGroup, diags: &mut Vec<Diagnostic>) -> RawGroup {
         constraints: map_constraints(&g.constraints),
         modifiers: map_modifiers(&g.modifiers, &g.modifier_groups, diags),
         profiles: map_profiles(&g.profiles),
-        info_links: Vec::new(),
+        info_links: map_info_links(&g.info_links),
     }
 }
 
@@ -318,6 +324,12 @@ fn map_profiles(ps: &[JsonProfile]) -> Vec<RawProfile> {
         characteristics: p.characteristics.iter()
             .map(|c| RawCharacteristic { name: c.name.clone(), value: c.text.clone() })
             .collect(),
+    }).collect()
+}
+
+fn map_info_links(ls: &[JsonInfoLink]) -> Vec<RawInfoLink> {
+    ls.iter().map(|l| RawInfoLink {
+        target_id: l.target_id.clone(), link_type: l.link_type.clone(), hidden: l.hidden,
     }).collect()
 }
 
