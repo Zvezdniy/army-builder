@@ -4,7 +4,7 @@ import {
   createRoster, availableUnits, addUnit, addOption, setCount, remove, optionsFor,
   selectedGroupMembers, toggleGroupMember, groupControl, optionControl, catalogueEntry,
   unitLoadout, availableDetachments, selectedDetachment, setDetachment, setPointsLimit,
-  unitsByRole,
+  unitsByRole, detachmentSelectionIds,
 } from "./index";
 
 const catalogue: IrCatalogue = {
@@ -565,6 +565,18 @@ describe("detachment + points-limit API", () => {
   it("setDetachment on an option id absent from the catalogue still records the choice", () => {
     const r = setDetachment(createRoster(detCat, 2000), "e.unknown", detCat);
     expect(selectedDetachment(r, detCat)).toBe("e.unknown");
+  });
+
+  it("detachmentSelectionIds returns the detachment root subtree, empty otherwise", () => {
+    const chosen = setDetachment(createRoster(detCat, 2000), "e.gladius", detCat);
+    const ids = detachmentSelectionIds(chosen, detCat);
+    const rootSel = chosen.selections.find((s) => s.entryId === "e.det")!;
+    expect(ids.has(rootSel.id)).toBe(true); // the Detachment root
+    expect(ids.has(rootSel.selections[0]!.id)).toBe(true); // the chosen option under it
+    expect(ids.size).toBe(2);
+    // No detachment chosen → empty; catalogue without a detachment root → empty.
+    expect(detachmentSelectionIds(createRoster(detCat, 2000), detCat).size).toBe(0);
+    expect(detachmentSelectionIds(createRoster(catalogue, 2000), catalogue).size).toBe(0);
   });
 
   it("setDetachment is a no-op when the catalogue models no detachment", () => {
