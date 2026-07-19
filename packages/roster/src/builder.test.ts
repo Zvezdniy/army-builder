@@ -5,6 +5,7 @@ import {
   selectedGroupMembers, toggleGroupMember, groupControl, optionControl, catalogueEntry,
   unitLoadout, availableDetachments, selectedDetachment, setDetachment, setPointsLimit,
   unitsByRole, detachmentSelectionIds, groupMemberCounts, groupTotal, setGroupMemberCount,
+  invulnSave,
 } from "./index";
 
 const catalogue: IrCatalogue = {
@@ -803,5 +804,116 @@ describe("detachment + points-limit API", () => {
 
   it("setPointsLimit changes the army's points limit", () => {
     expect(setPointsLimit(createRoster(detCat, 2000), 1000).pointsLimit).toBe(1000);
+  });
+});
+
+describe("invulnSave", () => {
+  // Minimal catalogue builders local to this block.
+  const prof = (typeName: string, name: string, chars: Record<string, string> = {}) => ({
+    name, typeName,
+    characteristics: Object.entries(chars).map(([n, value]) => ({ name: n, value })),
+  });
+  const unitProf = prof("Unit", "Body", { M: "6\"", T: "4", Sv: "3+" });
+
+  // Build a one-catalogue world with a root unit entry + optional wargear children.
+  function world(rootProfiles: any[], children: { profiles: any[] }[] = []) {
+    const kidEntries = children.map((c, i) => ({
+      id: `w${i}`, name: `w${i}`, costs: [], categories: [], constraints: [], children: [],
+      profiles: c.profiles,
+    }));
+    const root = {
+      id: "root", name: "Unit", costs: [], categories: [], constraints: [],
+      children: kidEntries, profiles: rootProfiles,
+    };
+    const catalogue: any = {
+      id: "c", name: "c", gameSystemId: "g", revision: 1, entries: [root],
+    };
+    const selection: any = {
+      id: "s", entryId: "root", count: 1,
+      selections: kidEntries.map((k) => ({ id: `sel-${k.id}`, entryId: k.id, count: 1, selections: [] })),
+    };
+    return { catalogue, selection };
+  }
+
+  it("class 1: dedicated Invulnerable Save section resolves, bare", () => {
+    const { catalogue, selection } = world([unitProf, prof("Invulnerable Save", "Invulnerable Save", { "": "4+" })]);
+    expect(invulnSave(catalogue, selection)).toEqual({ value: "4+", sourceName: "Invulnerable Save", bare: true });
+  });
+
+  it("class 2: ability named Invulnerable Save on the root is trusted (Logan shape)", () => {
+    const { catalogue, selection } = world([
+      unitProf,
+      prof("Abilities", "Invulnerable Save", { Description: "4+" }),
+    ]);
+    expect(invulnSave(catalogue, selection)).toEqual({ value: "4+", sourceName: "Invulnerable Save", bare: true });
+  });
+
+  it("class 3: storm-shield wargear grants an invuln, not bare", () => {
+    const { catalogue, selection } = world(
+      [unitProf],
+      [{ profiles: [prof("Abilities", "Storm Shield", { Description: "The bearer has a 4+ invulnerable save." })] }],
+    );
+    expect(invulnSave(catalogue, selection)).toEqual({ value: "4+", sourceName: "Storm Shield", bare: false });
+  });
+
+  it("false positive: invuln-phrased faction rule on the ROOT (Veil-of-Ancients shape) is NOT surfaced", () => {
+    const { catalogue, selection } = world([
+      unitProf,
+      prof("Abilities", "Veil of Ancients", { Description: "The bearer has a 4+ invulnerable save." }),
+    ]);
+    expect(invulnSave(catalogue, selection)).toBeUndefined();
+  });
+
+  it("best-of: a 4+ storm shield beats a 5+ named ability", () => {
+    const { catalogue, selection } = world(
+      [unitProf, prof("Abilities", "Invulnerable Save", { Description: "5+" })],
+      [{ profiles: [prof("Abilities", "Storm Shield", { Description: "The bearer has a 4+ invulnerable save." })] }],
+    );
+    expect(invulnSave(catalogue, selection)?.value).toBe("4+");
+  });
+
+  it("no invuln → undefined", () => {
+    const { catalogue, selection } = world([unitProf, prof("Abilities", "Oath of Moment", { Description: "Re-roll hits." })]);
+    expect(invulnSave(catalogue, selection)).toBeUndefined();
+  });
+
+  // Extra cases beyond the brief, added to keep the package's 100%-branch-coverage
+  // gate green (baseline was 100% before this feature; `pnpm --filter @muster/roster
+  // test` runs the full suite with coverage enforced, not just this file).
+
+  it("class 1 with a missing characteristic value contributes no candidate", () => {
+    const { catalogue, selection } = world([unitProf, prof("Invulnerable Save", "Invulnerable Save", {})]);
+    expect(invulnSave(catalogue, selection)).toBeUndefined();
+  });
+
+  it("class 1 with a non-numeric characteristic value contributes no candidate", () => {
+    const { catalogue, selection } = world([unitProf, prof("Invulnerable Save", "Invulnerable Save", { "": "N/A" })]);
+    expect(invulnSave(catalogue, selection)).toBeUndefined();
+  });
+
+  it("Abilities profile with no Description characteristic is ignored", () => {
+    const { catalogue, selection } = world([unitProf, prof("Abilities", "Random Ability", {})]);
+    expect(invulnSave(catalogue, selection)).toBeUndefined();
+  });
+
+  it("tie-break on rank: bare dedicated-section candidate beats a same-value wargear candidate", () => {
+    const { catalogue, selection } = world(
+      [unitProf, prof("Invulnerable Save", "Invulnerable Save", { "": "4+" })],
+      [{ profiles: [prof("Abilities", "Storm Shield", { Description: "The bearer has a 4+ invulnerable save." })] }],
+    );
+    expect(invulnSave(catalogue, selection)).toEqual({ value: "4+", sourceName: "Invulnerable Save", bare: true });
+  });
+
+  it("tie-break on rank+bare: named candidate beats a same-value wargear candidate", () => {
+    const { catalogue, selection } = world(
+      [unitProf, prof("Abilities", "Invulnerable Save (Ranged)", { Description: "The bearer has a 4+ invulnerable save." })],
+      [{ profiles: [prof("Abilities", "Storm Shield", { Description: "The bearer has a 4+ invulnerable save." })] }],
+    );
+    expect(invulnSave(catalogue, selection)?.sourceName).toBe("Invulnerable Save (Ranged)");
+  });
+
+  it("a selected entry with no profiles field at all contributes no candidate", () => {
+    const { catalogue, selection } = world([unitProf], [{ profiles: undefined as any }]);
+    expect(invulnSave(catalogue, selection)).toBeUndefined();
   });
 });
