@@ -23,6 +23,14 @@ export function applyModifiers(
       case "decrement":
         value -= modifier.value;
         break;
+      case "divide":
+        // BattleScribe cost divide truncates toward zero; guard divide-by-zero
+        // as a no-op (never NaN/Infinity) rather than propagating a bad value.
+        if (modifier.value !== 0) value = Math.trunc(value / modifier.value);
+        break;
+      case "multiply":
+        value *= modifier.value;
+        break;
       default: {
         const _exhaustive: never = modifier.type;
         throw new Error(`Unknown modifier type: ${String(_exhaustive)}`);

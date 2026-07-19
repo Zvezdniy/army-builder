@@ -96,7 +96,7 @@ describe("malformed structures fail loudly, not silently", () => {
 
   it("rejects an unknown modifier type instead of miscomputing", () => {
     const state = buildState({ ...rosterMeta, selections: [{ id: "s", entryId: "e", count: 1, selections: [] }] }, soloCatalogue);
-    const bogus = { id: "m", type: "multiply", value: 2 } as unknown as IrModifier;
+    const bogus = { id: "m", type: "bogus-type", value: 2 } as unknown as IrModifier;
     expect(() => applyModifiers(10, [bogus], state.all[0]!, state)).toThrow(/Unknown modifier type/);
   });
 });

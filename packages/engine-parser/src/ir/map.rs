@@ -524,12 +524,16 @@ fn map_condition_scope(scope: &str) -> String {
 /// logged via diagnostic, then the modifier is still emitted without repeat
 /// semantics (never dropped outright — that would silently change costs).
 fn map_modifier(m: &RawModifier, entry_id: &str, index: usize, cat: &RawCatalogue, diags: &mut Vec<Diagnostic>) -> Option<IrModifier> {
-    // The value engine only models set/increment/decrement. Other value kinds
-    // (e.g. `floor`/`ceil` clamps seen in real catalogues) have no IR form; emit
+    // The value engine models set/increment/decrement/divide/multiply (divide and
+    // multiply cover 11e's Enhancement cost-scaling-on-reuse modifiers). Other value
+    // kinds (e.g. `floor`/`ceil` clamps seen in real catalogues) have no IR form; emit
     // a diagnostic and drop just this modifier rather than passing an unknown type
-    // downstream, where it would fail the domain schema and sink the whole
-    // catalogue. Mirrors the strict path's kind filter.
-    if !matches!(m.kind.as_str(), "set" | "increment" | "decrement") {
+    // downstream, where it would fail the domain schema and sink the whole catalogue.
+    // NOTE: broader than the strict path's kind filter below (constraint LIMIT
+    // modifiers stay restricted to set/increment/decrement — a divide/multiply on a
+    // selection-count limit has no observed real use and partial support there would
+    // risk under/over-enforcing a legality rule).
+    if !matches!(m.kind.as_str(), "set" | "increment" | "decrement" | "divide" | "multiply") {
         diags.push(Diagnostic {
             code: "modifier.value_type_unsupported".to_string(),
             message: format!("value modifier on entry {} has unsupported type {} (dropped)", entry_id, m.kind),

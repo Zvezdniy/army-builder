@@ -223,6 +223,39 @@ fn drops_cost_modifier_with_unsupported_value_kind() {
 }
 
 #[test]
+fn maps_divide_and_multiply_cost_modifiers() {
+    // ~400 real 11e Enhancement modifiers use `divide` (cost halves/thirds on
+    // 2nd/3rd take in a multi-detachment roster); `multiply` is its counterpart.
+    // Both must be emitted, not dropped as value_type_unsupported.
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <costTypes><costType id="pts" name="Points"/></costTypes>
+  <selectionEntries>
+    <selectionEntry id="e.u" name="Unit" type="unit">
+      <costs><cost name="pts" typeId="pts" value="30"/></costs>
+      <modifiers>
+        <modifier type="divide" field="pts" value="2"/>
+        <modifier type="multiply" field="pts" value="3"/>
+      </modifiers>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let raw = resolve(parse_raw(xml).unwrap()).unwrap();
+    let (ir, diags) = to_ir(&raw);
+    let u = ir.entries.iter().find(|e| e.id == "e.u").unwrap();
+    let mods = u.costs[0].modifiers.as_ref().unwrap();
+    assert_eq!(mods.len(), 2);
+    assert!(mods.iter().any(|m| m.type_ == "divide" && m.value == 2.0));
+    assert!(mods.iter().any(|m| m.type_ == "multiply" && m.value == 3.0));
+    assert!(
+        !diags.iter().any(|d| d.code == "modifier.value_type_unsupported"),
+        "divide/multiply must not be dropped as unsupported: {:?}",
+        diags
+    );
+}
+
+#[test]
 fn maps_group_choose_n_and_flattens_members() {
     let raw = resolve(parse_raw(include_bytes!("fixtures/mini40k.cat")).unwrap()).unwrap();
     let (ir, diags) = to_ir(&raw);
