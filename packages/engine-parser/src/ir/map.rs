@@ -75,9 +75,20 @@ fn map_entry(e: &RawEntry, cat: &RawCatalogue, diags: &mut Vec<Diagnostic>) -> I
             .filter_map(|c| map_constraint(c, "category", &link.target_id, cat, diags)));
     }
 
+    // Map groups BEFORE the modifier loop: a modifier whose `field` names a
+    // constraint owned by an enclosing selectionEntryGroup (an IrGroupConstraint)
+    // is routed onto it below (A2), which requires `groups` to already exist.
+    let mut children: Vec<IrEntry> = e.entries.iter().map(|c| map_entry(c, cat, diags)).collect();
+    let mut groups: Vec<IrGroup> = Vec::new();
+    for g in &e.groups {
+        flatten_group_members(g, cat, diags, &mut children);
+        collect_groups(g, cat, diags, &mut groups);
+    }
+
     // Attach each raw modifier to the IR cost or constraint it targets, based
     // on where its `field` points: a known cost-type id is a cost modifier, a
-    // matching constraint id is a bound modifier. Neither → diagnostic + drop.
+    // matching constraint id is a bound modifier (the entry's own, or — failing
+    // that — an enclosing group's). Neither → diagnostic + drop.
     let mut visibility_modifiers: Vec<IrVisibilityModifier> = Vec::new();
     let mut validation_rules: Vec<IrValidationRule> = Vec::new();
     let mut category_modifiers: Vec<IrCategoryModifier> = Vec::new();
@@ -144,6 +155,14 @@ fn map_entry(e: &RawEntry, cat: &RawCatalogue, diags: &mut Vec<Diagnostic>) -> I
             }
         } else if let Some(c) = constraints.iter_mut().find(|c| c.id == m.field) {
             c.modifiers.get_or_insert_with(Vec::new).push(ir_mod);
+        } else if let Some(gc) = groups.iter_mut()
+            .flat_map(|g| g.constraints.iter_mut())
+            .find(|gc| gc.id == m.field)
+        {
+            // A2: the field names a constraint owned by an enclosing
+            // selectionEntryGroup rather than the entry itself — attach to
+            // that IrGroupConstraint instead of dropping.
+            gc.modifiers.get_or_insert_with(Vec::new).push(ir_mod);
         } else {
             diags.push(Diagnostic {
                 code: "modifier.target_unmapped".to_string(),
@@ -152,12 +171,6 @@ fn map_entry(e: &RawEntry, cat: &RawCatalogue, diags: &mut Vec<Diagnostic>) -> I
         }
     }
 
-    let mut children: Vec<IrEntry> = e.entries.iter().map(|c| map_entry(c, cat, diags)).collect();
-    let mut groups: Vec<IrGroup> = Vec::new();
-    for g in &e.groups {
-        flatten_group_members(g, cat, diags, &mut children);
-        collect_groups(g, cat, diags, &mut groups);
-    }
     let profiles: Vec<IrProfile> = e.profiles.iter().map(map_profile).collect();
 
     IrEntry {

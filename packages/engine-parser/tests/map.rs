@@ -1378,6 +1378,40 @@ fn group_constraint_self_scope_omits_scope_field() {
 }
 
 #[test]
+fn entry_modifier_routes_to_owning_group_constraint() {
+    // A modifier on the entry itself (not on the group) whose `field` names an
+    // enclosing selectionEntryGroup's OWN constraint id (A2). It must land on
+    // that IrGroupConstraint's modifiers, not drop as modifier.target_unmapped.
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <selectionEntries>
+    <selectionEntry id="e.u" name="U" type="unit">
+      <modifiers>
+        <modifier type="increment" value="1" field="gc"/>
+      </modifiers>
+      <selectionEntryGroups>
+        <selectionEntryGroup id="g.opt" name="Opt">
+          <constraints><constraint id="gc" type="max" value="1" field="selections" scope="parent"/></constraints>
+          <selectionEntries>
+            <selectionEntry id="e.o1" name="O1" type="upgrade"/>
+          </selectionEntries>
+        </selectionEntryGroup>
+      </selectionEntryGroups>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let (ir, diags) = to_ir(&resolve(parse_raw(xml).unwrap()).unwrap());
+    let e = ir.entries.iter().find(|e| e.id == "e.u").unwrap();
+    let g = e.groups.iter().find(|g| g.id == "g.opt").expect("group mapped");
+    let gc = g.constraints.iter().find(|c| c.id == "gc").expect("group constraint mapped");
+    let mods = gc.modifiers.as_ref().expect("modifier attached to group constraint");
+    assert_eq!(mods.len(), 1);
+    assert_eq!((mods[0].type_.as_str(), mods[0].value), ("increment", 1.0));
+    assert!(!diags.iter().any(|d| d.code == "modifier.target_unmapped"), "{:?}", diags);
+}
+
+#[test]
 fn maps_error_modifier_to_validation_rule() {
     let xml = br#"<?xml version="1.0" encoding="utf-8"?>
 <catalogue id="c" name="C" revision="1" gameSystemId="gs"
