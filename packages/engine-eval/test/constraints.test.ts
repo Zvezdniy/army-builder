@@ -158,6 +158,52 @@ describe("checkConstraint with a modified bound", () => {
   });
 });
 
+describe("force-global cost-type constraint (A1: max 2 Enhancements)", () => {
+  const enhCat: IrCatalogue = {
+    id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [],
+    entries: [{
+      id: "e.enh", name: "Enhancement",
+      costs: [{ name: "Enhancements", value: 1 }, { name: "pts", value: 10 }],
+      categories: [], constraints: [], children: [],
+    }],
+  };
+  const rosterN = (n: number): Roster => ({
+    id: "r", name: "R", gameSystemId: "gs", catalogueId: "c", catalogueRevision: 1, pointsLimit: 2000,
+    selections: Array.from({ length: n }, (_, i) => ({ id: `s${i}`, entryId: "e.enh", count: 1, selections: [] })),
+  });
+  const maxTwoEnhancements: IrConstraint = {
+    id: "fc.enh", type: "max", value: 2, field: "Enhancements", scope: "force",
+    targetType: "force", targetId: "force.root", includeChildSelections: false,
+  };
+
+  it("is satisfied at exactly 2 enhancements (sums the named cost type across the force)", () => {
+    const state = buildState(rosterN(2), enhCat);
+    expect(checkConstraint(maxTwoEnhancements, null, state)).toBeNull();
+  });
+
+  it("flags constraint.max at 3 enhancements", () => {
+    const state = buildState(rosterN(3), enhCat);
+    const issue = checkConstraint(maxTwoEnhancements, null, state);
+    expect(issue?.code).toBe("constraint.max");
+    expect(issue?.message).toMatch(/3 .*max 2/);
+  });
+
+  it("skips an inert scope=parent force constraint at force level (returns null)", () => {
+    const state = buildState(rosterN(3), enhCat);
+    const inert: IrConstraint = { ...maxTwoEnhancements, id: "fc.inert", scope: "parent" };
+    expect(checkConstraint(inert, null, state)).toBeNull();
+  });
+
+  it("aggregates an absent cost-type field to 0 (inert, never throws)", () => {
+    // Crusade-only cost type on a matched-play roster: no entry carries it, so the
+    // constraint must never fire (and must not throw).
+    const state = buildState(rosterN(5), enhCat);
+    const crusadeOnly: IrConstraint = { ...maxTwoEnhancements, id: "fc.crusade", field: "Crusade Points" };
+    expect(() => checkConstraint(crusadeOnly, null, state)).not.toThrow();
+    expect(checkConstraint(crusadeOnly, null, state)).toBeNull();
+  });
+});
+
 describe("checkConstraint context/type scopes", () => {
   const uCat: IrCatalogue = {
     id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [],

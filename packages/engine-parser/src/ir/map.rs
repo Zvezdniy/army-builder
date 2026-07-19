@@ -28,8 +28,9 @@ pub fn to_ir(cat: &RawCatalogue) -> (IrCatalogue, Vec<Diagnostic>) {
 /// ContainerEntryBase, so it carries its own <constraints>), which makes the
 /// target category a structural FK — the owning link's targetId — regardless of
 /// how many categoryLinks the force has. Constraints placed directly under the
-/// forceEntry are force-global (no category); the IR has no whole-force target,
-/// so those are diagnosed and dropped rather than guessed onto a category.
+/// forceEntry are force-global (no category): `targetType: "force"` (A1) sums
+/// over the whole force with no category/entry filter, so these map like any
+/// other constraint (e.g. 11e's army-wide "max 2 Enhancements" rule).
 fn map_force_constraints(force: &crate::raw::RawForce, cat: &RawCatalogue, diags: &mut Vec<Diagnostic>) -> Vec<IrConstraint> {
     let mut out: Vec<IrConstraint> = Vec::new();
     for link in &force.category_links {
@@ -40,13 +41,9 @@ fn map_force_constraints(force: &crate::raw::RawForce, cat: &RawCatalogue, diags
         }
     }
     for c in &force.constraints {
-        diags.push(Diagnostic {
-            code: "constraint.force_global_unrepresentable".to_string(),
-            message: format!(
-                "force {} constraint {} is force-global (no category) and has no IR representation (dropped)",
-                force.id, c.id
-            ),
-        });
+        if let Some(mapped) = map_constraint(c, "force", &force.id, cat, diags) {
+            out.push(mapped);
+        }
     }
     out
 }
@@ -420,6 +417,13 @@ fn map_constraint(rc: &RawConstraint, target_type: &str, target_id: &str, cat: &
         let type_name = cat.cost_types.get(&rc.field).cloned().unwrap_or_default();
         if rc.field == "pts" || type_name.to_lowercase().contains("point") {
             "points".to_string()
+        } else if let Some(name) = cat.cost_types.get(&rc.field) {
+            // A known cost type that isn't "points" (e.g. 11e's "Enhancements") —
+            // emit its NAME so the eval side can sum that named cost across the
+            // constraint's scope (A1: force-global cost-type constraints like the
+            // army-wide "max 2 Enhancements" rule). Only a field that resolves to
+            // neither "selections" nor any known cost type is truly unmappable.
+            name.clone()
         } else {
             diags.push(Diagnostic {
                 code: "constraint.field_unmapped".to_string(),

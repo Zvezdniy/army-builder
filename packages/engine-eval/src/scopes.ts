@@ -1,14 +1,18 @@
 import type { EvalNode, EvalState } from "./state";
-import { nodePoints, type CostFn } from "./cost";
+import { nodePoints, costOfType, type CostFn } from "./cost";
 
 // The shared shape aggregate() reads. Both IrConstraint and IrCondition satisfy it.
 export interface AggregateSpec {
   id: string;
-  field: "selections" | "points" | "forces";
+  // "selections" (count), "points", "forces", or any other cost-type name (e.g.
+  // "Enhancements") to sum that named cost across the scope.
+  field: string;
   // A keyword scope (self/parent/force/roster/root-entry/ancestor/unit/upgrade/model/
   // model-or-unit) or a foreign-id scope: the entry id of an ancestor-or-self node.
   scope: string;
-  targetType: "category" | "entry";
+  // "force" matches every node in the scope (a whole-force aggregate, e.g. the
+  // army-wide "max 2 Enhancements" rule) — no per-node category/entry filter.
+  targetType: "category" | "entry" | "force";
   targetId: string;
   includeChildSelections: boolean;
 }
@@ -132,6 +136,7 @@ export function scopeUnanchored(node: EvalNode | null, spec: AggregateSpec, stat
 }
 
 function matchesTarget(node: EvalNode, spec: AggregateSpec): boolean {
+  if (spec.targetType === "force") return true;
   return spec.targetType === "category"
     ? node.categories.includes(spec.targetId)
     : node.entry.id === spec.targetId;
@@ -153,5 +158,10 @@ export function aggregate(
   if (spec.field === "selections") {
     return matched.reduce((sum, n) => sum + n.effectiveCount, 0);
   }
-  return matched.reduce((sum, n) => sum + costOf(n), 0);
+  if (spec.field === "points") {
+    return matched.reduce((sum, n) => sum + costOf(n), 0);
+  }
+  // Any other field is a cost-type name (e.g. "Enhancements") — sum that named
+  // cost across the matched nodes. An entry without that cost type contributes 0.
+  return matched.reduce((sum, n) => sum + costOfType(n, spec.field), 0);
 }

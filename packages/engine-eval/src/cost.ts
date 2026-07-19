@@ -26,3 +26,13 @@ export function nodePoints(node: EvalNode): number {
 export function totalCost(state: EvalState, costOf: CostFn = nodePoints): number {
   return state.all.reduce((sum, node) => sum + costOf(node), 0);
 }
+
+// Sums a named cost type (e.g. "Enhancements") for a single node, scaled by its
+// effective count. An entry that carries no cost of that name contributes 0 — a
+// force-global cost-type constraint (A1) must aggregate to 0 (inert), never throw,
+// for entries/catalogues that don't use that cost type (e.g. Crusade-only costs in
+// a matched-play roster).
+export function costOfType(node: EvalNode, typeName: string): number {
+  const cost = node.entry.costs.find((c) => c.name === typeName);
+  return (cost?.value ?? 0) * node.effectiveCount;
+}

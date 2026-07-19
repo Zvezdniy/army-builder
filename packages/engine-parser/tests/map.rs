@@ -107,11 +107,12 @@ fn maps_force_constraints_nested_in_each_category_link() {
 }
 
 /// A constraint placed directly under <forceEntry> (not inside a categoryLink)
-/// is force-global — it has no category association. The current IR has no
-/// whole-force target, so it is diagnostic-dropped, never silently lost and
-/// never miscompiled onto a guessed category.
+/// is force-global — no category, but the IR's `targetType: "force"` (A1) now
+/// represents "sum over the whole force" directly, so it is mapped, not dropped.
+/// (Regression guard for the walking-skeleton behaviour this replaces: such a
+/// constraint used to be diagnostic-dropped with no IR representation.)
 #[test]
-fn diagnoses_force_global_constraint_without_category() {
+fn maps_force_global_constraint_with_force_target_type() {
     let xml = br#"<?xml version="1.0" encoding="utf-8"?>
 <catalogue id="c" name="C" revision="1" gameSystemId="gs"
            xmlns="http://www.battlescribe.net/schema/catalogueSchema">
@@ -125,9 +126,48 @@ fn diagnoses_force_global_constraint_without_category() {
 </catalogue>"#;
     let raw = resolve(parse_raw(xml).unwrap()).unwrap();
     let (ir, diags) = to_ir(&raw);
-    assert!(ir.force_constraints.is_empty(), "force-global constraint should not be emitted");
-    assert!(diags.iter().any(|d| d.code == "constraint.force_global_unrepresentable"),
-        "expected loud diagnostic for dropped force-global constraint: {:?}", diags);
+    let c = ir.force_constraints.iter().find(|c| c.id == "fg.max")
+        .unwrap_or_else(|| panic!("force-global constraint fg.max missing (dropped): {:?}", ir.force_constraints));
+    assert_eq!(c.target_type, "force");
+    assert_eq!(c.target_id, "fe");
+    assert_eq!(c.field, "points");
+    assert_eq!(c.scope, "force");
+    assert_eq!(c.value, 2000.0);
+    assert!(!diags.iter().any(|d| d.code == "constraint.force_global_unrepresentable"),
+        "force-global constraint should no longer be diagnosed as unrepresentable: {:?}", diags);
+}
+
+/// The 11e "max 2 Enhancements" rule: a forceEntry-direct `max 2` constraint whose
+/// field is a cost-type id (not "selections"/"pts") must map to that cost type's
+/// NAME (from `cat.cost_types`), not drop as `field_unmapped`.
+#[test]
+fn maps_force_global_enhancements_cost_type_constraint() {
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <costTypes>
+    <costType id="ct.enh" name="Enhancements"/>
+  </costTypes>
+  <forceEntries>
+    <forceEntry id="fe.army" name="Army Roster">
+      <constraints>
+        <constraint id="fc.max2enh" type="max" value="2" field="ct.enh" scope="force"/>
+      </constraints>
+    </forceEntry>
+  </forceEntries>
+</catalogue>"#;
+    let raw = resolve(parse_raw(xml).unwrap()).unwrap();
+    let (ir, diags) = to_ir(&raw);
+    let c = ir.force_constraints.iter().find(|c| c.id == "fc.max2enh")
+        .unwrap_or_else(|| panic!("force constraint fc.max2enh missing (dropped): {:?}", ir.force_constraints));
+    assert_eq!(c.field, "Enhancements");
+    assert_eq!(c.scope, "force");
+    assert_eq!(c.target_type, "force");
+    assert_eq!(c.value, 2.0);
+    assert!(!diags.iter().any(|d| d.code == "constraint.field_unmapped"),
+        "cost-type field should map to its name, not drop: {:?}", diags);
+    assert!(!diags.iter().any(|d| d.code == "constraint.force_global_unrepresentable"),
+        "force-global constraint should no longer be diagnosed as unrepresentable: {:?}", diags);
 }
 
 #[test]

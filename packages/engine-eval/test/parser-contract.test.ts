@@ -279,6 +279,49 @@ describe("parser IR contract — cost modifier shape from an inlined link", () =
   });
 });
 
+describe("parser IR contract — force-global cost-type constraint (A1: max 2 Enhancements)", () => {
+  // Mirrors the exact wire shape engine-parser's map_constraint/map_force_constraints
+  // now emit for a forceEntry-direct constraint on a cost-type field (ir/map.rs):
+  // targetType "force" (whole-force sum, no category/entry filter), field = the
+  // cost type's NAME ("Enhancements"), targetId = the forceEntry's id. Proves the
+  // parser's serialized shape validates against the domain schema and is enforced
+  // end-to-end by evaluate().
+  const shaped = {
+    id: "c", name: "C", gameSystemId: "gs", revision: 1,
+    forceConstraints: [{
+      id: "fc.max2enh", type: "max", value: 2, field: "Enhancements", scope: "force",
+      targetType: "force", targetId: "fe.army", includeChildSelections: false,
+    }],
+    entries: [{
+      id: "e.enh", name: "Enhancement",
+      costs: [{ name: "Enhancements", value: 1 }, { name: "points", value: 10 }],
+      categories: [], constraints: [], children: [],
+    }],
+  };
+
+  const roster = (n: number): Roster => ({
+    id: "r", name: "R", gameSystemId: "gs", catalogueId: "c", catalogueRevision: 1, pointsLimit: 2000,
+    selections: Array.from({ length: n }, (_, i) => ({ id: `e${i}`, entryId: "e.enh", count: 1, selections: [] })),
+  });
+
+  it("validates against the domain schema", () => {
+    const parsed = IrCatalogue.safeParse(shaped);
+    if (!parsed.success) console.error(parsed.error);
+    expect(parsed.success).toBe(true);
+  });
+
+  it("is legal at 2 enhancements and violates at 3 (parser output → domain → engine)", () => {
+    const cat = IrCatalogue.parse(shaped);
+    const legal = evaluate(roster(2), cat);
+    expect(legal.valid).toBe(true);
+    expect(legal.issues.some((i) => i.constraintId === "fc.max2enh")).toBe(false);
+
+    const illegal = evaluate(roster(3), cat);
+    expect(illegal.valid).toBe(false);
+    expect(illegal.issues.some((i) => i.constraintId === "fc.max2enh" && i.code === "constraint.max")).toBe(true);
+  });
+});
+
 describe("parser IR contract — same-id per-placement now evaluates (keystone)", () => {
   // The SAME shared id `e.wargear` inlined under two units, one placement
   // discounted via costs[].modifiers. Before the keystone this threw in
