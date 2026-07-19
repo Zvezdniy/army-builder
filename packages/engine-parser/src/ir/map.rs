@@ -190,13 +190,15 @@ fn map_entry(e: &RawEntry, cat: &RawCatalogue, diags: &mut Vec<Diagnostic>) -> I
             // kind (divide/multiply) or an unparseable/absent `affects` path
             // falls through to the same target_unmapped diagnostic as before —
             // this branch never guesses a target.
-            match map_characteristic_modifier(m, &characteristic, cat, diags) {
+            let kind = m.kind.clone();
+            let affects = m.affects.clone();
+            match map_characteristic_modifier(m, &characteristic, ir_mod) {
                 Some(cm) => characteristic_modifiers.push(cm),
                 None => diags.push(Diagnostic {
                     code: "modifier.target_unmapped".to_string(),
                     message: format!(
                         "modifier field {} matches characteristic {} on entry {} but its kind ({}) or affects path ({:?}) is unsupported",
-                        m.field, characteristic, e.id, m.kind, m.affects
+                        m.field, characteristic, e.id, kind, affects
                     ),
                 }),
             }
@@ -797,39 +799,86 @@ fn map_category_modifier(m: &RawModifier, cat: &RawCatalogue) -> Option<IrCatego
 }
 
 /// Parse a characteristic modifier's `affects` BattleScribe addressing path
-/// into the pieces `IrCharacteristicModifier` needs: whether the target is the
-/// scope anchor's whole subtree or just its direct children (`recursive`), an
-/// optional specific descendant entry id to restrict to, and the profile
-/// typeName the target profile must have. Only the documented grammar
-/// `self.entries[.recursive][.<entryId>].profiles.<TypeName>` is understood
-/// (per the design doc / investigation report); anything else — a bare
-/// `profiles.<TypeName>` (no `self.entries` prefix, "this entry's own profile,
-/// explicit" shape), a bare `<entryId>.profiles.<TypeName>`, or no `affects` at
-/// all ("implicit self") — returns None. This is a deliberate first-slice
-/// restriction, not a resolution step: an unparseable/unrecognized path is
-/// faithfully left uncaptured (the caller drops it as `target_unmapped`, the
-/// same diagnostic every characteristic modifier got before this channel
-/// existed) rather than guessed.
-fn parse_affects(affects: &str) -> Option<(bool, Option<String>, String)> {
-    let rest = affects.strip_prefix("self.entries")?;
-    let rest = rest.strip_prefix('.')?;
-    let (recursive, rest) = match rest.strip_prefix("recursive.") {
-        Some(r) => (true, r),
-        None => (false, rest),
-    };
-    let (target_entry_id, profile_type) = match rest.strip_prefix("profiles.") {
-        Some(type_name) => (None, type_name),
-        None => {
-            let idx = rest.find(".profiles.")?;
-            let id = &rest[..idx];
-            let type_name = &rest[idx + ".profiles.".len()..];
-            (Some(id.to_string()), type_name)
+/// (plus its `scope` attribute, needed because the resolved `target_scope`
+/// depends on WHICH shape matched — see below) into the pieces
+/// `IrCharacteristicModifier` needs: whether the target is the scope anchor's
+/// whole subtree or just its direct children (`recursive`), an optional
+/// specific descendant entry id to restrict to, the profile typeName the
+/// target profile must have, and the resolved `target_scope`. Three shapes are
+/// understood, confirmed against real 11e BSData
+/// (`/private/tmp/wh40k-11e-probe/`) rather than guessed:
+///
+/// - `self.entries[.recursive][.<entryId>].profiles.<TypeName>` (the majority
+///   shape, ~1435 raw occurrences sampled) — `target_scope` comes from the
+///   modifier's own `scope` attribute (`map_condition_scope`), unchanged from
+///   before this function grew the two shapes below.
+/// - bare `profiles.<TypeName>` (no prefix at all — the modifier targets its
+///   OWN entry's profile; ~305 raw occurrences, e.g. `scope: upgrade, affects:
+///   profiles.Ranged Weapons`) — `target_scope` is hardcoded to `"self"`
+///   regardless of the modifier's `scope` attribute: the bare-profile shape
+///   already unambiguously means "this entry, no anchor walk needed," so the
+///   `scope` attribute (which real data shows can independently be `upgrade`
+///   etc. on this shape) is not the target anchor here.
+/// - bare `<entryId>.profiles.<TypeName>` (leading token is neither `self` nor
+///   `profiles` — a specific foreign entry id, non-recursive; ~28 raw
+///   occurrences, e.g. `affects: 982b-de77-dd2d-d9bd.profiles.Ranged
+///   Weapons`) — `target_scope` comes from the modifier's own `scope`
+///   attribute, falling back to `"self"` when `scope` is empty (real data
+///   always has it non-empty for this shape, but the fallback keeps this arm
+///   from silently emitting an empty scope string).
+///
+/// Anything else — no `affects` at all ("implicit self"), an empty profile
+/// type, or a leading token that is literally `self` but NOT followed by
+/// `.entries` (no real occurrence found, guarded defensively rather than
+/// mis-parsed as an entry id named "self") — returns `None` and is faithfully
+/// left uncaptured (the caller drops it as `target_unmapped`, the same
+/// diagnostic every characteristic modifier got before this channel existed)
+/// rather than guessed.
+fn parse_affects(affects: &str, scope: &str) -> Option<(bool, Option<String>, String, String)> {
+    if let Some(rest) = affects.strip_prefix("self.entries") {
+        let rest = rest.strip_prefix('.')?;
+        let (recursive, rest) = match rest.strip_prefix("recursive.") {
+            Some(r) => (true, r),
+            None => (false, rest),
+        };
+        let (target_entry_id, profile_type) = match rest.strip_prefix("profiles.") {
+            Some(type_name) => (None, type_name),
+            None => {
+                let idx = rest.find(".profiles.")?;
+                let id = &rest[..idx];
+                let type_name = &rest[idx + ".profiles.".len()..];
+                (Some(id.to_string()), type_name)
+            }
+        };
+        if profile_type.is_empty() {
+            return None;
         }
-    };
-    if profile_type.is_empty() {
+        return Some((recursive, target_entry_id, profile_type.to_string(), map_condition_scope(scope)));
+    }
+
+    if let Some(type_name) = affects.strip_prefix("profiles.") {
+        if type_name.is_empty() {
+            return None;
+        }
+        return Some((false, None, type_name.to_string(), "self".to_string()));
+    }
+
+    // `<entryId>.profiles.<TypeName>` — the leading token up to the first
+    // ".profiles." is a foreign entry id. Guard against a leading token of
+    // literally "self" (which would mean an unrecognized self-prefixed shape,
+    // not a real entry named "self" — no such id was found in real data, but
+    // never guess).
+    let idx = affects.find(".profiles.")?;
+    let id = &affects[..idx];
+    if id.is_empty() || id == "self" {
         return None;
     }
-    Some((recursive, target_entry_id, profile_type.to_string()))
+    let type_name = &affects[idx + ".profiles.".len()..];
+    if type_name.is_empty() {
+        return None;
+    }
+    let target_scope = if scope.is_empty() { "self".to_string() } else { map_condition_scope(scope) };
+    Some((false, Some(id.to_string()), type_name.to_string(), target_scope))
 }
 
 /// Build a captured (UNRESOLVED — no tree-walking here) characteristic
@@ -842,38 +891,31 @@ fn parse_affects(affects: &str) -> Option<(bool, Option<String>, String)> {
 /// before this channel existed. `append`/`replace`/`floor`/`ceil` never reach
 /// here at all — `map_modifier`'s kind whitelist already drops them earlier
 /// (as `modifier.value_type_unsupported`) before the caller's branching logic
-/// runs. Conditions/condition-groups are mapped with the existing non-strict
-/// helpers (an individually-unmappable condition is dropped, not the whole
-/// modifier — mirrors `map_modifier`'s own gate handling, not the constraint-
-/// limit strict path).
+/// runs. `ir_mod` is the SAME `IrModifier` the caller already built via
+/// `map_modifier` for this raw modifier — its `conditions`/`condition_groups`
+/// are reused as-is rather than re-derived from `m.conditions`/
+/// `m.condition_groups` here, so each condition is mapped (and each unmappable
+/// condition diagnosed) exactly once per modifier, not twice.
 fn map_characteristic_modifier(
     m: &RawModifier,
     characteristic: &str,
-    cat: &RawCatalogue,
-    diags: &mut Vec<Diagnostic>,
+    ir_mod: IrModifier,
 ) -> Option<IrCharacteristicModifier> {
     if !matches!(m.kind.as_str(), "set" | "increment" | "decrement") {
         return None;
     }
-    let (recursive, target_entry_id, profile_type) = parse_affects(&m.affects)?;
-
-    let conditions: Vec<IrCondition> = m.conditions.iter()
-        .filter_map(|c| map_condition(c, cat, diags))
-        .collect();
-    let condition_groups: Vec<IrConditionGroup> = m.condition_groups.iter()
-        .filter_map(|g| map_condition_group(g, cat, diags))
-        .collect();
+    let (recursive, target_entry_id, profile_type, target_scope) = parse_affects(&m.affects, &m.scope)?;
 
     Some(IrCharacteristicModifier {
         characteristic: characteristic.to_string(),
         profile_type,
         kind: m.kind.clone(),
         value: m.value_raw.clone(),
-        target_scope: map_condition_scope(&m.scope),
+        target_scope,
         target_entry_id,
         recursive,
-        conditions: if conditions.is_empty() { None } else { Some(conditions) },
-        condition_groups: if condition_groups.is_empty() { None } else { Some(condition_groups) },
+        conditions: ir_mod.conditions,
+        condition_groups: ir_mod.condition_groups,
     })
 }
 

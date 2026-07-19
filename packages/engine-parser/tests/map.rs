@@ -2152,11 +2152,11 @@ fn divide_multiply_on_characteristic_field_stays_target_unmapped() {
     assert!(diags.iter().any(|d| d.code == "modifier.target_unmapped" && d.message.contains("e.enh")));
 }
 
-/// An `affects` path that does not match the documented grammar (no leading
-/// "self.entries") is faithfully NOT captured — falls through to
-/// target_unmapped unchanged, rather than guessing a target.
+/// No `affects` attribute at all ("implicit self" — not one of the three
+/// documented/understood grammars) is faithfully NOT captured — falls through
+/// to target_unmapped unchanged, rather than guessing a target.
 #[test]
-fn unrecognized_affects_grammar_stays_target_unmapped() {
+fn missing_affects_stays_target_unmapped() {
     let xml = br#"<?xml version="1.0" encoding="utf-8"?>
 <catalogue id="c" name="C" revision="1" gameSystemId="gs"
            xmlns="http://www.battlescribe.net/schema/catalogueSchema">
@@ -2170,7 +2170,7 @@ fn unrecognized_affects_grammar_stays_target_unmapped() {
   <selectionEntries>
     <selectionEntry id="e.enh" name="Enh" type="upgrade">
       <modifiers>
-        <modifier type="set" field="ct.a" value="1" scope="upgrade" affects="profiles.Ranged Weapons"/>
+        <modifier type="set" field="ct.a" value="1" scope="upgrade"/>
       </modifiers>
     </selectionEntry>
   </selectionEntries>
@@ -2178,6 +2178,148 @@ fn unrecognized_affects_grammar_stays_target_unmapped() {
     let raw = resolve(parse_raw(xml).unwrap()).unwrap();
     let (ir, diags) = to_ir(&raw);
     let enh = ir.entries.iter().find(|e| e.id == "e.enh").unwrap();
-    assert!(enh.characteristic_modifiers.is_empty(), "bare `profiles.X` affects (no self.entries prefix) not yet handled");
+    assert!(enh.characteristic_modifiers.is_empty(), "missing affects (\"implicit self\") not yet handled");
     assert!(diags.iter().any(|d| d.code == "modifier.target_unmapped" && d.message.contains("e.enh")));
+}
+
+/// Fix 2, shape 1: a bare `profiles.<TypeName>` `affects` (no `self.entries`
+/// prefix at all) targets the OWNING entry's own profile — confirmed as the
+/// ~24.5%/~6.7% real-data shape (e.g. `scope: upgrade, affects: profiles.Ranged
+/// Weapons` in real 11e BSData). `target_scope` is hardcoded to "self"
+/// regardless of the modifier's own `scope` attribute (the bare-profile shape
+/// already unambiguously means "this entry," no anchor walk needed).
+#[test]
+fn maps_own_entry_bare_profiles_characteristic_modifier() {
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <profileTypes>
+    <profileType id="pt.unit" name="Unit">
+      <characteristicTypes>
+        <characteristicType id="ct.sv" name="Sv"/>
+      </characteristicTypes>
+    </profileType>
+  </profileTypes>
+  <selectionEntries>
+    <selectionEntry id="e.enh" name="Enh" type="upgrade">
+      <modifiers>
+        <modifier type="set" field="ct.sv" value="2+" scope="upgrade" affects="profiles.Unit"/>
+      </modifiers>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let raw = resolve(parse_raw(xml).unwrap()).unwrap();
+    let (ir, diags) = to_ir(&raw);
+    let enh = ir.entries.iter().find(|e| e.id == "e.enh").unwrap();
+    assert_eq!(enh.characteristic_modifiers.len(), 1);
+    let cm = &enh.characteristic_modifiers[0];
+    assert_eq!(cm.characteristic, "Sv");
+    assert_eq!(cm.profile_type, "Unit");
+    assert_eq!(cm.kind, "set");
+    assert_eq!(cm.value, "2+");
+    assert_eq!(cm.target_scope, "self", "bare profiles.X hardcodes target_scope=self, ignoring the modifier's own `scope` attribute");
+    assert!(cm.target_entry_id.is_none());
+    assert!(!cm.recursive);
+    assert!(
+        !diags.iter().any(|d| d.code == "modifier.target_unmapped" && d.message.contains("e.enh")),
+        "bare profiles.X should now be captured, not target_unmapped: {:?}", diags
+    );
+}
+
+/// Fix 2, shape 2: a bare `<entryId>.profiles.<TypeName>` `affects` (leading
+/// token is neither "self" nor "profiles") targets one specific foreign entry,
+/// non-recursively — confirmed as the ~7.5% real-data shape (e.g. `affects:
+/// 982b-de77-dd2d-d9bd.profiles.Ranged Weapons` in real 11e BSData).
+/// `target_scope` comes from the modifier's own `scope` attribute.
+#[test]
+fn maps_foreign_entry_non_recursive_characteristic_modifier() {
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <profileTypes>
+    <profileType id="pt.rw" name="Ranged Weapons">
+      <characteristicTypes>
+        <characteristicType id="ct.a" name="A"/>
+      </characteristicTypes>
+    </profileType>
+  </profileTypes>
+  <selectionEntries>
+    <selectionEntry id="e.enh" name="Enh" type="upgrade">
+      <modifiers>
+        <modifier type="increment" field="ct.a" value="1" scope="upgrade"
+                  affects="e993-e086-6de1-12af.profiles.Ranged Weapons"/>
+      </modifiers>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let raw = resolve(parse_raw(xml).unwrap()).unwrap();
+    let (ir, diags) = to_ir(&raw);
+    let enh = ir.entries.iter().find(|e| e.id == "e.enh").unwrap();
+    assert_eq!(enh.characteristic_modifiers.len(), 1);
+    let cm = &enh.characteristic_modifiers[0];
+    assert_eq!(cm.characteristic, "A");
+    assert_eq!(cm.profile_type, "Ranged Weapons");
+    assert_eq!(cm.kind, "increment");
+    assert_eq!(cm.target_scope, "upgrade", "target_scope comes from the modifier's own scope attribute");
+    assert_eq!(cm.target_entry_id.as_deref(), Some("e993-e086-6de1-12af"));
+    assert!(!cm.recursive);
+    assert!(
+        !diags.iter().any(|d| d.code == "modifier.target_unmapped" && d.message.contains("e.enh")),
+        "foreign-entry-id bare affects should now be captured, not target_unmapped: {:?}", diags
+    );
+}
+
+/// Fix 1 regression guard: a characteristic modifier with one mappable and one
+/// unmappable condition must map its conditions (and diagnose the unmappable
+/// one) EXACTLY ONCE — not twice. Before the fix, `map_entry` built `ir_mod`
+/// via `map_modifier` (which maps conditions and pushes diagnostics), then
+/// `map_characteristic_modifier` re-mapped the SAME raw conditions from
+/// scratch, doubling both the mapped-condition work and the diagnostic.
+#[test]
+fn characteristic_modifier_condition_mapped_and_diagnosed_exactly_once() {
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <categoryEntries><categoryEntry id="cat.x" name="X"/></categoryEntries>
+  <profileTypes>
+    <profileType id="pt.unit" name="Unit">
+      <characteristicTypes>
+        <characteristicType id="ct.m" name="M"/>
+      </characteristicTypes>
+    </profileType>
+  </profileTypes>
+  <selectionEntries>
+    <selectionEntry id="e.enh" name="Enh" type="upgrade">
+      <modifiers>
+        <modifier type="increment" field="ct.m" value="2" scope="self" affects="self.entries.profiles.Unit">
+          <conditions>
+            <condition type="atLeast" field="selections" scope="roster" value="1" childId="cat.x"/>
+            <condition type="atLeast" field="bogus-field" scope="roster" value="1" childId="cat.x"/>
+          </conditions>
+        </modifier>
+      </modifiers>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let raw = resolve(parse_raw(xml).unwrap()).unwrap();
+    let (ir, diags) = to_ir(&raw);
+    let enh = ir.entries.iter().find(|e| e.id == "e.enh").unwrap();
+    assert_eq!(enh.characteristic_modifiers.len(), 1);
+    let cm = &enh.characteristic_modifiers[0];
+
+    // The mappable condition survives on the captured modifier.
+    let conds = cm.conditions.as_ref().expect("the mappable condition is carried");
+    assert_eq!(conds.len(), 1, "only the mappable condition is kept, and only once");
+    assert_eq!(conds[0].comparator, "atLeast");
+    assert_eq!(conds[0].target_id, "cat.x");
+
+    // The unmappable condition's diagnostic is emitted EXACTLY ONCE, not twice
+    // (once by map_modifier's ir_mod construction, once again by
+    // map_characteristic_modifier re-deriving from the raw conditions).
+    let field_unmapped_count = diags.iter()
+        .filter(|d| d.code == "condition.field_unmapped" && d.message.contains("bogus-field"))
+        .count();
+    assert_eq!(field_unmapped_count, 1,
+        "condition.field_unmapped for the unmappable condition should be emitted exactly once, got {}: {:?}",
+        field_unmapped_count, diags);
 }

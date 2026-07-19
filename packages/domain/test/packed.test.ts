@@ -102,12 +102,49 @@ describe("rehydrateCatalogue", () => {
 
   it("round-trips: rehydrate(pack(c)) deep-equals c", () => {
     const shared = entry({ id: "w", name: "Bolter", costs: [{ name: "pts", value: 2 }] });
-    const a = entry({ id: "a", name: "A", type: "unit", children: [shared], categories: ["k"] });
+    const a = entry({
+      id: "a",
+      name: "A",
+      type: "unit",
+      children: [shared],
+      categories: ["k"],
+      // A non-empty characteristicModifiers, matching the Artificer-Armour-style
+      // real shape: an unresolved cross-entry `set` targeting a parent's Unit
+      // profile, gated by a condition. Only the empty-default case was covered
+      // before; this guards the field itself (and its nested condition) surviving
+      // pack -> rehydrate.
+      characteristicModifiers: [
+        {
+          characteristic: "Sv",
+          profileType: "Unit",
+          kind: "set",
+          value: "2+",
+          targetScope: "model",
+          targetEntryId: "w",
+          recursive: true,
+          conditions: [
+            {
+              id: "cond.atLeast.a",
+              comparator: "atLeast",
+              value: 1,
+              field: "selections",
+              scope: "roster",
+              targetType: "entry",
+              targetId: "a",
+              includeChildSelections: false,
+            },
+          ],
+        },
+      ],
+    });
     const b = entry({ id: "b", name: "B", children: [shared] });
     const c = cat([a, b]);
     expect(rehydrateCatalogue(packCatalogue(c))).toEqual(c);
     // guard the one entry field no other test populates: type must survive
     expect(rehydrateCatalogue(packCatalogue(c)).entries[0]!.type).toBe("unit");
+    // guard characteristicModifiers specifically survives pack -> rehydrate
+    expect(rehydrateCatalogue(packCatalogue(c)).entries[0]!.characteristicModifiers)
+      .toEqual(a.characteristicModifiers);
   });
 
   it("errors cleanly on a cyclic packed payload instead of overflowing the stack", () => {
