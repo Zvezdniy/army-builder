@@ -1,0 +1,6 @@
+{"gameSystem":{"type":"gameSystem","id":"gs.11e","name":"WH40K 11e","revision":1,
+  "costTypes":[{"id":"pts","name":"pts"},{"id":"dp","name":"Detachment Points"}],
+  "categoryEntries":[{"id":"cat.hq","name":"HQ"}],
+  "forceEntries":[{"id":"f.army","name":"Army",
+    "constraints":[{"id":"fc.hq.min","type":"min","value":1,"field":"selections","scope":"force"}],
+    "categoryLinks":[{"targetId":"cat.hq","primary":false}]}]}}
