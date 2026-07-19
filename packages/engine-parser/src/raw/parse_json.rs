@@ -218,6 +218,7 @@ fn map_cat(c: JsonCat, diags: &mut Vec<Diagnostic>) -> RawCatalogue {
             .map(|l| RawCatalogueLink { target_id: l.target_id.clone(), import_root_entries: l.import_root_entries })
             .collect(),
         entry_links: c.entry_links.iter().map(|l| map_entry_link(l, diags)).collect(),
+        shared_profiles: Vec::new(),
     }
 }
 
@@ -238,6 +239,7 @@ fn map_entry(e: &JsonEntry, diags: &mut Vec<Diagnostic>) -> RawEntry {
         groups: e.selection_entry_groups.iter().map(|g| map_group(g, diags)).collect(),
         entry_links: e.entry_links.iter().map(|l| map_entry_link(l, diags)).collect(),
         profiles: map_profiles(&e.profiles),
+        info_links: Vec::new(),
     }
 }
 
@@ -251,6 +253,7 @@ fn map_group(g: &JsonGroup, diags: &mut Vec<Diagnostic>) -> RawGroup {
         constraints: map_constraints(&g.constraints),
         modifiers: map_modifiers(&g.modifiers, &g.modifier_groups, diags),
         profiles: map_profiles(&g.profiles),
+        info_links: Vec::new(),
     }
 }
 

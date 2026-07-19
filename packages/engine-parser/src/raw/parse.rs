@@ -4,7 +4,7 @@ use crate::error::ParseError;
 use crate::xml::SafeXmlReader;
 use super::model::{
     RawCatalogue, RawCatalogueLink, RawCategoryLink, RawCharacteristic, RawCondition, RawConditionGroup,
-    RawConstraint, RawCost, RawEntry, RawEntryLink, RawForce, RawGroup, RawModifier, RawProfile,
+    RawConstraint, RawCost, RawEntry, RawEntryLink, RawForce, RawGroup, RawInfoLink, RawModifier, RawProfile,
 };
 
 fn attr(e: &BytesStart, key: &[u8]) -> Option<String> {
@@ -57,6 +57,9 @@ pub fn parse_raw(bytes: &[u8]) -> Result<RawCatalogue, ParseError> {
                 b"forceEntries" => read_forces_into(&mut cat.force_entries, &mut r, b"forceEntries")?,
                 b"catalogueLinks" => read_cataloguelinks_into(&mut cat.catalogue_links, &mut r)?,
                 b"entryLinks" => read_entrylinks_into(&mut cat.entry_links, &mut r)?,
+                b"sharedProfiles" => {
+                    read_profiles_into(&mut cat.shared_profiles, &mut r, b"sharedProfiles")?
+                }
                 other => {
                     let name = other.to_vec();
                     skip_element(&mut r, &name)?;
@@ -174,7 +177,8 @@ fn read_entry(start: &BytesStart, r: &mut SafeXmlReader) -> Result<RawEntry, Par
                     }
                     b"entryLinks" => read_entrylinks_into(&mut entry.entry_links, r)?,
                     b"modifiers" => read_modifiers_into(&mut entry.modifiers, r)?,
-                    b"profiles" => read_profiles_into(&mut entry.profiles, r)?,
+                    b"profiles" => read_profiles_into(&mut entry.profiles, r, b"profiles")?,
+                    b"infoLinks" => read_infolinks_into(&mut entry.info_links, r)?,
                     other => {
                         let name = other.to_vec();
                         skip_element(r, &name)?;
@@ -252,7 +256,8 @@ fn read_group(start: &BytesStart, r: &mut SafeXmlReader) -> Result<RawGroup, Par
                     }
                     b"entryLinks" => read_entrylinks_into(&mut group.entry_links, r)?,
                     b"modifiers" => read_modifiers_into(&mut group.modifiers, r)?,
-                    b"profiles" => read_profiles_into(&mut group.profiles, r)?,
+                    b"profiles" => read_profiles_into(&mut group.profiles, r, b"profiles")?,
+                    b"infoLinks" => read_infolinks_into(&mut group.info_links, r)?,
                     other => {
                         let name = other.to_vec();
                         skip_element(r, &name)?;
@@ -357,7 +362,11 @@ fn read_costs_into(dst: &mut Vec<RawCost>, r: &mut SafeXmlReader) -> Result<(), 
     }
 }
 
-fn read_profiles_into(dst: &mut Vec<RawProfile>, r: &mut SafeXmlReader) -> Result<(), ParseError> {
+fn read_profiles_into(
+    dst: &mut Vec<RawProfile>,
+    r: &mut SafeXmlReader,
+    container_end: &[u8],
+) -> Result<(), ParseError> {
     loop {
         match r.read_event()? {
             Some(ev) => match ev.event {
@@ -372,7 +381,7 @@ fn read_profiles_into(dst: &mut Vec<RawProfile>, r: &mut SafeXmlReader) -> Resul
                         ..Default::default()
                     });
                 }
-                Event::End(end) if end.local_name().as_ref() == b"profiles" => return Ok(()),
+                Event::End(end) if end.local_name().as_ref() == container_end => return Ok(()),
                 Event::Start(e) => {
                     skip_element(r, e.local_name().as_ref())?;
                 }
@@ -381,6 +390,39 @@ fn read_profiles_into(dst: &mut Vec<RawProfile>, r: &mut SafeXmlReader) -> Resul
             None => {
                 return Err(ParseError::MalformedXml("unexpected EOF in profiles".to_string()))
             }
+        }
+    }
+}
+
+/// Read a `<infoLinks>` block (typically inside a selectionEntry/Group). An
+/// <infoLink> is normally self-closing; a rare one with children (e.g. its own
+/// modifiers) has them skipped, since only the target/type/hidden matter here.
+fn read_infolinks_into(dst: &mut Vec<RawInfoLink>, r: &mut SafeXmlReader) -> Result<(), ParseError> {
+    loop {
+        match r.read_event()? {
+            Some(ev) => match ev.event {
+                Event::Empty(e) if e.local_name().as_ref() == b"infoLink" => {
+                    dst.push(RawInfoLink {
+                        target_id: attr(&e, b"targetId").unwrap_or_default(),
+                        link_type: attr(&e, b"type").unwrap_or_default(),
+                        hidden: attr_bool(&e, b"hidden"),
+                    });
+                }
+                Event::Start(e) if e.local_name().as_ref() == b"infoLink" => {
+                    dst.push(RawInfoLink {
+                        target_id: attr(&e, b"targetId").unwrap_or_default(),
+                        link_type: attr(&e, b"type").unwrap_or_default(),
+                        hidden: attr_bool(&e, b"hidden"),
+                    });
+                    skip_element(r, b"infoLink")?; // consume the (rare) child subtree
+                }
+                Event::End(end) if end.local_name().as_ref() == b"infoLinks" => return Ok(()),
+                Event::Start(e) => {
+                    skip_element(r, e.local_name().as_ref())?;
+                }
+                _ => {}
+            },
+            None => return Err(ParseError::MalformedXml("unexpected EOF in infoLinks".to_string())),
         }
     }
 }
