@@ -70,6 +70,16 @@ pub fn merge_supporting(
         }
     }
 
+    // Carry shared profiles (the pool infoLink type="profile" resolves against),
+    // deduping by id — primary's definition wins, mirroring shared_entries/groups.
+    let mut seen_profiles: std::collections::HashSet<String> =
+        primary.shared_profiles.iter().map(|p| p.id.clone()).collect();
+    for p in supporting.shared_profiles {
+        if seen_profiles.insert(p.id.clone()) {
+            primary.shared_profiles.push(p);
+        }
+    }
+
     // Union maps: primary wins on key clash (insert only if absent).
     for (k, v) in supporting.cost_types {
         primary.cost_types.entry(k).or_insert(v);
@@ -338,6 +348,25 @@ mod tests {
         merge_supporting(&mut primary, supporting, &mut diags);
         assert_eq!(primary.rules.get("Pistol").unwrap(), "primary"); // primary wins
         assert_eq!(primary.rules.get("Leader").unwrap(), "gst text"); // gst rule folded in
+    }
+
+    #[test]
+    fn merge_carries_shared_profiles_dedup_by_id() {
+        use crate::raw::model::RawProfile;
+        let mut primary = RawCatalogue { id: "p".into(), game_system_id: Some("gs".into()),
+            shared_profiles: vec![RawProfile { id: "keep".into(), name: "P".into(), ..Default::default() }],
+            ..Default::default() };
+        let supporting = RawCatalogue { id: "gs".into(),
+            shared_profiles: vec![
+                RawProfile { id: "keep".into(), name: "DUP".into(), ..Default::default() }, // deduped (primary wins)
+                RawProfile { id: "new".into(), name: "Q".into(), ..Default::default() },
+            ], ..Default::default() };
+        let mut diags = Vec::new();
+        merge_supporting(&mut primary, supporting, &mut diags);
+        assert!(primary.shared_profiles.iter().any(|p| p.id == "new"));
+        let keep: Vec<_> = primary.shared_profiles.iter().filter(|p| p.id == "keep").collect();
+        assert_eq!(keep.len(), 1, "dup id not added twice");
+        assert_eq!(keep[0].name, "P", "primary definition wins");
     }
 
     #[test]

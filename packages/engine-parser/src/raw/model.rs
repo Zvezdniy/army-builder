@@ -15,6 +15,7 @@ pub struct RawCatalogue {
     pub force_entries: Vec<RawForce>,          // filled in Task 6/11
     pub catalogue_links: Vec<RawCatalogueLink>, // catalogue-level <catalogueLink> (root import)
     pub entry_links: Vec<RawEntryLink>,   // catalogue-level <entryLinks> (roster roots)
+    pub shared_profiles: Vec<RawProfile>, // catalogue-level <sharedProfiles>
 }
 
 #[derive(Debug, Default, Clone)]
@@ -31,6 +32,7 @@ pub struct RawEntry {
     pub groups: Vec<RawGroup>,         // nested selectionEntryGroups
     pub entry_links: Vec<RawEntryLink>,
     pub profiles: Vec<RawProfile>,
+    pub info_links: Vec<RawInfoLink>,
 }
 
 #[derive(Debug, Default, Clone)] pub struct RawGroup {
@@ -41,12 +43,20 @@ pub struct RawEntry {
     pub entry_links: Vec<RawEntryLink>, pub constraints: Vec<RawConstraint>,
     pub modifiers: Vec<RawModifier>,
     pub profiles: Vec<RawProfile>,
+    pub info_links: Vec<RawInfoLink>,
 }
 #[derive(Debug, Default, Clone)] pub struct RawCost { pub type_id: String, pub value: f64 }
 #[derive(Debug, Default, Clone)] pub struct RawCategoryLink { pub target_id: String, pub primary: bool, pub constraints: Vec<RawConstraint> }
 #[derive(Debug, Default, Clone)] pub struct RawEntryLink { pub id: String, pub target_id: String, pub link_type: String, pub hidden: bool, pub modifiers: Vec<RawModifier> }
 #[derive(Debug, Default, Clone)] pub struct RawForce { pub id: String, pub name: String, pub constraints: Vec<RawConstraint>, pub category_links: Vec<RawCategoryLink> }
 #[derive(Debug, Default, Clone)] pub struct RawCatalogueLink { pub target_id: String, pub import_root_entries: bool }
+
+#[derive(Debug, Default, Clone)]
+pub struct RawInfoLink {
+    pub target_id: String,
+    pub link_type: String,   // profile | rule | infoGroup
+    pub hidden: bool,
+}
 
 #[derive(Debug, Default, Clone)]
 pub struct RawConstraint {

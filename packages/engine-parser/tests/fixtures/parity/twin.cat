@@ -2,10 +2,16 @@
 <catalogue id="c" name="Twin" revision="1" gameSystemId="gs"
            xmlns="http://www.battlescribe.net/schema/catalogueSchema">
   <categoryEntries><categoryEntry id="cat.hq" name="HQ"/></categoryEntries>
+  <sharedProfiles>
+    <profile id="p.inv" name="Invulnerable Save" typeName="Abilities" typeId="pt2">
+      <characteristics><characteristic name="Description" typeId="d">4+</characteristic></characteristics>
+    </profile>
+  </sharedProfiles>
   <selectionEntries>
     <selectionEntry id="e.u" name="U" type="model">
       <costs><cost name="pts" typeId="pts" value="90"/></costs>
       <categoryLinks><categoryLink id="cl.hq" name="HQ" targetId="cat.hq" primary="true"/></categoryLinks>
+      <infoLinks><infoLink name="Invulnerable Save" hidden="false" type="profile" id="il1" targetId="p.inv"/></infoLinks>
       <profiles><profile id="p" name="U" typeName="Unit" typeId="pt">
         <characteristics>
           <characteristic name="T" typeId="t">4</characteristic>
