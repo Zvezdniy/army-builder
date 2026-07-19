@@ -132,7 +132,10 @@ fn map_entry(e: &RawEntry, cat: &RawCatalogue, diags: &mut Vec<Diagnostic>) -> I
             }
             continue;
         }
-        let ir_mod = map_modifier(m, &e.id, index, cat, diags);
+        let ir_mod = match map_modifier(m, &e.id, index, cat, diags) {
+            Some(im) => im,
+            None => continue, // unsupported value kind, already diagnosed
+        };
         if cat.cost_types.contains_key(&m.field) {
             if let Some(idx) = e.costs.iter().position(|rc| rc.type_id == m.field) {
                 costs[idx].modifiers.get_or_insert_with(Vec::new).push(ir_mod);
@@ -444,7 +447,20 @@ fn map_condition_scope(scope: &str) -> String {
 /// within that entry. `has_repeats` is documented as an unsupported deferral:
 /// logged via diagnostic, then the modifier is still emitted without repeat
 /// semantics (never dropped outright — that would silently change costs).
-fn map_modifier(m: &RawModifier, entry_id: &str, index: usize, cat: &RawCatalogue, diags: &mut Vec<Diagnostic>) -> IrModifier {
+fn map_modifier(m: &RawModifier, entry_id: &str, index: usize, cat: &RawCatalogue, diags: &mut Vec<Diagnostic>) -> Option<IrModifier> {
+    // The value engine only models set/increment/decrement. Other value kinds
+    // (e.g. `floor`/`ceil` clamps seen in real catalogues) have no IR form; emit
+    // a diagnostic and drop just this modifier rather than passing an unknown type
+    // downstream, where it would fail the domain schema and sink the whole
+    // catalogue. Mirrors the strict path's kind filter.
+    if !matches!(m.kind.as_str(), "set" | "increment" | "decrement") {
+        diags.push(Diagnostic {
+            code: "modifier.value_type_unsupported".to_string(),
+            message: format!("value modifier on entry {} has unsupported type {} (dropped)", entry_id, m.kind),
+        });
+        return None;
+    }
+
     if m.has_repeats {
         diags.push(Diagnostic {
             code: "modifier.repeat_unsupported".to_string(),
@@ -459,13 +475,13 @@ fn map_modifier(m: &RawModifier, entry_id: &str, index: usize, cat: &RawCatalogu
         .filter_map(|g| map_condition_group(g, cat, diags))
         .collect();
 
-    IrModifier {
+    Some(IrModifier {
         id: format!("mod.{}.{}", entry_id, index),
         type_: m.kind.clone(),
         value: m.value,
         conditions: if conditions.is_empty() { None } else { Some(conditions) },
         condition_groups: if condition_groups.is_empty() { None } else { Some(condition_groups) },
-    }
+    })
 }
 
 /// Strict all-or-nothing modifier mapping for constraint LIMIT modifiers.

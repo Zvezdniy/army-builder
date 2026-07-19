@@ -9,8 +9,12 @@
 // "- Library.cat") are handled by passing the library as a supporting parse input;
 // catalogueLink resolution (P0-c) is NOT required.
 //
+// BSData is acquired with ONE shallow `git clone`, not ~50 individual raw fetches:
+// under load raw.githubusercontent can return an empty 200 body, which silently
+// yields a 0-root catalogue. A clone is atomic and complete.
+//
 // Usage: node scripts/update-catalogues.mjs [--config <path>]
-import { readFileSync, writeFileSync, mkdtempSync, openSync, closeSync, mkdirSync, readdirSync, rmSync, copyFileSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdtempSync, openSync, closeSync, mkdirSync, readdirSync, rmSync, copyFileSync, statSync, existsSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
@@ -33,14 +37,18 @@ function run(cmd, args, opts = {}) {
   return res;
 }
 
-async function download(repo, ref, name, dest) {
-  const url = `https://raw.githubusercontent.com/${repo}/${ref}/${encodeURIComponent(name)}`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`download ${name}: HTTP ${res.status}`);
-  writeFileSync(dest, Buffer.from(await res.arrayBuffer()));
+// Guard against a bad acquisition (missing/truncated/HTML-error file) before it
+// reaches the parser as a silent 0-root catalogue. Checks the file exists, has
+// plausible size, and opens with the expected BattleScribe root tag.
+function assertCatalogueFile(path, rootTag) {
+  if (!existsSync(path)) throw new Error(`missing ${path}`);
+  const size = statSync(path).size;
+  if (size < 200) throw new Error(`${path} is ${size}B — truncated or empty`);
+  const head = readFileSync(path, "utf8").slice(0, 4096);
+  if (!head.includes(rootTag)) throw new Error(`${path} is not a ${rootTag}… file`);
 }
 
-async function main() {
+function main() {
   const configPath = arg("--config", join(ROOT, "scripts/catalogues.config.json"));
   const config = JSON.parse(readFileSync(configPath, "utf8"));
   const { repo, ref, gameSystem, catalogues } = config;
@@ -53,22 +61,24 @@ async function main() {
     console.log(`Building parser (cargo build --release)...`);
     run("cargo", ["build", "--release", "--bin", "muster-parse"], { cwd: PARSER_DIR });
 
-    console.log(`Downloading game system ${gameSystem}...`);
-    const gstPath = join(tmp, "gamesystem.gst");
-    await download(repo, ref, gameSystem, gstPath);
+    const srcDir = join(tmp, "bsdata");
+    console.log(`Cloning ${repo}@${ref}...`);
+    run("git", ["clone", "--depth", "1", "--branch", ref, "--single-branch", `https://github.com/${repo}.git`, srcDir]);
+
+    const gstPath = join(srcDir, gameSystem);
+    assertCatalogueFile(gstPath, "<gameSystem");
 
     for (const cat of catalogues) {
       console.log(`\n[${cat.slug}] ${cat.name}`);
       const outPath = join(OUT_DIR, `${cat.slug}.ir.json`);
       try {
-        const primaryPath = join(tmp, `${cat.slug}-primary.cat`);
-        await download(repo, ref, cat.primary, primaryPath);
-        const libPaths = [];
-        for (const [i, lib] of (cat.libraries ?? []).entries()) {
-          const p = join(tmp, `${cat.slug}-lib${i}.cat`);
-          await download(repo, ref, lib, p);
-          libPaths.push(p);
-        }
+        const primaryPath = join(srcDir, cat.primary);
+        assertCatalogueFile(primaryPath, "<catalogue");
+        const libPaths = (cat.libraries ?? []).map((lib) => {
+          const p = join(srcDir, lib);
+          assertCatalogueFile(p, "<catalogue");
+          return p;
+        });
 
         // Parse: primary + supporting libraries + game system. Tree IR is large, so
         // redirect stdout to a file rather than buffering it in the orchestrator.
@@ -100,15 +110,19 @@ async function main() {
 
         const packed = JSON.parse(readFileSync(tmpOut, "utf8"));
         const roots = packed.entries?.length ?? 0;
-        if (roots < MIN_ROOTS) throw new Error(`only ${roots} roots — likely a missing library in the config`);
+        if (roots < MIN_ROOTS) throw new Error(`only ${roots} roots — thin parse (missing library, or roots not surfaced)`);
         copyFileSync(tmpOut, outPath);
         console.log(`  ${roots} roots`);
         built++;
+        // Release this faction's large intermediates immediately so a 35-faction
+        // run doesn't accumulate gigabytes in one temp dir before the final cleanup.
+        rmSync(treePath, { force: true });
+        rmSync(tmpOut, { force: true });
       } catch (err) {
         // One faction's upstream rename / OOM / thin parse must not abort the whole
         // refresh: warn and continue. Output is placed only on success (above), so a
-        // previously-good catalogue is left intact. (The game-system download and
-        // parser build are shared prerequisites and remain hard failures.)
+        // previously-good catalogue is left intact. (The clone and parser build are
+        // shared prerequisites and remain hard failures.)
         console.warn(`  skipped ${cat.slug}: ${err.message}`);
       }
     }
@@ -131,7 +145,9 @@ async function main() {
   }
 }
 
-main().catch((err) => {
+try {
+  main();
+} catch (err) {
   console.error(err);
   process.exit(1);
-});
+}
