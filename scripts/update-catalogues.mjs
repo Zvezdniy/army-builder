@@ -10,7 +10,7 @@
 // catalogueLink resolution (P0-c) is NOT required.
 //
 // Usage: node scripts/update-catalogues.mjs [--config <path>]
-import { readFileSync, writeFileSync, mkdtempSync, openSync, closeSync, existsSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdtempSync, openSync, closeSync, mkdirSync, readdirSync, rmSync, copyFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
@@ -46,66 +46,89 @@ async function main() {
   const { repo, ref, gameSystem, catalogues } = config;
 
   const tmp = mkdtempSync(join(tmpdir(), "muster-cat-"));
-  if (!existsSync(OUT_DIR)) mkdirSync(OUT_DIR, { recursive: true });
-
-  console.log(`Building parser (cargo build --release)...`);
-  run("cargo", ["build", "--release", "--bin", "muster-parse"], { cwd: PARSER_DIR });
-
-  console.log(`Downloading game system ${gameSystem}...`);
-  const gstPath = join(tmp, "gamesystem.gst");
-  await download(repo, ref, gameSystem, gstPath);
+  mkdirSync(OUT_DIR, { recursive: true });
 
   let built = 0;
-  for (const cat of catalogues) {
-    console.log(`\n[${cat.slug}] ${cat.name}`);
-    const primaryPath = join(tmp, `${cat.slug}-primary.cat`);
-    await download(repo, ref, cat.primary, primaryPath);
-    const libPaths = [];
-    for (const [i, lib] of (cat.libraries ?? []).entries()) {
-      const p = join(tmp, `${cat.slug}-lib${i}.cat`);
-      await download(repo, ref, lib, p);
-      libPaths.push(p);
+  try {
+    console.log(`Building parser (cargo build --release)...`);
+    run("cargo", ["build", "--release", "--bin", "muster-parse"], { cwd: PARSER_DIR });
+
+    console.log(`Downloading game system ${gameSystem}...`);
+    const gstPath = join(tmp, "gamesystem.gst");
+    await download(repo, ref, gameSystem, gstPath);
+
+    for (const cat of catalogues) {
+      console.log(`\n[${cat.slug}] ${cat.name}`);
+      const outPath = join(OUT_DIR, `${cat.slug}.ir.json`);
+      try {
+        const primaryPath = join(tmp, `${cat.slug}-primary.cat`);
+        await download(repo, ref, cat.primary, primaryPath);
+        const libPaths = [];
+        for (const [i, lib] of (cat.libraries ?? []).entries()) {
+          const p = join(tmp, `${cat.slug}-lib${i}.cat`);
+          await download(repo, ref, lib, p);
+          libPaths.push(p);
+        }
+
+        // Parse: primary + supporting libraries + game system. Tree IR is large, so
+        // redirect stdout to a file rather than buffering it in the orchestrator.
+        const treePath = join(tmp, `${cat.slug}.tree.json`);
+        const fd = openSync(treePath, "w");
+        let parse;
+        try {
+          // Capture the parser's stderr (thousands of per-entry diagnostics) instead of
+          // inheriting it, and surface only the one-line summary below.
+          parse = spawnSync(PARSER_BIN, [primaryPath, ...libPaths, gstPath], {
+            stdio: ["ignore", fd, "pipe"],
+            maxBuffer: 64 * 1024 * 1024,
+          });
+        } finally {
+          closeSync(fd);
+        }
+        if (parse.status !== 0) throw new Error(`parser exited ${parse.status}`);
+        const diagLine = String(parse.stderr).split("\n").reverse().find((l) => l.startsWith("diagnostics:"));
+        if (diagLine) console.log(`  parser ${diagLine.trim()}`);
+
+        // Pack in a separate high-heap child (the tree can be ~200MB). Write to a temp
+        // path and place it into OUT_DIR only after it validates, so a failed/thin run
+        // never overwrites a previously-good catalogue.
+        const tmpOut = join(tmp, `${cat.slug}.ir.json`);
+        run("pnpm", ["exec", "tsx", join(ROOT, "scripts/pack-ir.mjs"), treePath, tmpOut], {
+          cwd: ROOT,
+          env: { ...process.env, NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ""} --max-old-space-size=8192`.trim() },
+        });
+
+        const packed = JSON.parse(readFileSync(tmpOut, "utf8"));
+        const roots = packed.entries?.length ?? 0;
+        if (roots < MIN_ROOTS) throw new Error(`only ${roots} roots — likely a missing library in the config`);
+        copyFileSync(tmpOut, outPath);
+        console.log(`  ${roots} roots`);
+        built++;
+      } catch (err) {
+        // One faction's upstream rename / OOM / thin parse must not abort the whole
+        // refresh: warn and continue. Output is placed only on success (above), so a
+        // previously-good catalogue is left intact. (The game-system download and
+        // parser build are shared prerequisites and remain hard failures.)
+        console.warn(`  skipped ${cat.slug}: ${err.message}`);
+      }
     }
 
-    // Parse: primary + supporting libraries + game system. Tree IR is large, so
-    // redirect stdout to a file rather than buffering it in the orchestrator.
-    const treePath = join(tmp, `${cat.slug}.tree.json`);
-    const fd = openSync(treePath, "w");
-    let parse;
-    try {
-      // Capture the parser's stderr (thousands of per-entry diagnostics) instead of
-      // inheriting it, and surface only the one-line summary below.
-      parse = spawnSync(PARSER_BIN, [primaryPath, ...libPaths, gstPath], {
-        stdio: ["ignore", fd, "pipe"],
-        maxBuffer: 64 * 1024 * 1024,
-      });
-    } finally {
-      closeSync(fd);
+    // Drop packed files for factions no longer in the config (renamed/removed), so the
+    // manifest never lists a stale faction. Failed-this-run factions keep their last
+    // good file and stay listed.
+    const configSlugs = new Set(catalogues.map((c) => c.slug));
+    for (const f of readdirSync(OUT_DIR)) {
+      if (f.endsWith(".ir.json") && !configSlugs.has(f.replace(/\.ir\.json$/, ""))) {
+        rmSync(join(OUT_DIR, f));
+      }
     }
-    if (parse.status !== 0) { console.warn(`  parse failed (exit ${parse.status}) — skipping`); continue; }
-    const diagLine = String(parse.stderr).split("\n").reverse().find((l) => l.startsWith("diagnostics:"));
-    if (diagLine) console.log(`  parser ${diagLine.trim()}`);
 
-    // Pack in a separate high-heap child (the tree can be ~200MB).
-    const outPath = join(OUT_DIR, `${cat.slug}.ir.json`);
-    run("pnpm", ["exec", "tsx", join(ROOT, "scripts/pack-ir.mjs"), treePath, outPath], {
-      cwd: ROOT,
-      env: { ...process.env, NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ""} --max-old-space-size=8192`.trim() },
-    });
-
-    const packed = JSON.parse(readFileSync(outPath, "utf8"));
-    const roots = packed.entries?.length ?? 0;
-    if (roots < MIN_ROOTS) {
-      console.warn(`  only ${roots} roots — likely a missing library in the config; keeping anyway`);
-    } else {
-      console.log(`  ${roots} roots`);
-    }
-    built++;
+    console.log(`\nBuilding manifest...`);
+    run("node", [join(ROOT, "scripts/build-catalogue-manifest.mjs")], { cwd: ROOT });
+    console.log(`Done — refreshed ${built}/${catalogues.length} catalogue(s).`);
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
   }
-
-  console.log(`\nBuilding manifest...`);
-  run("node", [join(ROOT, "scripts/build-catalogue-manifest.mjs")], { cwd: ROOT });
-  console.log(`Done — refreshed ${built}/${catalogues.length} catalogue(s).`);
 }
 
 main().catch((err) => {
