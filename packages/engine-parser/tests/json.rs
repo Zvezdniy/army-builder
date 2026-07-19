@@ -41,3 +41,32 @@ fn rule_without_description_is_skipped_matching_xml() {
     assert_eq!(raw.rules.get("Oath"), Some(&"Re-roll hits.".to_string()));
     assert!(raw.rules.get("Stealth").is_none());
 }
+
+#[test]
+fn maps_full_entry_tree_with_links_groups_and_associations_drop() {
+    let json = br#"{"catalogue":{"id":"c","name":"C","revision":1,
+      "catalogueLinks":[{"targetId":"lib.1","importRootEntries":true}],
+      "sharedSelectionEntries":[{"id":"e.w","name":"Bolter","type":"upgrade",
+        "costs":[{"typeId":"pts","value":5}],"associations":[{"x":1}]}],
+      "selectionEntries":[{"id":"e.u","name":"U","type":"unit",
+        "categoryLinks":[{"targetId":"cat.hq","primary":true}],
+        "constraints":[{"id":"c1","type":"max","value":1,"field":"selections","scope":"parent"}],
+        "selectionEntryGroups":[{"id":"g","name":"Wargear",
+          "constraints":[{"id":"g.max","type":"max","value":1,"field":"selections","scope":"parent"}],
+          "entryLinks":[{"id":"l1","targetId":"e.w","type":"selectionEntry"}]}]}],
+      "forceEntries":[{"id":"f","name":"Army",
+        "constraints":[{"id":"fc","type":"min","value":1,"field":"selections","scope":"force"}],
+        "categoryLinks":[{"targetId":"cat.hq","primary":false}]}]}}"#;
+    let mut diags = Vec::new();
+    let raw = parse_raw_json(json, &mut diags).unwrap();
+    assert_eq!(raw.catalogue_links[0].target_id, "lib.1");
+    assert!(raw.catalogue_links[0].import_root_entries);
+    assert_eq!(raw.shared_entries[0].costs[0].value, 5.0);
+    let u = raw.entries.iter().find(|e| e.id == "e.u").unwrap();
+    assert_eq!(u.category_links[0].target_id, "cat.hq");
+    assert_eq!(u.constraints[0].kind, "max");
+    let g = &u.groups[0];
+    assert_eq!(g.entry_links[0].target_id, "e.w");
+    assert_eq!((raw.force_entries[0].name.as_str(), raw.force_entries[0].constraints[0].kind.as_str()), ("Army", "min"));
+    assert!(diags.iter().any(|d| d.code == "entry.associations_dropped" && d.message.contains("e.w")));
+}

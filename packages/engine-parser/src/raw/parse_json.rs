@@ -125,15 +125,15 @@ struct JsonCharacteristic { name: String, #[serde(rename = "$text")] text: Strin
 /// the same target the XML parser produces. Diagnostics are collected by the
 /// caller in later stages; the only diagnostic emitted here (dropped
 /// `associations`) is accumulated into a thread-local-free out param added in Task 5.
-pub fn parse_raw_json(bytes: &[u8], _diags: &mut Vec<Diagnostic>) -> Result<RawCatalogue, ParseError> {
+pub fn parse_raw_json(bytes: &[u8], diags: &mut Vec<Diagnostic>) -> Result<RawCatalogue, ParseError> {
     let root: JsonRoot = serde_json::from_slice(bytes)
         .map_err(|e| ParseError::Io(format!("invalid catalogue JSON: {e}")))?;
     let cat = root.catalogue.or(root.game_system)
         .ok_or_else(|| ParseError::Io("JSON has neither `catalogue` nor `gameSystem`".into()))?;
-    Ok(map_cat(cat))
+    Ok(map_cat(cat, diags))
 }
 
-fn map_cat(c: JsonCat) -> RawCatalogue {
+fn map_cat(c: JsonCat, diags: &mut Vec<Diagnostic>) -> RawCatalogue {
     let mut cost_types = HashMap::new();
     for ct in &c.cost_types {
         if ct.id.is_empty() { continue; }
@@ -150,7 +150,69 @@ fn map_cat(c: JsonCat) -> RawCatalogue {
         id: c.id.clone(), name: c.name.clone(), revision: c.revision,
         game_system_id: c.game_system_id.clone(),
         cost_types, categories, rules,
-        ..Default::default()
+        shared_entries: c.shared_selection_entries.iter().map(|e| map_entry(e, diags)).collect(),
+        shared_groups: c.shared_selection_entry_groups.iter().map(|g| map_group(g, diags)).collect(),
+        entries: c.selection_entries.iter().map(|e| map_entry(e, diags)).collect(),
+        force_entries: c.force_entries.iter().map(map_force).collect(),
+        catalogue_links: c.catalogue_links.iter()
+            .map(|l| RawCatalogueLink { target_id: l.target_id.clone(), import_root_entries: l.import_root_entries })
+            .collect(),
+        entry_links: c.entry_links.iter().map(map_entry_link).collect(),
+    }
+}
+
+fn map_entry(e: &JsonEntry, diags: &mut Vec<Diagnostic>) -> RawEntry {
+    if !e.associations.is_empty() {
+        diags.push(Diagnostic {
+            code: "entry.associations_dropped".into(),
+            message: format!("entry {} associations dropped (unsupported)", e.id),
+        });
+    }
+    RawEntry {
+        id: e.id.clone(), name: e.name.clone(), entry_type: e.entry_type.clone(), hidden: e.hidden,
+        costs: map_costs(&e.costs),
+        category_links: map_category_links(&e.category_links),
+        constraints: map_constraints(&e.constraints),
+        modifiers: map_modifiers(&e.modifiers),
+        entries: e.selection_entries.iter().map(|c| map_entry(c, diags)).collect(),
+        groups: e.selection_entry_groups.iter().map(|g| map_group(g, diags)).collect(),
+        entry_links: e.entry_links.iter().map(map_entry_link).collect(),
+        profiles: map_profiles(&e.profiles),
+    }
+}
+
+fn map_group(g: &JsonGroup, diags: &mut Vec<Diagnostic>) -> RawGroup {
+    RawGroup {
+        id: g.id.clone(), name: g.name.clone(),
+        default_selection_entry_id: g.default_selection_entry_id.clone(), hidden: g.hidden,
+        entries: g.selection_entries.iter().map(|c| map_entry(c, diags)).collect(),
+        groups: g.selection_entry_groups.iter().map(|sg| map_group(sg, diags)).collect(),
+        entry_links: g.entry_links.iter().map(map_entry_link).collect(),
+        constraints: map_constraints(&g.constraints),
+        modifiers: map_modifiers(&g.modifiers),
+        profiles: map_profiles(&g.profiles),
+    }
+}
+
+fn map_entry_link(l: &JsonEntryLink) -> RawEntryLink {
+    RawEntryLink {
+        id: l.id.clone(), target_id: l.target_id.clone(), link_type: l.link_type.clone(),
+        hidden: l.hidden, modifiers: map_modifiers(&l.modifiers),
+    }
+}
+
+fn map_category_links(ls: &[JsonCategoryLink]) -> Vec<RawCategoryLink> {
+    ls.iter().map(|l| RawCategoryLink {
+        target_id: l.target_id.clone(), primary: l.primary,
+        constraints: map_constraints(&l.constraints),
+    }).collect()
+}
+
+fn map_force(f: &JsonForce) -> RawForce {
+    RawForce {
+        id: f.id.clone(), name: f.name.clone(),
+        constraints: map_constraints(&f.constraints),
+        category_links: map_category_links(&f.category_links),
     }
 }
 
@@ -185,7 +247,6 @@ fn collect_rules_group(g: &JsonGroup, out: &mut BTreeMap<String, String>) {
 /// Maps BS-JSON profiles to `RawProfile`s, taking each characteristic's value
 /// from the `$text` field. Not yet wired into `RawCatalogue` entries — Task 5
 /// calls this from `map_entry`.
-#[allow(dead_code)]
 fn map_profiles(ps: &[JsonProfile]) -> Vec<RawProfile> {
     ps.iter().map(|p| RawProfile {
         id: p.id.clone(), name: p.name.clone(), type_name: p.type_name.clone(),
@@ -195,11 +256,9 @@ fn map_profiles(ps: &[JsonProfile]) -> Vec<RawProfile> {
     }).collect()
 }
 
-#[allow(dead_code)]
 fn map_costs(cs: &[JsonCost]) -> Vec<RawCost> {
     cs.iter().map(|c| RawCost { type_id: c.type_id.clone(), value: c.value }).collect()
 }
-#[allow(dead_code)]
 fn map_constraints(cs: &[JsonConstraint]) -> Vec<RawConstraint> {
     cs.iter().map(|c| RawConstraint {
         id: c.id.clone(), kind: c.kind.clone(), value: c.value, field: c.field.clone(),
@@ -209,7 +268,6 @@ fn map_constraints(cs: &[JsonConstraint]) -> Vec<RawConstraint> {
 /// BS-JSON encodes a modifier's `value` as bool (field="hidden"), number, or
 /// string. RawModifier needs both the numeric value (for cost/limit modifiers)
 /// and the raw string (for field="hidden"/"category", parsed downstream in to_ir).
-#[allow(dead_code)]
 fn modifier_value(v: &serde_json::Value) -> (f64, String) {
     match v {
         serde_json::Value::Bool(b) => (0.0, b.to_string()),
@@ -218,7 +276,6 @@ fn modifier_value(v: &serde_json::Value) -> (f64, String) {
         _ => (0.0, String::new()),
     }
 }
-#[allow(dead_code)]
 fn map_conditions(cs: &[JsonCondition]) -> Vec<RawCondition> {
     cs.iter().map(|c| RawCondition {
         comparator: c.comparator.clone(), field: c.field.clone(), scope: c.scope.clone(),
@@ -226,7 +283,6 @@ fn map_conditions(cs: &[JsonCondition]) -> Vec<RawCondition> {
         include_child_selections: c.include_child_selections,
     }).collect()
 }
-#[allow(dead_code)]
 fn map_condition_groups(gs: &[JsonConditionGroup]) -> Vec<RawConditionGroup> {
     gs.iter().map(|g| RawConditionGroup {
         kind: g.kind.clone(),
@@ -234,7 +290,6 @@ fn map_condition_groups(gs: &[JsonConditionGroup]) -> Vec<RawConditionGroup> {
         groups: map_condition_groups(&g.condition_groups),
     }).collect()
 }
-#[allow(dead_code)]
 fn map_modifiers(ms: &[JsonModifier]) -> Vec<RawModifier> {
     ms.iter().map(|m| {
         let (value, value_raw) = modifier_value(&m.value);
