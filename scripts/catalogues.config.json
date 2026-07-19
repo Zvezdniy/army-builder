@@ -1,0 +1,19 @@
+{
+  "repo": "BSData/wh40k-10e",
+  "ref": "main",
+  "gameSystem": "Warhammer 40,000.gst",
+  "catalogues": [
+    {
+      "slug": "space-marines",
+      "name": "Space Marines",
+      "primary": "Imperium - Space Marines.cat",
+      "libraries": []
+    },
+    {
+      "slug": "astra-militarum",
+      "name": "Astra Militarum",
+      "primary": "Imperium - Astra Militarum.cat",
+      "libraries": ["Imperium - Astra Militarum - Library.cat"]
+    }
+  ]
+}

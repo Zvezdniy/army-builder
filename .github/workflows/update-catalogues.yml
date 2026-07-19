@@ -1,0 +1,71 @@
+name: Update catalogues
+
+# Refresh the parsed catalogue library from BSData and publish it to GitHub Pages.
+# Runs on a schedule (BSData tracks GW balance updates within days) and on demand.
+# Publishes ONLY catalogue data (manifest + packed IR), not the web app.
+
+on:
+  schedule:
+    - cron: "0 6 * * *" # daily at 06:00 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never run two publishes at once; let a newer run supersede an in-flight one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            packages/engine-parser/target
+          key: cargo-${{ runner.os }}-${{ hashFiles('packages/engine-parser/Cargo.toml') }}
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build the catalogue library
+        run: pnpm run update-catalogues
+
+      - uses: actions/configure-pages@v5
+
+      - name: Upload catalogue library as the Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          # apps/web/public is gitignored → in CI it holds only what the pipeline
+          # just wrote: catalogues.json + catalogues/*.ir.json.
+          path: apps/web/public
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

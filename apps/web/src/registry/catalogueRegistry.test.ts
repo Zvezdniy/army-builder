@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { bundledDescriptor, loadRegistry, loadCatalogueFor, type CatalogueDescriptor } from "./catalogueRegistry";
+import { bundledDescriptor, loadRegistry, loadCatalogueFor, normalizeBase, type CatalogueDescriptor } from "./catalogueRegistry";
 import mini40k from "../mini40k.ir.json";
 
 const bundled = bundledDescriptor(mini40k);
@@ -92,6 +92,16 @@ describe("loadRegistry", () => {
     } finally {
       warn.mockRestore();
     }
+  });
+});
+
+describe("normalizeBase", () => {
+  it("adds a trailing slash when missing", () => {
+    expect(normalizeBase("https://user.github.io/repo")).toBe("https://user.github.io/repo/");
+  });
+  it("leaves an existing trailing slash", () => {
+    expect(normalizeBase("/")).toBe("/");
+    expect(normalizeBase("/muster/")).toBe("/muster/");
   });
 });
 

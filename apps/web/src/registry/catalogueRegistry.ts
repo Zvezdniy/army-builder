@@ -28,6 +28,14 @@ function parseManifest(raw: unknown): CatalogueManifest | null {
   return { version: 1, catalogues };
 }
 
+/** Normalize a catalogues base URL to a guaranteed trailing slash, so
+ *  `${base}catalogues.json` and `${base}<file>` join cleanly whether the
+ *  configured value is a relative Vite base ("/", "/muster/") or an absolute
+ *  host ("https://user.github.io/repo"). */
+export function normalizeBase(base: string): string {
+  return base.replace(/\/?$/, "/");
+}
+
 /** Build the always-present bundled descriptor from an imported IR JSON. */
 export function bundledDescriptor(data: unknown): CatalogueDescriptor {
   const cat = loadCatalogue(data);
