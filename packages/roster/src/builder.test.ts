@@ -4,7 +4,7 @@ import {
   createRoster, availableUnits, addUnit, addOption, setCount, remove, optionsFor,
   selectedGroupMembers, toggleGroupMember, groupControl, optionControl, catalogueEntry,
   unitLoadout, availableDetachments, selectedDetachment, setDetachment, setPointsLimit,
-  unitsByRole, detachmentSelectionIds,
+  unitsByRole, detachmentSelectionIds, groupMemberCounts, groupTotal, setGroupMemberCount,
 } from "./index";
 
 const catalogue: IrCatalogue = {
@@ -15,7 +15,7 @@ const catalogue: IrCatalogue = {
       id: "e.captain", name: "Captain", costs: [{ name: "points", value: 90 }],
       categories: ["cat.hq"], constraints: [],
       children: [{ id: "e.bolter", name: "Bolter", costs: [], categories: [], constraints: [], children: [] }],
-      groups: [{ id: "g.wpn", name: "Weapon", memberEntryIds: ["e.bolter"], constraints: [{ id: "gc", type: "max", value: 1 }] }],
+      groups: [{ id: "g.wpn", name: "Weapon", memberEntryIds: ["e.bolter"], constraints: [{ id: "gc", type: "max", value: 1, scope: "self" }] }],
     },
     { id: "e.squad", name: "Squad", costs: [{ name: "points", value: 100 }], categories: [], constraints: [], children: [], groups: [] },
   ],
@@ -152,8 +152,8 @@ const swapCat: IrCatalogue = {
         { id: "e.ring", name: "Ring", costs: [], categories: [], constraints: [], children: [] },
       ],
       groups: [
-        { id: "g.weapon", name: "Weapon", memberEntryIds: ["e.sword", "e.axe"], constraints: [{ id: "w.max", type: "max", value: 1 }] },
-        { id: "g.trinket", name: "Trinket", memberEntryIds: ["e.shield", "e.cloak", "e.ring"], constraints: [{ id: "t.max", type: "max", value: 2 }] },
+        { id: "g.weapon", name: "Weapon", memberEntryIds: ["e.sword", "e.axe"], constraints: [{ id: "w.max", type: "max", value: 1, scope: "self" }] },
+        { id: "g.trinket", name: "Trinket", memberEntryIds: ["e.shield", "e.cloak", "e.ring"], constraints: [{ id: "t.max", type: "max", value: 2, scope: "self" }] },
       ],
     },
   ],
@@ -227,7 +227,7 @@ describe("group single/limited choice", () => {
   it("a required (min 1) single group cannot be emptied but can be swapped", () => {
     const requiredWeapon: IrGroup = {
       id: "g.req", name: "Weapon", memberEntryIds: ["e.sword", "e.axe"],
-      constraints: [{ id: "r.min", type: "min", value: 1 }, { id: "r.max", type: "max", value: 1 }],
+      constraints: [{ id: "r.min", type: "min", value: 1, scope: "self" }, { id: "r.max", type: "max", value: 1, scope: "self" }],
     };
     const { r, heroId } = addHero();
     const r1 = toggleGroupMember(r, heroId, requiredWeapon, "e.sword");
@@ -238,6 +238,19 @@ describe("group single/limited choice", () => {
     // choosing another member swaps (never empties)
     const r3 = toggleGroupMember(r2, heroId, requiredWeapon, "e.axe");
     expect(selectedGroupMembers(r3, heroId, requiredWeapon)).toEqual(["e.axe"]);
+  });
+
+  it("a multi group (max > 1) can be emptied below its min — the engine reports the min", () => {
+    // The original bug: a below-min group trapped the user (couldn't deselect). Only a
+    // required single-choice radio holds its pick; multi/counted groups deselect freely.
+    const minMulti: IrGroup = {
+      id: "g.mm", name: "Trinket", memberEntryIds: ["e.shield", "e.cloak", "e.ring"],
+      constraints: [{ id: "mm.min", type: "min", value: 2, scope: "self" }, { id: "mm.max", type: "max", value: 3, scope: "self" }],
+    };
+    const { r, heroId } = addHero();
+    const r1 = toggleGroupMember(r, heroId, minMulti, "e.shield");
+    const r2 = toggleGroupMember(r1, heroId, minMulti, "e.shield"); // below min 2 → still deselects
+    expect(selectedGroupMembers(r2, heroId, minMulti)).toEqual([]);
   });
 });
 
@@ -256,25 +269,46 @@ function entryWith(constraints: ReturnType<typeof makeConstraint>[]) {
 describe("groupControl", () => {
   it("max 1 with min >= 1 is a required single choice", () => {
     expect(groupControl({ id: "g", name: "G", memberEntryIds: [], constraints: [
-      { id: "a", type: "min", value: 1 }, { id: "b", type: "max", value: 1 },
+      { id: "a", type: "min", value: 1, scope: "self" }, { id: "b", type: "max", value: 1, scope: "self" },
     ] })).toEqual({ kind: "single", required: true });
   });
 
   it("max 1 without a min is an optional single choice", () => {
     expect(groupControl({ id: "g", name: "G", memberEntryIds: [], constraints: [
-      { id: "b", type: "max", value: 1 },
+      { id: "b", type: "max", value: 1, scope: "self" },
     ] })).toEqual({ kind: "single", required: false });
   });
 
   it("max > 1 is an up-to-N multi choice", () => {
     expect(groupControl({ id: "g", name: "G", memberEntryIds: [], constraints: [
-      { id: "b", type: "max", value: 3 },
+      { id: "b", type: "max", value: 3, scope: "self" },
     ] })).toEqual({ kind: "multi", max: 3 });
   });
 
   it("no max at all is an unbounded multi choice", () => {
     expect(groupControl({ id: "g", name: "G", memberEntryIds: [], constraints: [] }))
       .toEqual({ kind: "multi", max: Infinity });
+  });
+
+  it("max > 1 with repeatable (stepper) members is a counted distribution", () => {
+    const members = [entryWith([makeConstraint("mx", "max", 9)])];
+    expect(groupControl({ id: "g", name: "G", memberEntryIds: ["e"], constraints: [
+      { id: "mn", type: "min", value: 4, scope: "self" }, { id: "mx", type: "max", value: 9, scope: "self" },
+    ] }, members)).toEqual({ kind: "counted", min: 4, max: 9 });
+  });
+
+  it("counted also triggers on a fixed multiplicity above 1", () => {
+    const members = [entryWith([makeConstraint("a", "min", 2), makeConstraint("b", "max", 2)])];
+    expect(groupControl({ id: "g", name: "G", memberEntryIds: ["e"], constraints: [
+      { id: "mx", type: "max", value: 5, scope: "self" },
+    ] }, members)).toEqual({ kind: "counted", min: 0, max: 5 });
+  });
+
+  it("max > 1 with single-count members stays a multi toggle", () => {
+    const members = [entryWith([makeConstraint("mx", "max", 1)])];
+    expect(groupControl({ id: "g", name: "G", memberEntryIds: ["e"], constraints: [
+      { id: "mx", type: "max", value: 3, scope: "self" },
+    ] }, members)).toEqual({ kind: "multi", max: 3 });
   });
 });
 
@@ -369,7 +403,7 @@ const defCat: IrCatalogue = {
     ],
     groups: [
       { id: "gw", name: "Weapon", memberEntryIds: ["w.sword", "w.axe"], defaultMemberEntryId: "w.sword",
-        constraints: [{ id: "gw.min", type: "min", value: 1 }, { id: "gw.max", type: "max", value: 1 }] },
+        constraints: [{ id: "gw.min", type: "min", value: 1, scope: "self" }, { id: "gw.max", type: "max", value: 1, scope: "self" }] },
     ],
   }],
 };
@@ -399,7 +433,7 @@ describe("addUnit prepopulates from defaults and mins", () => {
       ...defCat,
       entries: [{ ...defCat.entries[0]!, groups: [
         { id: "gw", name: "Weapon", memberEntryIds: ["w.sword", "w.axe"],
-          constraints: [{ id: "gw.min", type: "min", value: 1 }, { id: "gw.max", type: "max", value: 1 }] },
+          constraints: [{ id: "gw.min", type: "min", value: 1, scope: "self" }, { id: "gw.max", type: "max", value: 1, scope: "self" }] },
       ] }],
     };
     const r = addUnit(createRoster(noDefaultCat, 2000), "u", noDefaultCat);
@@ -413,7 +447,7 @@ describe("addUnit prepopulates from defaults and mins", () => {
       ...defCat,
       entries: [{ ...defCat.entries[0]!, groups: [
         { id: "gw", name: "Weapon", memberEntryIds: ["w.sword", "w.axe"],
-          constraints: [{ id: "gw.max", type: "max", value: 1 }] },
+          constraints: [{ id: "gw.max", type: "max", value: 1, scope: "self" }] },
       ], children: [defCat.entries[0]!.children[0]!, defCat.entries[0]!.children[1]!] }],
     };
     const r = addUnit(createRoster(optCat, 2000), "u", optCat);
@@ -435,7 +469,7 @@ describe("addUnit prepopulates from defaults and mins", () => {
             ],
             groups: [
               { id: "sub.gw", name: "SubWeapon", memberEntryIds: ["sub.sword", "sub.axe"], defaultMemberEntryId: "sub.sword",
-                constraints: [{ id: "sub.gw.min", type: "min", value: 1 }, { id: "sub.gw.max", type: "max", value: 1 }] },
+                constraints: [{ id: "sub.gw.min", type: "min", value: 1, scope: "self" }, { id: "sub.gw.max", type: "max", value: 1, scope: "self" }] },
             ],
           },
         ],
@@ -478,7 +512,7 @@ describe("addUnit prepopulates from defaults and mins", () => {
         ...defCat.entries[0]!,
         groups: [
           { id: "gw", name: "Weapon", memberEntryIds: ["w.sword", "w.axe"], defaultMemberEntryId: "ghost.id",
-            constraints: [{ id: "gw.min", type: "min", value: 1 }, { id: "gw.max", type: "max", value: 1 }] },
+            constraints: [{ id: "gw.min", type: "min", value: 1, scope: "self" }, { id: "gw.max", type: "max", value: 1, scope: "self" }] },
         ],
       }],
     };
@@ -498,7 +532,7 @@ describe("addUnit prepopulates from defaults and mins", () => {
         children: [], // nothing materialized
         groups: [
           { id: "gw", name: "Weapon", memberEntryIds: ["ghost.a", "ghost.b"], defaultMemberEntryId: "ghost.a",
-            constraints: [{ id: "gw.min", type: "min", value: 1 }, { id: "gw.max", type: "max", value: 1 }] },
+            constraints: [{ id: "gw.min", type: "min", value: 1, scope: "self" }, { id: "gw.max", type: "max", value: 1, scope: "self" }] },
         ],
       }],
     };
@@ -513,7 +547,7 @@ describe("addUnit prepopulates from defaults and mins", () => {
         ...defCat.entries[0]!,
         groups: [
           { id: "gw", name: "Weapon", memberEntryIds: ["w.sword", "w.axe"], defaultMemberEntryId: "ghost.id",
-            constraints: [{ id: "gw.max", type: "max", value: 1 }] },
+            constraints: [{ id: "gw.max", type: "max", value: 1, scope: "self" }] },
         ],
       }],
     };
@@ -521,6 +555,152 @@ describe("addUnit prepopulates from defaults and mins", () => {
     const kids = r.selections[0]!.selections.map((s) => s.entryId);
     expect(kids).not.toContain("ghost.id");
     expect(kids).not.toContain("w.sword"); // optional + no valid default → seed nothing
+  });
+});
+
+// A counted-distribution unit: a fixed leader plus a "4-9" group whose members are
+// repeatable models (per-member max), mirroring Wolf Guard Terminators.
+function memberMax(id: string, value: number) {
+  return { id: `${id}.max`, type: "max" as const, value, field: "selections" as const,
+    scope: "parent" as const, targetType: "entry" as const, targetId: id, includeChildSelections: false };
+}
+const unitProfile = [{ name: "Body", typeName: "Unit", characteristics: [] }];
+const countedCat: IrCatalogue = {
+  id: "c", name: "C", gameSystemId: "g", revision: 1, forceConstraints: [], categoryNames: {},
+  entries: [{
+    id: "u", name: "Squad", costs: [], categories: [], constraints: [],
+    children: [
+      { id: "leader", name: "Leader", costs: [], categories: [],
+        constraints: [
+          { id: "leader.min", type: "min", value: 1, field: "selections", scope: "self", targetType: "entry", targetId: "leader", includeChildSelections: false },
+          { id: "leader.max", type: "max", value: 1, field: "selections", scope: "self", targetType: "entry", targetId: "leader", includeChildSelections: false },
+        ], children: [], profiles: unitProfile },
+      { id: "bolter", name: "w/ bolter", costs: [], categories: [], constraints: [memberMax("bolter", 9)], children: [], profiles: unitProfile },
+      { id: "shield", name: "w/ shield", costs: [], categories: [], constraints: [memberMax("shield", 2)], children: [], profiles: unitProfile },
+    ],
+    groups: [
+      { id: "g4", name: "4-9 Bodies", memberEntryIds: ["bolter", "shield"], defaultMemberEntryId: "bolter",
+        constraints: [{ id: "g4.min", type: "min", value: 4, scope: "self" }, { id: "g4.max", type: "max", value: 9, scope: "self" }] },
+    ],
+  }],
+};
+const countedGroup = countedCat.entries[0]!.groups![0]!;
+
+describe("counted group members", () => {
+  function seed() {
+    const r = addUnit(createRoster(countedCat, 2000), "u", countedCat);
+    return { r, uId: r.selections[0]!.id };
+  }
+
+  it("addUnit seeds the counted group's default member up to the group minimum", () => {
+    const { r, uId } = seed();
+    expect(groupMemberCounts(r, uId, countedGroup).get("bolter")).toBe(4);
+    expect(groupTotal(r, uId, countedGroup)).toBe(4);
+    // seeded as 4 distinct one-each model selections (not one count-4 node)
+    const bolters = r.selections[0]!.selections.filter((s) => s.entryId === "bolter");
+    expect(bolters).toHaveLength(4);
+    expect(bolters.every((b) => b.count === 1)).toBe(true);
+    // the fixed leader is seeded separately (not part of the group)
+    expect(r.selections[0]!.selections.find((s) => s.entryId === "leader")?.count).toBe(1);
+  });
+
+  it("seeds only up to the member's own max when it is below the group minimum", () => {
+    // default member max 2 < group min 4 → seed 2 (the member cap wins)
+    const cappedCat: IrCatalogue = {
+      ...countedCat,
+      entries: [{ ...countedCat.entries[0]!, groups: [{ ...countedGroup, defaultMemberEntryId: "shield" }] }],
+    };
+    const r = addUnit(createRoster(cappedCat, 2000), "u", cappedCat);
+    expect(groupMemberCounts(r, r.selections[0]!.id, countedGroup).get("shield")).toBe(2);
+  });
+
+  it("groupMemberCounts and groupTotal are empty for an unknown selection", () => {
+    const { r } = seed();
+    expect(groupMemberCounts(r, "nope", countedGroup).size).toBe(0);
+    expect(groupTotal(r, "nope", countedGroup)).toBe(0);
+  });
+
+  it("setGroupMemberCount materializes an absent member (seeded with its own subtree)", () => {
+    const { r, uId } = seed();
+    const r1 = setGroupMemberCount(r, uId, countedGroup, "shield", 2, countedCat);
+    expect(groupMemberCounts(r1, uId, countedGroup).get("shield")).toBe(2);
+    expect(groupTotal(r1, uId, countedGroup)).toBe(6);
+  });
+
+  it("setGroupMemberCount grows a present member to the requested model count", () => {
+    const { r, uId } = seed();
+    const r1 = setGroupMemberCount(r, uId, countedGroup, "bolter", 7, countedCat);
+    expect(groupMemberCounts(r1, uId, countedGroup).get("bolter")).toBe(7);
+    // stored as 7 distinct one-each model selections (not one count-7 node), so each
+    // model keeps its own per-model loadout
+    const bolters = r1.selections[0]!.selections.filter((s) => s.entryId === "bolter");
+    expect(bolters).toHaveLength(7);
+    expect(bolters.every((b) => b.count === 1)).toBe(true);
+  });
+
+  it("setGroupMemberCount shrinks a present member by dropping surplus models", () => {
+    const { r, uId } = seed(); // starts at 4 bolters
+    const r1 = setGroupMemberCount(r, uId, countedGroup, "bolter", 2, countedCat);
+    expect(groupMemberCounts(r1, uId, countedGroup).get("bolter")).toBe(2);
+    expect(r1.selections[0]!.selections.filter((s) => s.entryId === "bolter")).toHaveLength(2);
+  });
+
+  it("setGroupMemberCount removes a member at count 0", () => {
+    const { r, uId } = seed();
+    const r1 = setGroupMemberCount(r, uId, countedGroup, "bolter", 0, countedCat);
+    expect(groupMemberCounts(r1, uId, countedGroup).has("bolter")).toBe(false);
+    expect(groupTotal(r1, uId, countedGroup)).toBe(0);
+  });
+
+  it("setGroupMemberCount is a no-op when removing an already-absent member", () => {
+    const { r, uId } = seed();
+    expect(setGroupMemberCount(r, uId, countedGroup, "shield", 0, countedCat)).toBe(r);
+  });
+
+  it("setGroupMemberCount ignores an entry that is not a group member", () => {
+    const { r, uId } = seed();
+    expect(setGroupMemberCount(r, uId, countedGroup, "leader", 3, countedCat)).toBe(r);
+  });
+
+  it("setGroupMemberCount is a no-op for an unknown parent selection", () => {
+    const { r } = seed();
+    expect(setGroupMemberCount(r, "nope", countedGroup, "bolter", 2, countedCat)).toBe(r);
+  });
+
+  it("setGroupMemberCount is a no-op when appending an unresolvable member", () => {
+    // A group member whose id is not in the catalogue (dangling link): never inject an
+    // unresolvable entryId — it would crash datasheet()/evaluate() lookups. No-op instead.
+    const ghostGroup: IrGroup = { ...countedGroup, memberEntryIds: [...countedGroup.memberEntryIds, "ghost"] };
+    const ghostCat: IrCatalogue = {
+      ...countedCat,
+      entries: [{ ...countedCat.entries[0]!, groups: [ghostGroup] }],
+    };
+    const r = addUnit(createRoster(ghostCat, 2000), "u", ghostCat);
+    expect(setGroupMemberCount(r, r.selections[0]!.id, ghostGroup, "ghost", 3, ghostCat)).toBe(r);
+  });
+
+  it("seeds a counted member with its own min>=2 as one-each model instances (count:1)", () => {
+    // A repeatable member carrying its own min>=2 is still counted; each seeded model
+    // must be count:1 (N distinct nodes), else nested per-model wargear re-inflates.
+    const minMemberCat: IrCatalogue = {
+      ...countedCat,
+      entries: [{
+        ...countedCat.entries[0]!,
+        children: [
+          countedCat.entries[0]!.children[0]!, // leader
+          { id: "bolter", name: "w/ bolter", costs: [], categories: [],
+            constraints: [
+              { id: "bolter.min", type: "min", value: 2, field: "selections", scope: "parent", targetType: "entry", targetId: "bolter", includeChildSelections: false },
+              memberMax("bolter", 9),
+            ], children: [], profiles: unitProfile },
+          countedCat.entries[0]!.children[2]!, // shield
+        ],
+      }],
+    };
+    const r = addUnit(createRoster(minMemberCat, 2000), "u", minMemberCat);
+    const bolters = r.selections[0]!.selections.filter((s) => s.entryId === "bolter");
+    expect(bolters).toHaveLength(4); // seeded to group min, as distinct nodes
+    expect(bolters.every((b) => b.count === 1)).toBe(true); // each is one model, not count-2
   });
 });
 

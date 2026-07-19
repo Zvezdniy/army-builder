@@ -224,6 +224,14 @@ section { background: var(--panel); border: 1px solid var(--line); border-radius
   border: 1px solid var(--line); background: var(--panel); color: var(--ink); }
 .uc-opt:hover { border-color: var(--accent); }
 
+/* Counted group: one row per repeatable member — its name + a count stepper —
+   so a "4-9 Terminators" group distributes models across loadouts. */
+.uc-counted { display: flex; flex-direction: column; gap: 4px; }
+.uc-countrow { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.uc-countname { font-size: 13px; color: var(--ink); }
+.uc-stepper button:disabled { opacity: 0.35; cursor: default; }
+.uc-stepper button:disabled:hover { background: transparent; color: var(--ink); }
+
 /* Free (non-group) adders read as dashed "+" chips — clearly additive, not a toggle. */
 .uc-adds { display: flex; flex-wrap: wrap; gap: 6px; }
 .uc-add { font-size: 12px; padding: 5px 12px; border-radius: 20px; letter-spacing: 0.01em;

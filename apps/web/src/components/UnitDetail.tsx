@@ -4,7 +4,8 @@ import { SelectionNode } from "./SelectionNode";
 import { Datasheet, UnitStatline } from "./Datasheet";
 
 export function UnitDetail({
-  roster, catalogue, selectedUnitId, onBack, onAddOption, onToggleGroupMember, onRemove, onSetCount,
+  roster, catalogue, selectedUnitId, onBack, onAddOption, onToggleGroupMember,
+  onSetGroupMemberCount, onRemove, onSetCount,
 }: {
   roster: Roster;
   catalogue: IrCatalogue;
@@ -12,6 +13,7 @@ export function UnitDetail({
   onBack: () => void;
   onAddOption: (parentId: string, entryId: string) => void;
   onToggleGroupMember: (parentId: string, group: IrGroup, entryId: string) => void;
+  onSetGroupMemberCount: (parentId: string, group: IrGroup, entryId: string, count: number) => void;
   onRemove: (id: string) => void;
   onSetCount: (id: string, count: number) => void;
 }) {
@@ -36,6 +38,7 @@ export function UnitDetail({
       <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
         <SelectionNode roster={roster} selection={sel} catalogue={catalogue} depth={0}
           onAddOption={onAddOption} onToggleGroupMember={onToggleGroupMember}
+          onSetGroupMemberCount={onSetGroupMemberCount}
           onRemove={onRemove} onSetCount={onSetCount} />
       </ul>
       <Datasheet catalogue={catalogue} selection={sel} />

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { IrCatalogue } from "@muster/domain";
 import { loadCatalogue } from "@muster/domain";
-import { createRoster, addUnit, addOption, toggleGroupMember, setCount, remove,
+import { createRoster, addUnit, addOption, toggleGroupMember, setGroupMemberCount, setCount, remove,
   setDetachment, setPointsLimit, availableDetachments, selectedDetachment,
   detachmentSelectionIds } from "@muster/roster";
 import { evaluate, hiddenEntryIds, hiddenSelectionIds } from "@muster/engine-eval";
@@ -145,6 +145,7 @@ export function App() {
           onBack={() => setSelectedUnitId(undefined)}
           onAddOption={(pid, eid) => setRoster((r) => addOption(r, pid, eid))}
           onToggleGroupMember={(pid, group, eid) => setRoster((r) => toggleGroupMember(r, pid, group, eid))}
+          onSetGroupMemberCount={(pid, group, eid, count) => setRoster((r) => setGroupMemberCount(r, pid, group, eid, count, catalogue))}
           onRemove={handleRemove}
           onSetCount={(id, c) => setRoster((r) => setCount(r, id, c))} />
       </div>
