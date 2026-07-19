@@ -194,6 +194,8 @@ fn maps_group_choose_n_and_flattens_members() {
     let g = cap.groups.iter().find(|g| g.id == "g.wargear").unwrap();
     assert_eq!(g.name, "Wargear");
     assert_eq!(g.member_entry_ids, vec!["e.captain.sword", "e.captain.axe"]);
+    // a leaf group (no sub-groups): descendants equal direct members
+    assert_eq!(g.descendant_entry_ids, g.member_entry_ids);
     assert_eq!(g.constraints.len(), 1);
     assert_eq!((g.constraints[0].id.as_str(), g.constraints[0].type_.as_str(), g.constraints[0].value),
                ("g.wargear.max", "max", 1.0));
@@ -249,6 +251,53 @@ fn emits_group_with_unconditional_limit_modifier_drops_only_points_field() {
     }
     // exactly one loud drop remains: the points-field group
     assert_eq!(diags.iter().filter(|d| d.code == "group.constraint_dropped").count(), 1, "{:?}", diags);
+}
+
+#[test]
+fn outer_group_descendant_ids_span_nested_subgroups() {
+    // The "Enhancements" shape: an outer group with NO direct entries carries the
+    // real limit (max 3), its options nested in per-detachment sub-groups. Its
+    // descendant_entry_ids must span those nested entries so engine-eval can count
+    // them; member_entry_ids stays empty (direct members only).
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <selectionEntries>
+    <selectionEntry id="e.u" name="Unit" type="unit">
+      <selectionEntryGroups>
+        <selectionEntryGroup id="g.enh" name="Enhancements">
+          <constraints><constraint id="g.enh.max" type="max" value="3" field="selections" scope="roster"/></constraints>
+          <selectionEntryGroups>
+            <selectionEntryGroup id="g.det.a" name="Detachment A">
+              <selectionEntries>
+                <selectionEntry id="e.enh.a1" name="A1" type="upgrade"/>
+                <selectionEntry id="e.enh.a2" name="A2" type="upgrade"/>
+              </selectionEntries>
+            </selectionEntryGroup>
+            <selectionEntryGroup id="g.det.b" name="Detachment B">
+              <selectionEntries><selectionEntry id="e.enh.b1" name="B1" type="upgrade"/></selectionEntries>
+            </selectionEntryGroup>
+          </selectionEntryGroups>
+        </selectionEntryGroup>
+      </selectionEntryGroups>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let raw = resolve(parse_raw(xml).unwrap()).unwrap();
+    let (ir, _diags) = to_ir(&raw);
+    let u = ir.entries.iter().find(|e| e.id == "e.u").unwrap();
+    let enh = u.groups.iter().find(|g| g.id == "g.enh").expect("outer group emitted");
+    // direct members: none (only sub-groups)
+    assert!(enh.member_entry_ids.is_empty(), "outer group has no direct entry members");
+    // descendants: every enhancement nested in the sub-groups
+    assert_eq!(
+        enh.descendant_entry_ids,
+        vec!["e.enh.a1", "e.enh.a2", "e.enh.b1"],
+        "descendant closure must span nested sub-group entries"
+    );
+    // the roster-scope limit maps
+    assert_eq!(enh.constraints[0].scope, "roster");
+    assert_eq!(enh.constraints[0].value, 3.0);
 }
 
 #[test]

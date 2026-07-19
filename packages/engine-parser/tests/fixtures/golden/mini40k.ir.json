@@ -113,6 +113,10 @@
             "e.captain.sword",
             "e.captain.axe"
           ],
+          "descendantEntryIds": [
+            "e.captain.sword",
+            "e.captain.axe"
+          ],
           "constraints": [
             {
               "id": "g.wargear.max",

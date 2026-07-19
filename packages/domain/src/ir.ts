@@ -37,7 +37,19 @@ export const IrGroup = z.object({
   id: z.string(),
   name: z.string(),
   defaultMemberEntryId: z.string().optional(),
+  // Direct entry members of this group only — used for UI grouping, default
+  // seeding, and per-member editing.
   memberEntryIds: z.array(z.string()).default([]),
+  // Transitive closure of member entry ids across this group AND all nested
+  // sub-groups (⊇ memberEntryIds). This is the set a group's `selections`
+  // constraint counts: BattleScribe aggregates a group limit over the group's
+  // whole subtree, so an outer group whose real members live in sub-groups
+  // (e.g. "Enhancements: max 3 per army", its options nested per-detachment)
+  // must count those descendants, not just its (often empty) direct members.
+  // Optional (not defaulted like memberEntryIds) because it is a backward-
+  // compatible addition: pre-descendant packed IR omits it, and the engine
+  // then falls back to memberEntryIds. The parser always emits it.
+  descendantEntryIds: z.array(z.string()).optional(),
   constraints: z.array(IrGroupConstraint).default([]),
 });
 export type IrGroup = z.infer<typeof IrGroup>;

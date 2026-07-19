@@ -255,6 +255,12 @@ fn map_group(g: &RawGroup, cat: &RawCatalogue, diags: &mut Vec<Diagnostic>) -> O
     if constraints.is_empty() {
         return None;
     }
+    // Transitive member closure: a group's selections limit counts its whole
+    // subtree, so include entries nested in sub-groups (e.g. the "Enhancements:
+    // max 3" group whose real options live in per-detachment sub-groups). A leaf
+    // group's descendants equal its direct members.
+    let mut descendant_entry_ids: Vec<String> = Vec::new();
+    collect_descendant_entry_ids(g, &mut descendant_entry_ids);
     // BattleScribe writes `defaultSelectionEntryId="none"` to mean "no default"; treat
     // that sentinel (and empty) as absent so downstream never seeds a non-member id.
     let default_member_entry_id = (!g.default_selection_entry_id.is_empty()
@@ -265,20 +271,33 @@ fn map_group(g: &RawGroup, cat: &RawCatalogue, diags: &mut Vec<Diagnostic>) -> O
         name: g.name.clone(),
         default_member_entry_id,
         member_entry_ids,
+        descendant_entry_ids,
         constraints,
     })
 }
 
+/// Collect this group's direct entry members plus, recursively, those of every
+/// nested sub-group — the transitive set a group's selections limit counts over.
+fn collect_descendant_entry_ids(g: &RawGroup, out: &mut Vec<String>) {
+    for e in &g.entries {
+        out.push(e.id.clone());
+    }
+    for sub in &g.groups {
+        collect_descendant_entry_ids(sub, out);
+    }
+}
+
 /// Emit an IrGroup for `g` and every nested sub-group that carries a mappable
 /// choose-N limit. Members of all levels are flattened into the owning entry's
-/// children (see flatten_group_members), and each group's memberEntryIds are its
-/// DIRECT entry members, so engine-eval's flat per-owner count enforces each
-/// group's local choose-N independently. Nested sub-group limits used to be
-/// dropped wholesale (`drop_group_constraints`); they are now mapped like any
-/// other group. A parent group still counts only its direct entry members, not
-/// selections made inside its sub-groups — an intentional, pre-existing modeling
-/// limitation, never a miscompile (the parent's own limit is still enforced over
-/// its direct members).
+/// children (see flatten_group_members). Each group's memberEntryIds are its
+/// DIRECT entry members (for UI grouping/seeding), while descendantEntryIds is
+/// the transitive closure over its sub-groups — the set engine-eval counts a
+/// group's selections limit over (BattleScribe aggregates a group limit across
+/// its whole subtree). So an outer group whose real options live in sub-groups
+/// (e.g. "Enhancements: max 3 per army") counts those nested selections, and
+/// each sub-group's own choose-N is still enforced independently. Nested
+/// sub-group limits used to be dropped wholesale (`drop_group_constraints`);
+/// they are now mapped like any other group.
 fn collect_groups(g: &RawGroup, cat: &RawCatalogue, diags: &mut Vec<Diagnostic>, out: &mut Vec<IrGroup>) {
     if let Some(ir_group) = map_group(g, cat, diags) {
         out.push(ir_group);

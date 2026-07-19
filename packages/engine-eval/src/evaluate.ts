@@ -84,11 +84,14 @@ export function evaluate(roster: Roster, catalogue: IrCatalogue): ValidationResu
       for (const gc of group.constraints) {
         if (gc.scope === "roster") {
           // A shared group is inlined at N placements; a roster-wide limit is one
-          // army rule, so evaluate it once. The member set is part of the key so
+          // army rule, so evaluate it once. The COUNTED member set (descendants,
+          // matching what checkGroupConstraint aggregates) is part of the key so
           // that two placements which somehow carry the same group+constraint id
           // with DIVERGENT members are both evaluated rather than one silently
           // dropped (mirrors symbols.ts's refusal to collapse divergent ids).
-          const key = `${group.id}:${gc.id}:${[...group.memberEntryIds].sort().join(",")}`;
+          const counted =
+            group.descendantEntryIds?.length ? group.descendantEntryIds : group.memberEntryIds;
+          const key = `${group.id}:${gc.id}:${[...counted].sort().join(",")}`;
           if (seenRosterGroup.has(key)) continue;
           seenRosterGroup.add(key);
         }
