@@ -35,3 +35,6 @@ target/
 
 # Turborepo cache
 .turbo/
+
+# Local real catalogue (GW-IP, do not commit)
+/apps/web/public/
