@@ -133,11 +133,43 @@ pub fn parse_raw_json(bytes: &[u8], _diags: &mut Vec<Diagnostic>) -> Result<RawC
 }
 
 fn map_cat(c: JsonCat) -> RawCatalogue {
+    let mut cost_types = HashMap::new();
+    for ct in &c.cost_types { cost_types.insert(ct.id.clone(), ct.name.clone()); }
+    let mut categories = HashMap::new();
+    for ce in &c.category_entries { categories.insert(ce.id.clone(), ce.name.clone()); }
+    let mut rules = BTreeMap::new();
+    collect_rules(&c, &mut rules);
     RawCatalogue {
-        id: c.id,
-        name: c.name,
-        revision: c.revision,
-        game_system_id: c.game_system_id,
+        id: c.id.clone(), name: c.name.clone(), revision: c.revision,
+        game_system_id: c.game_system_id.clone(),
+        cost_types, categories, rules,
         ..Default::default()
     }
+}
+
+/// Rules live at top level (rules/sharedRules) AND nested inside entries/groups/
+/// forces. Key by `name` and, when present, also by `alias` — mirroring the XML
+/// parser's `read_all_rules` flat capture. Later (non-empty) descriptions win on
+/// duplicate keys, matching insertion-order-last semantics of the XML pass.
+fn collect_rules(c: &JsonCat, out: &mut BTreeMap<String, String>) {
+    for r in c.rules.iter().chain(c.shared_rules.iter()) { insert_rule(r, out); }
+    for e in c.shared_selection_entries.iter().chain(c.selection_entries.iter()) {
+        collect_rules_entry(e, out);
+    }
+    for g in &c.shared_selection_entry_groups { collect_rules_group(g, out); }
+    for f in &c.force_entries { for r in &f.rules { insert_rule(r, out); } }
+}
+fn insert_rule(r: &JsonRule, out: &mut BTreeMap<String, String>) {
+    if !r.name.is_empty() { out.insert(r.name.clone(), r.description.clone()); }
+    if !r.alias.is_empty() { out.insert(r.alias.clone(), r.description.clone()); }
+}
+fn collect_rules_entry(e: &JsonEntry, out: &mut BTreeMap<String, String>) {
+    for r in &e.rules { insert_rule(r, out); }
+    for c in e.selection_entries.iter() { collect_rules_entry(c, out); }
+    for g in &e.selection_entry_groups { collect_rules_group(g, out); }
+}
+fn collect_rules_group(g: &JsonGroup, out: &mut BTreeMap<String, String>) {
+    for r in &g.rules { insert_rule(r, out); }
+    for c in g.selection_entries.iter() { collect_rules_entry(c, out); }
+    for sg in &g.selection_entry_groups { collect_rules_group(sg, out); }
 }

@@ -14,3 +14,18 @@ fn parses_gamesystem_wrapper_and_errors_on_neither() {
     assert_eq!(parse_raw_json(gs, &mut Vec::new()).unwrap().id, "gs.1");
     assert!(parse_raw_json(br#"{"other":{}}"#, &mut Vec::new()).is_err());
 }
+
+#[test]
+fn maps_costtypes_categories_and_nested_rules() {
+    let json = br#"{"gameSystem":{"id":"gs","name":"GS","revision":1,
+      "costTypes":[{"id":"pts","name":"pts"},{"id":"dp","name":"Detachment Points"}],
+      "categoryEntries":[{"id":"cat.hq","name":"HQ"}],
+      "sharedRules":[{"id":"r1","name":"Oath","alias":"","description":"Re-roll hits."}],
+      "selectionEntries":[{"id":"e.u","name":"U","type":"unit",
+        "rules":[{"id":"r2","name":"Deep Strike","alias":"","description":"Arrive from reserves."}]}]}}"#;
+    let raw = parse_raw_json(json, &mut Vec::new()).unwrap();
+    assert_eq!(raw.cost_types.get("dp").map(String::as_str), Some("Detachment Points"));
+    assert_eq!(raw.categories.get("cat.hq").map(String::as_str), Some("HQ"));
+    assert_eq!(raw.rules.get("Oath").map(String::as_str), Some("Re-roll hits."));
+    assert_eq!(raw.rules.get("Deep Strike").map(String::as_str), Some("Arrive from reserves."));
+}
