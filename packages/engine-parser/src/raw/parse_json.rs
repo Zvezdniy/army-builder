@@ -195,6 +195,58 @@ fn map_profiles(ps: &[JsonProfile]) -> Vec<RawProfile> {
     }).collect()
 }
 
+#[allow(dead_code)]
+fn map_costs(cs: &[JsonCost]) -> Vec<RawCost> {
+    cs.iter().map(|c| RawCost { type_id: c.type_id.clone(), value: c.value }).collect()
+}
+#[allow(dead_code)]
+fn map_constraints(cs: &[JsonConstraint]) -> Vec<RawConstraint> {
+    cs.iter().map(|c| RawConstraint {
+        id: c.id.clone(), kind: c.kind.clone(), value: c.value, field: c.field.clone(),
+        scope: c.scope.clone(), include_child_selections: c.include_child_selections,
+    }).collect()
+}
+/// BS-JSON encodes a modifier's `value` as bool (field="hidden"), number, or
+/// string. RawModifier needs both the numeric value (for cost/limit modifiers)
+/// and the raw string (for field="hidden"/"category", parsed downstream in to_ir).
+#[allow(dead_code)]
+fn modifier_value(v: &serde_json::Value) -> (f64, String) {
+    match v {
+        serde_json::Value::Bool(b) => (0.0, b.to_string()),
+        serde_json::Value::Number(n) => (n.as_f64().unwrap_or(0.0), n.to_string()),
+        serde_json::Value::String(s) => (s.parse::<f64>().unwrap_or(0.0), s.clone()),
+        _ => (0.0, String::new()),
+    }
+}
+#[allow(dead_code)]
+fn map_conditions(cs: &[JsonCondition]) -> Vec<RawCondition> {
+    cs.iter().map(|c| RawCondition {
+        comparator: c.comparator.clone(), field: c.field.clone(), scope: c.scope.clone(),
+        value: c.value, child_id: c.child_id.clone(),
+        include_child_selections: c.include_child_selections,
+    }).collect()
+}
+#[allow(dead_code)]
+fn map_condition_groups(gs: &[JsonConditionGroup]) -> Vec<RawConditionGroup> {
+    gs.iter().map(|g| RawConditionGroup {
+        kind: g.kind.clone(),
+        conditions: map_conditions(&g.conditions),
+        groups: map_condition_groups(&g.condition_groups),
+    }).collect()
+}
+#[allow(dead_code)]
+fn map_modifiers(ms: &[JsonModifier]) -> Vec<RawModifier> {
+    ms.iter().map(|m| {
+        let (value, value_raw) = modifier_value(&m.value);
+        RawModifier {
+            kind: m.kind.clone(), field: m.field.clone(), value, value_raw,
+            conditions: map_conditions(&m.conditions),
+            condition_groups: map_condition_groups(&m.condition_groups),
+            has_repeats: !m.repeats.is_empty(),
+        }
+    }).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -207,5 +259,28 @@ mod tests {
         let out = map_profiles(std::slice::from_ref(&p));
         assert_eq!(out[0].characteristics[0].value, "4+");
         assert_eq!(out[0].type_name, "Unit");
+    }
+
+    #[test]
+    fn modifier_value_handles_bool_number_string() {
+        assert_eq!(modifier_value(&serde_json::json!(true)), (0.0, "true".to_string()));
+        assert_eq!(modifier_value(&serde_json::json!(3)), (3.0, "3".to_string()));
+        assert_eq!(modifier_value(&serde_json::json!("-1")), (-1.0, "-1".to_string()));
+        assert_eq!(modifier_value(&serde_json::json!("x2")), (0.0, "x2".to_string()));
+    }
+
+    #[test]
+    fn map_modifier_carries_repeats_and_nested_conditions() {
+        let m = JsonModifier {
+            kind: "set".into(), field: "hidden".into(), value: serde_json::json!(true),
+            conditions: vec![JsonCondition { comparator: "instanceOf".into(), field: "selections".into(),
+                scope: "roster".into(), value: 1.0, child_id: "x".into(), include_child_selections: true }],
+            condition_groups: vec![], repeats: vec![serde_json::json!({})],
+        };
+        let out = map_modifiers(std::slice::from_ref(&m));
+        assert_eq!((out[0].kind.as_str(), out[0].value, out[0].value_raw.as_str()), ("set", 0.0, "true"));
+        assert!(out[0].has_repeats);
+        assert_eq!(out[0].conditions[0].comparator, "instanceOf");
+        assert_eq!(out[0].conditions[0].child_id, "x");
     }
 }
