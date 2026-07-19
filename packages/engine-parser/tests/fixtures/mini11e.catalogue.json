@@ -1,0 +1,11 @@
+{"catalogue":{"type":"catalogue","id":"cat.11e","name":"Mini 11e","revision":1,"gameSystemId":"gs.11e",
+  "selectionEntries":[{"id":"e.cap","name":"Captain","type":"model",
+    "categoryLinks":[{"targetId":"cat.hq","primary":true}],
+    "costs":[{"typeId":"pts","value":90}],
+    "profiles":[{"id":"p","name":"Captain","typeName":"Unit","characteristics":[
+      {"name":"T","typeId":"t","$text":"4"},{"name":"InSv","typeId":"i","$text":"4+"}]}],
+    "selectionEntryGroups":[{"id":"g.wg","name":"Wargear",
+      "constraints":[{"id":"g.wg.max","type":"max","value":1,"field":"selections","scope":"parent"}],
+      "selectionEntries":[
+        {"id":"e.sword","name":"Sword","type":"upgrade","costs":[{"typeId":"pts","value":5}]},
+        {"id":"e.axe","name":"Axe","type":"upgrade","costs":[{"typeId":"pts","value":10}]}]}]}]}}

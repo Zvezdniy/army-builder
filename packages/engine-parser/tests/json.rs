@@ -1,4 +1,6 @@
+use engine_parser::parse_system_files;
 use engine_parser::raw::parse_raw_json;
+use std::path::Path;
 
 #[test]
 fn parses_root_scalars_from_catalogue_wrapper() {
@@ -69,4 +71,20 @@ fn maps_full_entry_tree_with_links_groups_and_associations_drop() {
     assert_eq!(g.entry_links[0].target_id, "e.w");
     assert_eq!((raw.force_entries[0].name.as_str(), raw.force_entries[0].constraints[0].kind.as_str()), ("Army", "min"));
     assert!(diags.iter().any(|d| d.code == "entry.associations_dropped" && d.message.contains("e.w")));
+}
+
+#[test]
+fn parse_system_files_reads_json_faction_plus_gamesystem() {
+    let (ir, diags) = parse_system_files(
+        Path::new("tests/fixtures/mini11e.catalogue.json"),
+        &[Path::new("tests/fixtures/mini11e.gamesystem.json")],
+        None,
+    )
+    .unwrap();
+    // The Captain surfaces as a root with its HQ category and points cost.
+    let cap = ir.entries.iter().find(|e| e.id == "e.cap").expect("captain root");
+    assert!(cap.children.iter().any(|c| c.id == "e.sword"));
+    let wg = cap.groups.iter().find(|g| g.id == "g.wg").expect("wargear group emitted");
+    assert_eq!(wg.constraints.len(), 1);
+    assert!(!diags.iter().any(|d| d.code == "entry.associations_dropped"));
 }
