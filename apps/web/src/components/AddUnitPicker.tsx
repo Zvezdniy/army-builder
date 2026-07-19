@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { IrCatalogue, IrEntry } from "@muster/domain";
-import { availableUnits } from "@muster/roster";
+import { availableUnits, battlefieldRole, roleRank } from "@muster/roster";
 import { pointsCost } from "@muster/engine-eval";
 
 function points(e: IrEntry): number {
@@ -27,8 +27,7 @@ export function AddUnitPicker({
   const groups: { role: string; units: IrEntry[] }[] = [];
   const byRole = new Map<string, { role: string; units: IrEntry[] }>();
   for (const u of units) {
-    const catId = u.categories[0];
-    const role = catId === undefined ? "Other" : (catalogue.categoryNames?.[catId] ?? catId);
+    const role = battlefieldRole(u, catalogue);
     let group = byRole.get(role);
     if (!group) {
       group = { role, units: [] };
@@ -37,6 +36,7 @@ export function AddUnitPicker({
     }
     group.units.push(u);
   }
+  groups.sort((a, b) => roleRank(a.role) - roleRank(b.role));
 
   const toggle = (role: string) =>
     setCollapsed((prev) => {

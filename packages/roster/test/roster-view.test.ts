@@ -26,15 +26,20 @@ const roster = (sels: RosterSelection[]): Roster => ({
 } as unknown as Roster);
 
 describe("unitsByRole", () => {
-  it("groups root units by first-category name in first-seen order", () => {
+  it("groups root units by battlefield role, ordered by ROLE_ORDER", () => {
     const out = unitsByRole(roster([sel("e.cap"), sel("e.sq"), sel("e.cap")]), cat);
     expect(out.map((g) => g.role)).toEqual(["HQ", "Battleline"]);
     expect(out[0]?.units).toHaveLength(2);
   });
-  it("falls back to the id when the name is unknown, and to 'Other' when there is no category", () => {
+  it("buckets units with no recognised role (or no category) under 'Other'", () => {
+    // No category names → the raw ids aren't known roles, so both fall to Other.
     const c2 = { ...cat, categoryNames: {} } as unknown as IrCatalogue;
     const out = unitsByRole(roster([sel("e.cap"), sel("e.nocat")]), c2);
-    expect(out.map((g) => g.role)).toEqual(["cat.hq", "Other"]);
+    expect(out.map((g) => g.role)).toEqual(["Other"]);
+  });
+  it("buckets a selection whose entry is not in the catalogue under 'Other'", () => {
+    const out = unitsByRole(roster([sel("e.ghost")]), cat);
+    expect(out.map((g) => g.role)).toEqual(["Other"]);
   });
 });
 

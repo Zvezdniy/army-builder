@@ -1,4 +1,5 @@
 import type { IrCatalogue, IrEntry, IrGroup, IrProfile, Roster, RosterSelection } from "@muster/domain";
+import { battlefieldRole, OTHER_ROLE, roleRank } from "./roles";
 
 /** Create an empty roster bound to a catalogue. */
 export function createRoster(catalogue: IrCatalogue, pointsLimit: number, name = "New Roster"): Roster {
@@ -256,8 +257,9 @@ export interface RoleGroup {
   units: RosterSelection[];
 }
 
-/** Group the roster's root units by their entry's first category, resolved to a
- *  human name via `catalogue.categoryNames` (fallback: the id, then "Other"). */
+/** Group the roster's root units by their battlefield role (`battlefieldRole`),
+ *  ordered by `ROLE_ORDER` so Characters lead and Other trails — instead of the
+ *  entry's incidental first category. */
 export function unitsByRole(roster: Roster, catalogue: IrCatalogue): RoleGroup[] {
   const groups: RoleGroup[] = [];
   const byRole = new Map<string, RoleGroup>();
@@ -267,8 +269,7 @@ export function unitsByRole(roster: Roster, catalogue: IrCatalogue): RoleGroup[]
   for (const sel of roster.selections) {
     if (sel.entryId === detId) continue;
     const entry = catalogueEntry(catalogue, sel.entryId);
-    const catId = entry?.categories[0];
-    const role = catId === undefined ? "Other" : (catalogue.categoryNames?.[catId] ?? catId);
+    const role = entry ? battlefieldRole(entry, catalogue) : OTHER_ROLE;
     let group = byRole.get(role);
     if (!group) {
       group = { role, units: [] };
@@ -277,7 +278,7 @@ export function unitsByRole(roster: Roster, catalogue: IrCatalogue): RoleGroup[]
     }
     group.units.push(sel);
   }
-  return groups;
+  return groups.sort((a, b) => roleRank(a.role) - roleRank(b.role));
 }
 
 /** A readable loadout summary: the unit's name plus the distinct names of its

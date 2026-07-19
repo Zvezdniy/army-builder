@@ -73,6 +73,12 @@ export function UnitConfig({
       {groups.map((g) => {
         const ctrl = groupControl(g);
         const chosen = new Set(selectedGroupMembers(roster, selection.id, g));
+        // Members hidden by state (wrong detachment, character-only enhancement,
+        // Crusade-only relic on a matched-play unit …) drop out. A group left with
+        // no visible member is a phantom header — e.g. a vehicle carrying the whole
+        // Chapter-Command / Enhancement structure it can never use — so skip it.
+        const visibleMembers = g.memberEntryIds.filter((id) => !hiddenIds.has(id) || chosen.has(id));
+        if (visibleMembers.length === 0) return null;
         const required = ctrl.kind === "single" && ctrl.required;
         const hint = ctrl.kind === "single"
           ? (ctrl.required ? "choose 1 (required)" : "choose 1")
@@ -84,7 +90,7 @@ export function UnitConfig({
               <span className={required ? "uc-hint is-required" : "uc-hint"}>{hint}</span>
             </div>
             <div className="uc-options">
-              {g.memberEntryIds.filter((id) => !hiddenIds.has(id) || chosen.has(id)).map((id) => {
+              {visibleMembers.map((id) => {
                 const on = chosen.has(id);
                 return (
                   <button key={id} aria-pressed={on}
