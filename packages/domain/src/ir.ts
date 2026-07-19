@@ -15,9 +15,16 @@ export const IrConstraint = z.object({
   id: z.string(),
   type: z.enum(["min", "max"]),
   value: z.number().finite(),
-  field: z.enum(["selections", "points"]),
+  // "selections" (count), "points", or a cost-type name (e.g. "Enhancements") —
+  // sums that named cost across the constraint's scope. Widened from a two-value
+  // enum because a force-global constraint (targetType "force") can target any
+  // cost type the catalogue defines, not just points; an unrecognized/absent name
+  // aggregates to 0 (inert), never throws.
+  field: z.string(),
   scope: z.enum(["self", "parent", "force", "roster", "root-entry", "ancestor", "unit", "upgrade", "model", "model-or-unit"]),
-  targetType: z.enum(["category", "entry"]),
+  // "force": matches every node in the roster (no category/entry filter) — used
+  // for whole-force rules like 11e's "max 2 Enhancements".
+  targetType: z.enum(["category", "entry", "force"]),
   targetId: z.string(),
   includeChildSelections: z.boolean().default(false),
   modifiers: z.array(IrModifier).optional(),

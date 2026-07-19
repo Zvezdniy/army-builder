@@ -107,27 +107,119 @@ fn maps_force_constraints_nested_in_each_category_link() {
 }
 
 /// A constraint placed directly under <forceEntry> (not inside a categoryLink)
-/// is force-global — it has no category association. The current IR has no
-/// whole-force target, so it is diagnostic-dropped, never silently lost and
-/// never miscompiled onto a guessed category.
+/// is force-global — no category, but the IR's `targetType: "force"` (A1) now
+/// represents "sum over the whole force" directly, so it is mapped, not dropped.
+/// (Regression guard for the walking-skeleton behaviour this replaces: such a
+/// constraint used to be diagnostic-dropped with no IR representation.)
+/// Uses field="selections" (not a points/pts cost type) so this exercises the
+/// force-global mapping mechanism in isolation from the points-sentinel skip
+/// covered separately by `skips_force_global_points_sentinel_constraint`.
 #[test]
-fn diagnoses_force_global_constraint_without_category() {
+fn maps_force_global_constraint_with_force_target_type() {
     let xml = br#"<?xml version="1.0" encoding="utf-8"?>
 <catalogue id="c" name="C" revision="1" gameSystemId="gs"
            xmlns="http://www.battlescribe.net/schema/catalogueSchema">
   <forceEntries>
     <forceEntry id="fe" name="Detachment">
       <constraints>
-        <constraint id="fg.max" type="max" value="2000" field="pts" scope="force"/>
+        <constraint id="fg.max" type="max" value="20" field="selections" scope="force"/>
       </constraints>
     </forceEntry>
   </forceEntries>
 </catalogue>"#;
     let raw = resolve(parse_raw(xml).unwrap()).unwrap();
     let (ir, diags) = to_ir(&raw);
-    assert!(ir.force_constraints.is_empty(), "force-global constraint should not be emitted");
-    assert!(diags.iter().any(|d| d.code == "constraint.force_global_unrepresentable"),
-        "expected loud diagnostic for dropped force-global constraint: {:?}", diags);
+    let c = ir.force_constraints.iter().find(|c| c.id == "fg.max")
+        .unwrap_or_else(|| panic!("force-global constraint fg.max missing (dropped): {:?}", ir.force_constraints));
+    assert_eq!(c.target_type, "force");
+    assert_eq!(c.target_id, "fe");
+    assert_eq!(c.field, "selections");
+    assert_eq!(c.scope, "force");
+    assert_eq!(c.value, 20.0);
+    assert!(!diags.iter().any(|d| d.code == "constraint.force_global_unrepresentable"),
+        "force-global constraint should no longer be diagnosed as unrepresentable: {:?}", diags);
+}
+
+/// The 11e "max 2 Enhancements" rule: a forceEntry-direct `max 2` constraint whose
+/// field is a cost-type id (not "selections"/"pts") must map to that cost type's
+/// NAME (from `cat.cost_types`), not drop as `field_unmapped`.
+#[test]
+fn maps_force_global_enhancements_cost_type_constraint() {
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <costTypes>
+    <costType id="ct.enh" name="Enhancements"/>
+  </costTypes>
+  <forceEntries>
+    <forceEntry id="fe.army" name="Army Roster">
+      <constraints>
+        <constraint id="fc.max2enh" type="max" value="2" field="ct.enh" scope="force"/>
+      </constraints>
+    </forceEntry>
+  </forceEntries>
+</catalogue>"#;
+    let raw = resolve(parse_raw(xml).unwrap()).unwrap();
+    let (ir, diags) = to_ir(&raw);
+    let c = ir.force_constraints.iter().find(|c| c.id == "fc.max2enh")
+        .unwrap_or_else(|| panic!("force constraint fc.max2enh missing (dropped): {:?}", ir.force_constraints));
+    assert_eq!(c.field, "Enhancements");
+    assert_eq!(c.scope, "force");
+    assert_eq!(c.target_type, "force");
+    assert_eq!(c.value, 2.0);
+    assert!(!diags.iter().any(|d| d.code == "constraint.field_unmapped"),
+        "cost-type field should map to its name, not drop: {:?}", diags);
+    assert!(!diags.iter().any(|d| d.code == "constraint.force_global_unrepresentable"),
+        "force-global constraint should no longer be diagnosed as unrepresentable: {:?}", diags);
+}
+
+/// A force-level constraint whose mapped field is the POINTS cost type (e.g. a
+/// sibling Crusade Force's `max 0 pts` at scope=force) is a BattleScribe
+/// accounting/game-size sentinel, not a matched-play rule — mapping it would
+/// flag every non-empty roster as "too many pts, max 0". It must be skipped
+/// (not emitted into forceConstraints) with a
+/// `constraint.force_points_sentinel_skipped` diagnostic, while a sibling
+/// non-points force constraint on the same forceEntry (e.g. "max 2
+/// Enhancements") still maps normally.
+#[test]
+fn skips_force_global_points_sentinel_constraint() {
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <costTypes>
+    <costType id="pts" name="pts"/>
+    <costType id="ct.enh" name="Enhancements"/>
+  </costTypes>
+  <forceEntries>
+    <forceEntry id="fe.crusade" name="Crusade Force">
+      <constraints>
+        <constraint id="fc.pts.sentinel" type="max" value="0" field="pts" scope="force"/>
+        <constraint id="fc.max2enh" type="max" value="2" field="ct.enh" scope="force"/>
+      </constraints>
+    </forceEntry>
+  </forceEntries>
+</catalogue>"#;
+    let raw = resolve(parse_raw(xml).unwrap()).unwrap();
+    let (ir, diags) = to_ir(&raw);
+    // the points sentinel is NOT emitted into forceConstraints
+    assert!(
+        !ir.force_constraints.iter().any(|c| c.id == "fc.pts.sentinel"),
+        "points-sentinel force constraint must be dropped: {:?}",
+        ir.force_constraints
+    );
+    // ...and a diagnostic fires for it
+    assert!(
+        diags.iter().any(|d| d.code == "constraint.force_points_sentinel_skipped"
+            && d.message.contains("fc.pts.sentinel")),
+        "expected force_points_sentinel_skipped diagnostic: {:?}",
+        diags
+    );
+    // the sibling non-points force constraint still maps normally
+    let enh = ir.force_constraints.iter().find(|c| c.id == "fc.max2enh")
+        .unwrap_or_else(|| panic!("non-points force constraint fc.max2enh missing: {:?}", ir.force_constraints));
+    assert_eq!(enh.field, "Enhancements");
+    assert_eq!(enh.target_type, "force");
+    assert_eq!(enh.value, 2.0);
 }
 
 #[test]
@@ -178,6 +270,39 @@ fn drops_cost_modifier_with_unsupported_value_kind() {
     assert!(
         diags.iter().any(|d| d.code == "modifier.value_type_unsupported"),
         "expected a value_type_unsupported diagnostic, got: {:?}",
+        diags
+    );
+}
+
+#[test]
+fn maps_divide_and_multiply_cost_modifiers() {
+    // ~400 real 11e Enhancement modifiers use `divide` (cost halves/thirds on
+    // 2nd/3rd take in a multi-detachment roster); `multiply` is its counterpart.
+    // Both must be emitted, not dropped as value_type_unsupported.
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <costTypes><costType id="pts" name="Points"/></costTypes>
+  <selectionEntries>
+    <selectionEntry id="e.u" name="Unit" type="unit">
+      <costs><cost name="pts" typeId="pts" value="30"/></costs>
+      <modifiers>
+        <modifier type="divide" field="pts" value="2"/>
+        <modifier type="multiply" field="pts" value="3"/>
+      </modifiers>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let raw = resolve(parse_raw(xml).unwrap()).unwrap();
+    let (ir, diags) = to_ir(&raw);
+    let u = ir.entries.iter().find(|e| e.id == "e.u").unwrap();
+    let mods = u.costs[0].modifiers.as_ref().unwrap();
+    assert_eq!(mods.len(), 2);
+    assert!(mods.iter().any(|m| m.type_ == "divide" && m.value == 2.0));
+    assert!(mods.iter().any(|m| m.type_ == "multiply" && m.value == 3.0));
+    assert!(
+        !diags.iter().any(|d| d.code == "modifier.value_type_unsupported"),
+        "divide/multiply must not be dropped as unsupported: {:?}",
         diags
     );
 }
@@ -1335,6 +1460,40 @@ fn group_constraint_self_scope_omits_scope_field() {
     assert_eq!(g.constraints[0].scope, "self");
     let v = serde_json::to_value(&g.constraints[0]).unwrap();
     assert!(v.get("scope").is_none(), "self scope must be skip-serialized: {:?}", v);
+}
+
+#[test]
+fn entry_modifier_routes_to_owning_group_constraint() {
+    // A modifier on the entry itself (not on the group) whose `field` names an
+    // enclosing selectionEntryGroup's OWN constraint id (A2). It must land on
+    // that IrGroupConstraint's modifiers, not drop as modifier.target_unmapped.
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <selectionEntries>
+    <selectionEntry id="e.u" name="U" type="unit">
+      <modifiers>
+        <modifier type="increment" value="1" field="gc"/>
+      </modifiers>
+      <selectionEntryGroups>
+        <selectionEntryGroup id="g.opt" name="Opt">
+          <constraints><constraint id="gc" type="max" value="1" field="selections" scope="parent"/></constraints>
+          <selectionEntries>
+            <selectionEntry id="e.o1" name="O1" type="upgrade"/>
+          </selectionEntries>
+        </selectionEntryGroup>
+      </selectionEntryGroups>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let (ir, diags) = to_ir(&resolve(parse_raw(xml).unwrap()).unwrap());
+    let e = ir.entries.iter().find(|e| e.id == "e.u").unwrap();
+    let g = e.groups.iter().find(|g| g.id == "g.opt").expect("group mapped");
+    let gc = g.constraints.iter().find(|c| c.id == "gc").expect("group constraint mapped");
+    let mods = gc.modifiers.as_ref().expect("modifier attached to group constraint");
+    assert_eq!(mods.len(), 1);
+    assert_eq!((mods[0].type_.as_str(), mods[0].value), ("increment", 1.0));
+    assert!(!diags.iter().any(|d| d.code == "modifier.target_unmapped"), "{:?}", diags);
 }
 
 #[test]

@@ -34,4 +34,32 @@ describe("applyModifiers", () => {
     ];
     expect(applyModifiers(100, mods, null, state())).toBe(100); // gate false → unchanged
   });
+
+  it("divides the running value", () => {
+    const mods: IrModifier[] = [{ id: "d", type: "divide", value: 2 }];
+    expect(applyModifiers(20, mods, null, state())).toBe(10);
+  });
+
+  it("multiplies the running value", () => {
+    const mods: IrModifier[] = [{ id: "m", type: "multiply", value: 3 }];
+    expect(applyModifiers(4, mods, null, state())).toBe(12);
+  });
+
+  it("divide by zero is a no-op (never NaN/Infinity)", () => {
+    const mods: IrModifier[] = [{ id: "d0", type: "divide", value: 0 }];
+    expect(applyModifiers(20, mods, null, state())).toBe(20);
+  });
+
+  it("divides with truncation toward zero on a non-even divide", () => {
+    const mods: IrModifier[] = [{ id: "d3", type: "divide", value: 3 }];
+    expect(applyModifiers(20, mods, null, state())).toBe(6); // 6.66... -> 6, not 7
+  });
+
+  it("divide/multiply chain in order", () => {
+    const mods: IrModifier[] = [
+      { id: "a", type: "multiply", value: 5 }, // 100 -> 500
+      { id: "b", type: "divide", value: 4 },   // 500 -> 125
+    ];
+    expect(applyModifiers(100, mods, null, state())).toBe(125);
+  });
 });

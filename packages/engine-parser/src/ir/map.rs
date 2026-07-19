@@ -28,8 +28,9 @@ pub fn to_ir(cat: &RawCatalogue) -> (IrCatalogue, Vec<Diagnostic>) {
 /// ContainerEntryBase, so it carries its own <constraints>), which makes the
 /// target category a structural FK — the owning link's targetId — regardless of
 /// how many categoryLinks the force has. Constraints placed directly under the
-/// forceEntry are force-global (no category); the IR has no whole-force target,
-/// so those are diagnosed and dropped rather than guessed onto a category.
+/// forceEntry are force-global (no category): `targetType: "force"` (A1) sums
+/// over the whole force with no category/entry filter, so these map like any
+/// other constraint (e.g. 11e's army-wide "max 2 Enhancements" rule).
 fn map_force_constraints(force: &crate::raw::RawForce, cat: &RawCatalogue, diags: &mut Vec<Diagnostic>) -> Vec<IrConstraint> {
     let mut out: Vec<IrConstraint> = Vec::new();
     for link in &force.category_links {
@@ -40,13 +41,26 @@ fn map_force_constraints(force: &crate::raw::RawForce, cat: &RawCatalogue, diags
         }
     }
     for c in &force.constraints {
-        diags.push(Diagnostic {
-            code: "constraint.force_global_unrepresentable".to_string(),
-            message: format!(
-                "force {} constraint {} is force-global (no category) and has no IR representation (dropped)",
-                force.id, c.id
-            ),
-        });
+        if let Some(mapped) = map_constraint(c, "force", &force.id, cat, diags) {
+            // A force-level constraint on the POINTS cost type is a BattleScribe
+            // accounting/game-size sentinel (e.g. the Army Roster's inert `max 0 pts`,
+            // or a sibling Crusade Force's `max 0 pts` at force scope), never a
+            // matched-play rule — the real points ceiling is the roster's user-chosen
+            // pointsLimit. Emitting it would flag every non-empty roster as "too many
+            // pts, max 0" (the Crusade one is scope=force, so eval does evaluate it).
+            // Drop it; keep every non-points force rule (e.g. "max 2 Enhancements").
+            if mapped.field == "pts" || mapped.field == "points" {
+                diags.push(Diagnostic {
+                    code: "constraint.force_points_sentinel_skipped".to_string(),
+                    message: format!(
+                        "force {} constraint {} caps the points cost type ({}); dropped as a game-size sentinel",
+                        force.id, mapped.id, mapped.field
+                    ),
+                });
+                continue;
+            }
+            out.push(mapped);
+        }
     }
     out
 }
@@ -78,9 +92,20 @@ fn map_entry(e: &RawEntry, cat: &RawCatalogue, diags: &mut Vec<Diagnostic>) -> I
             .filter_map(|c| map_constraint(c, "category", &link.target_id, cat, diags)));
     }
 
+    // Map groups BEFORE the modifier loop: a modifier whose `field` names a
+    // constraint owned by an enclosing selectionEntryGroup (an IrGroupConstraint)
+    // is routed onto it below (A2), which requires `groups` to already exist.
+    let mut children: Vec<IrEntry> = e.entries.iter().map(|c| map_entry(c, cat, diags)).collect();
+    let mut groups: Vec<IrGroup> = Vec::new();
+    for g in &e.groups {
+        flatten_group_members(g, cat, diags, &mut children);
+        collect_groups(g, cat, diags, &mut groups);
+    }
+
     // Attach each raw modifier to the IR cost or constraint it targets, based
     // on where its `field` points: a known cost-type id is a cost modifier, a
-    // matching constraint id is a bound modifier. Neither → diagnostic + drop.
+    // matching constraint id is a bound modifier (the entry's own, or — failing
+    // that — an enclosing group's). Neither → diagnostic + drop.
     let mut visibility_modifiers: Vec<IrVisibilityModifier> = Vec::new();
     let mut validation_rules: Vec<IrValidationRule> = Vec::new();
     let mut category_modifiers: Vec<IrCategoryModifier> = Vec::new();
@@ -147,6 +172,14 @@ fn map_entry(e: &RawEntry, cat: &RawCatalogue, diags: &mut Vec<Diagnostic>) -> I
             }
         } else if let Some(c) = constraints.iter_mut().find(|c| c.id == m.field) {
             c.modifiers.get_or_insert_with(Vec::new).push(ir_mod);
+        } else if let Some(gc) = groups.iter_mut()
+            .flat_map(|g| g.constraints.iter_mut())
+            .find(|gc| gc.id == m.field)
+        {
+            // A2: the field names a constraint owned by an enclosing
+            // selectionEntryGroup rather than the entry itself — attach to
+            // that IrGroupConstraint instead of dropping.
+            gc.modifiers.get_or_insert_with(Vec::new).push(ir_mod);
         } else {
             diags.push(Diagnostic {
                 code: "modifier.target_unmapped".to_string(),
@@ -155,12 +188,6 @@ fn map_entry(e: &RawEntry, cat: &RawCatalogue, diags: &mut Vec<Diagnostic>) -> I
         }
     }
 
-    let mut children: Vec<IrEntry> = e.entries.iter().map(|c| map_entry(c, cat, diags)).collect();
-    let mut groups: Vec<IrGroup> = Vec::new();
-    for g in &e.groups {
-        flatten_group_members(g, cat, diags, &mut children);
-        collect_groups(g, cat, diags, &mut groups);
-    }
     let profiles: Vec<IrProfile> = e.profiles.iter().map(map_profile).collect();
 
     IrEntry {
@@ -420,6 +447,13 @@ fn map_constraint(rc: &RawConstraint, target_type: &str, target_id: &str, cat: &
         let type_name = cat.cost_types.get(&rc.field).cloned().unwrap_or_default();
         if rc.field == "pts" || type_name.to_lowercase().contains("point") {
             "points".to_string()
+        } else if let Some(name) = cat.cost_types.get(&rc.field) {
+            // A known cost type that isn't "points" (e.g. 11e's "Enhancements") —
+            // emit its NAME so the eval side can sum that named cost across the
+            // constraint's scope (A1: force-global cost-type constraints like the
+            // army-wide "max 2 Enhancements" rule). Only a field that resolves to
+            // neither "selections" nor any known cost type is truly unmappable.
+            name.clone()
         } else {
             diags.push(Diagnostic {
                 code: "constraint.field_unmapped".to_string(),
@@ -507,12 +541,16 @@ fn map_condition_scope(scope: &str) -> String {
 /// logged via diagnostic, then the modifier is still emitted without repeat
 /// semantics (never dropped outright — that would silently change costs).
 fn map_modifier(m: &RawModifier, entry_id: &str, index: usize, cat: &RawCatalogue, diags: &mut Vec<Diagnostic>) -> Option<IrModifier> {
-    // The value engine only models set/increment/decrement. Other value kinds
-    // (e.g. `floor`/`ceil` clamps seen in real catalogues) have no IR form; emit
+    // The value engine models set/increment/decrement/divide/multiply (divide and
+    // multiply cover 11e's Enhancement cost-scaling-on-reuse modifiers). Other value
+    // kinds (e.g. `floor`/`ceil` clamps seen in real catalogues) have no IR form; emit
     // a diagnostic and drop just this modifier rather than passing an unknown type
-    // downstream, where it would fail the domain schema and sink the whole
-    // catalogue. Mirrors the strict path's kind filter.
-    if !matches!(m.kind.as_str(), "set" | "increment" | "decrement") {
+    // downstream, where it would fail the domain schema and sink the whole catalogue.
+    // NOTE: broader than the strict path's kind filter below (constraint LIMIT
+    // modifiers stay restricted to set/increment/decrement — a divide/multiply on a
+    // selection-count limit has no observed real use and partial support there would
+    // risk under/over-enforcing a legality rule).
+    if !matches!(m.kind.as_str(), "set" | "increment" | "decrement" | "divide" | "multiply") {
         diags.push(Diagnostic {
             code: "modifier.value_type_unsupported".to_string(),
             message: format!("value modifier on entry {} has unsupported type {} (dropped)", entry_id, m.kind),

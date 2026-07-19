@@ -2,7 +2,7 @@ import type { IrCatalogue } from "@muster/domain";
 import { buildSymbolTable } from "./symbols";
 
 /** Resolve a constraint's target (a category or entry GUID) to a human name. */
-export type TargetNamer = (targetType: "category" | "entry", targetId: string) => string;
+export type TargetNamer = (targetType: "category" | "entry" | "force", targetId: string) => string;
 
 /**
  * Build a namer that turns a constraint's `targetId` into a readable name:

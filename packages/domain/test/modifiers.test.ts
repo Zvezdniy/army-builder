@@ -16,7 +16,12 @@ describe("IrModifier", () => {
   });
 
   it("rejects an unknown modifier type", () => {
-    expect(() => IrModifier.parse({ id: "m", type: "multiply", value: 2 })).toThrow();
+    expect(() => IrModifier.parse({ id: "m", type: "bogus-type", value: 2 })).toThrow();
+  });
+
+  it.each(["divide", "multiply"] as const)("accepts modifier type %s", (type) => {
+    const m = IrModifier.parse({ id: "m", type, value: 2 });
+    expect(m.type).toBe(type);
   });
 });
 
