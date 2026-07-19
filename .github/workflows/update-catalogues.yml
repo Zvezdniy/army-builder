@@ -80,14 +80,17 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Cache cargo build
+      - name: Cache cargo registry
         uses: actions/cache@v4
         with:
+          # Cache only downloaded crates, NOT packages/engine-parser/target. Caching
+          # the build output keyed on Cargo.toml alone served a stale binary when only
+          # .rs sources changed; the crate itself compiles quickly, so always rebuild
+          # it from the checked-out source and keep just the dependency download warm.
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            packages/engine-parser/target
-          key: cargo-${{ runner.os }}-${{ hashFiles('packages/engine-parser/Cargo.toml') }}
+          key: cargo-registry-${{ runner.os }}-${{ hashFiles('packages/engine-parser/Cargo.toml') }}
 
       - run: pnpm install --frozen-lockfile
 
