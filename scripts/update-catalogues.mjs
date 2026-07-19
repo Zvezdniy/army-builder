@@ -80,24 +80,31 @@ function main() {
           return p;
         });
 
-        // Parse: primary + supporting libraries + game system. Tree IR is large, so
-        // redirect stdout to a file rather than buffering it in the orchestrator.
+        // Parse: primary + supporting libraries + game system. Both the (large) tree
+        // on stdout and the (thousands of) diagnostics on stderr go to files — piping
+        // stderr through the orchestrator proved unreliable under CI's node (the
+        // summary line silently went missing), which hid why a faction parsed empty.
+        console.log(`  inputs: primary ${statSync(primaryPath).size}B` +
+          (libPaths.length ? `, libs [${libPaths.map((p) => statSync(p).size).join(", ")}]B` : ""));
         const treePath = join(tmp, `${cat.slug}.tree.json`);
-        const fd = openSync(treePath, "w");
+        const errPath = join(tmp, `${cat.slug}.stderr.txt`);
+        const fdOut = openSync(treePath, "w");
+        const fdErr = openSync(errPath, "w");
         let parse;
         try {
-          // Capture the parser's stderr (thousands of per-entry diagnostics) instead of
-          // inheriting it, and surface only the one-line summary below.
-          parse = spawnSync(PARSER_BIN, [primaryPath, ...libPaths, gstPath], {
-            stdio: ["ignore", fd, "pipe"],
-            maxBuffer: 64 * 1024 * 1024,
-          });
+          parse = spawnSync(PARSER_BIN, [primaryPath, ...libPaths, gstPath], { stdio: ["ignore", fdOut, fdErr] });
         } finally {
-          closeSync(fd);
+          closeSync(fdOut);
+          closeSync(fdErr);
         }
-        if (parse.status !== 0) throw new Error(`parser exited ${parse.status}`);
-        const diagLine = String(parse.stderr).split("\n").reverse().find((l) => l.startsWith("diagnostics:"));
-        if (diagLine) console.log(`  parser ${diagLine.trim()}`);
+        const stderr = readFileSync(errPath, "utf8");
+        rmSync(errPath, { force: true });
+        const diagLine = stderr.split("\n").reverse().find((l) => l.startsWith("diagnostics:"));
+        console.log(`  parser exit=${parse.status} — ${diagLine ? diagLine.trim() : "no diagnostics line"}`);
+        if (parse.status !== 0) {
+          const errLine = stderr.split("\n").reverse().find((l) => l.startsWith("parse error:"));
+          throw new Error(`parser exited ${parse.status}${errLine ? ` — ${errLine.trim()}` : ""}`);
+        }
 
         // Pack in a separate high-heap child (the tree can be ~200MB). Write to a temp
         // path and place it into OUT_DIR only after it validates, so a failed/thin run
