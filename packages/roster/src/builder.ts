@@ -181,8 +181,9 @@ export function optionsFor(
 
 /** How a choose-N group should be edited, derived from its selection constraints. */
 export type GroupControl =
-  | { kind: "single"; required: boolean } // max 1 — a radio (required when min >= 1)
-  | { kind: "multi"; max: number };       // max > 1 — up to `max` toggles (Infinity if unbounded)
+  | { kind: "single"; required: boolean }         // max 1 — a radio (required when min >= 1)
+  | { kind: "multi"; max: number }                // max > 1, single-count members — up to `max` toggles
+  | { kind: "counted"; min: number; max: number }; // max > 1, repeatable members — per-member steppers summing to [min,max]
 
 /** How a single option should be edited, derived from its own selection constraints. */
 export type OptionControl =
@@ -203,11 +204,31 @@ function ownBound(entry: IrEntry, type: "min" | "max", fallback: number): number
   return c?.value ?? fallback;
 }
 
-/** Classify how a group is edited: single-choice radio (max 1) vs up-to-N (max > 1). */
-export function groupControl(group: IrGroup): GroupControl {
+/** True when a group's members are repeatable models (each can appear more than
+ *  once), so the group is a count-distribution ("4-9 Terminators": pick how many
+ *  of each loadout, summing to the group bound) rather than a set of on/off toggles.
+ *  Detected from the members' OWN count bounds: a stepper (max > 1) or a fixed
+ *  multiplicity above 1. Empty/omitted members → not counted (the toggle default). */
+function membersAreCounted(members: IrEntry[]): boolean {
+  return members.some((m) => {
+    const c = optionControl(m);
+    return c.kind === "stepper" || (c.kind === "fixed" && c.count > 1);
+  });
+}
+
+/**
+ * Classify how a group is edited. Pass the group's member entries to detect the
+ * counted case (per-member steppers); without them a max>1 group falls back to
+ * `multi` toggles, which keeps existing name-only callers working.
+ * - `single` (max 1): a radio (required when min >= 1).
+ * - `counted` (max > 1, repeatable members): per-member count steppers summing to [min,max].
+ * - `multi` (max > 1, single-count members): up to `max` on/off toggles.
+ */
+export function groupControl(group: IrGroup, members: IrEntry[] = []): GroupControl {
   const max = groupBound(group, "max", Infinity);
   const min = groupBound(group, "min", 0);
   if (max === 1) return { kind: "single", required: min >= 1 };
+  if (max > 1 && membersAreCounted(members)) return { kind: "counted", min, max };
   return { kind: "multi", max };
 }
 
@@ -238,13 +259,91 @@ export function selectedGroupMembers(
     .map((c) => c.entryId);
 }
 
+/** Per-member model counts of a counted group directly under `selectionId`
+ *  (entryId → number of model selections; members with none are absent). A counted
+ *  member is stored as N distinct one-each selections, so this counts occurrences. */
+export function groupMemberCounts(
+  roster: Roster,
+  selectionId: string,
+  group: IrGroup,
+): Map<string, number> {
+  const counts = new Map<string, number>();
+  const sel = findTree(roster.selections, selectionId);
+  if (!sel) return counts;
+  for (const c of sel.selections) {
+    if (group.memberEntryIds.includes(c.entryId)) {
+      counts.set(c.entryId, (counts.get(c.entryId) ?? 0) + c.count);
+    }
+  }
+  return counts;
+}
+
+/** Total models chosen across all of a group's members under `selectionId` — the
+ *  quantity the group's min/max bounds (matches the engine's group aggregate). */
+export function groupTotal(roster: Roster, selectionId: string, group: IrGroup): number {
+  let total = 0;
+  for (const n of groupMemberCounts(roster, selectionId, group).values()) total += n;
+  return total;
+}
+
+/**
+ * Reconcile a counted group member to exactly `count` model selections under a unit.
+ * Each model is a distinct one-each selection carrying its own required loadout (via
+ * initialChildren), so per-model wargear constraints (e.g. "1 storm bolter per model")
+ * hold — a single count-N node would inflate that wargear's effectiveCount and trip
+ * those max-1 gates. Surplus models are dropped from the end; new ones are appended.
+ * `count <= 0` removes all of the member's models. Group/member bounds are the
+ * caller's/engine's concern; this primitive just matches the requested model count.
+ */
+export function setGroupMemberCount(
+  roster: Roster,
+  parentSelectionId: string,
+  group: IrGroup,
+  entryId: string,
+  count: number,
+  catalogue: IrCatalogue,
+): Roster {
+  if (!group.memberEntryIds.includes(entryId)) return roster;
+  const parent = findTree(roster.selections, parentSelectionId);
+  if (!parent) return roster;
+  const current = parent.selections.filter((c) => c.entryId === entryId);
+  const target = Math.max(0, count);
+  if (target === current.length) return roster;
+
+  if (target < current.length) {
+    // Drop the surplus models (the trailing ones), removing each subtree.
+    let next = roster;
+    for (const surplus of current.slice(target)) next = remove(next, surplus.id);
+    return next;
+  }
+
+  // Append the shortfall as fresh one-each model selections, each with its own loadout.
+  // An unresolvable member (dangling/cross-file link the parser could not inline) is a
+  // no-op: never inject an entryId absent from the catalogue — it would crash the
+  // datasheet/evaluate lookups (the same invariant groupSeed protects on seeding).
+  const memberEntry = findEntry(catalogue, entryId);
+  if (!memberEntry) return roster;
+  const additions: RosterSelection[] = [];
+  for (let i = 0; i < target - current.length; i += 1) additions.push(modelInstance(memberEntry));
+  return {
+    ...roster,
+    selections: mapTree(roster.selections, parentSelectionId, (s) => ({
+      ...s,
+      selections: [...s.selections, ...additions],
+    })),
+  };
+}
+
 /**
  * Toggle a group member under a unit while respecting the group's `max`.
- * - already selected → deselect it (remove).
+ * - already selected → deselect it (remove), UNLESS it is the sole pick of a
+ *   required single-choice group (a radio can't be emptied — you swap instead).
  * - room left (below max) → add it.
  * - at a max of 1 → swap: drop the current member, add the new one.
  * - at a max above 1 (full) → no-op (the group is full; deselect one first).
- * The group's `min` is intentionally NOT enforced here — the engine reports it.
+ * The group's `min` is intentionally NOT enforced for multi/counted groups — the
+ * engine reports it; enforcing it here only traps the user below a min they cannot
+ * reach through the UI (the original "can't deselect a below-min group" bug).
  */
 export function toggleGroupMember(
   roster: Roster,
@@ -257,14 +356,14 @@ export function toggleGroupMember(
 
   const members = parent.selections.filter((c) => group.memberEntryIds.includes(c.entryId));
   const already = members.find((c) => c.entryId === entryId);
+  const max = groupBound(group, "max", Infinity);
   if (already) {
-    // Deselect only if it keeps the group at or above its min (a required radio
-    // group cannot be emptied — you swap to another member instead).
-    const min = groupBound(group, "min", 0);
-    return members.length - 1 >= min ? remove(roster, already.id) : roster;
+    // A required radio (max 1, min >= 1) keeps its sole pick; you swap to another
+    // member instead of emptying it. Every other group deselects freely.
+    const required = max === 1 && groupBound(group, "min", 0) >= 1;
+    return required ? roster : remove(roster, already.id);
   }
 
-  const max = groupBound(group, "max", Infinity);
   if (members.length < max) return addOption(roster, parentSelectionId, entryId);
   if (max === 1) return addOption(remove(roster, members[0]!.id), parentSelectionId, entryId);
   return roster;
@@ -348,7 +447,23 @@ function initialChildren(entry: IrEntry): RosterSelection[] {
 
   for (const g of entry.groups ?? []) {
     const pick = groupSeed(g, childById);
-    if (pick !== undefined) kids.push(seedChild(pick));
+    if (pick === undefined) continue;
+    // A counted group (repeatable models, e.g. "4-9 Terminators") seeds its default
+    // member as N distinct one-each model selections up to the group minimum, so the
+    // unit starts at a legal squad size AND each model carries its own per-model
+    // wargear (a single count-N node would inflate that wargear's effectiveCount and
+    // trip per-model max-1 constraints). A single/toggle member stays one selection.
+    const members = g.memberEntryIds.map((id) => childById.get(id)).filter((m): m is IrEntry => m !== undefined);
+    const control = groupControl(g, members);
+    if (control.kind === "counted") {
+      // Seed as N one-each model instances (count:1), NOT seedChild — seedChild would
+      // apply the member's own min as the count, breaking the one-model-per-node
+      // invariant a counted group relies on (and re-inflating nested per-model wargear).
+      const n = Math.max(1, Math.min(control.min, ownBound(pick, "max", Infinity)));
+      for (let i = 0; i < n; i++) kids.push(modelInstance(pick));
+    } else {
+      kids.push(seedChild(pick));
+    }
   }
   for (const child of entry.children) {
     if (grouped.has(child.id)) continue; // group members handled above
@@ -386,6 +501,13 @@ function groupSeed(g: IrGroup, childById: Map<string, IrEntry>): IrEntry | undef
 function seedChild(child: IrEntry): RosterSelection {
   const count = Math.max(1, ownBound(child, "min", 0));
   return { id: crypto.randomUUID(), entryId: child.id, count, selections: initialChildren(child) };
+}
+
+/** One model instance of `entry` (count:1) with its own required loadout seeded. A
+ *  counted group member is stored as N of these so each model keeps its own wargear
+ *  at effectiveCount 1 — used by both group seeding and setGroupMemberCount. */
+function modelInstance(entry: IrEntry): RosterSelection {
+  return { id: crypto.randomUUID(), entryId: entry.id, count: 1, selections: initialChildren(entry) };
 }
 
 function mapTree(
