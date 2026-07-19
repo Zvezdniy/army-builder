@@ -218,7 +218,10 @@ fn resolve_group(group: &RawGroup, symbols: &SymbolTable, path: &mut HashSet<Str
     for link in &group.entry_links {
         resolve_link(link, symbols, path, budget, diags, depth, &mut children, &mut groups)?;
     }
-    resolve_info_links(&group.info_links, symbols, diags, &mut out.profiles);
+    // Group-level type="profile" infoLinks are not inlined: RawGroup.profiles is not
+    // mapped to IR (map_group emits no profiles), so inlining here would silently
+    // drop. Real 10e catalogues put profile infoLinks only on selectionEntry (0 on
+    // groups), so this is a documented no-op, not a gap.
     // A group's `defaultSelectionEntryId` may name one of its `<entryLink>`s by the
     // LINK's own id, but link members are inlined under their TARGET id (that is
     // what map_group emits as memberEntryIds and what lands in children). Remap the
