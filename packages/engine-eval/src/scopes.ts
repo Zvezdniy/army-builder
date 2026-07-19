@@ -26,6 +26,22 @@ function subtree(node: EvalNode, includeChildren: boolean): EvalNode[] {
   return acc;
 }
 
+// The counting set for a CONTAINER scope (parent/root-entry/type/foreign-id): the
+// anchor together with its selections. Unlike `self` (a membership subject that is
+// just the node when includeChildSelections is false), a container is counted by
+// what it holds — so `includeChildSelections=false` still reaches the anchor's
+// DIRECT children (BattleScribe's "direct selections"), and `true` its whole
+// subtree. This is what makes a "must contain N of this weapon" constraint
+// (scope=parent, e.g. Land Raider Redeemer needs 2 Flamestorm Cannons) count the
+// child weapons instead of only the empty parent. The anchor itself is included
+// (as it always was): container constraints are near-always self-referential on a
+// specific entry id, so the anchor never matches the (child) target and inclusion
+// is harmless; it also preserves the tested "parent carries category X" count.
+function containerScope(anchor: EvalNode, includeChildren: boolean): EvalNode[] {
+  if (includeChildren) return subtree(anchor, true);
+  return [anchor, ...anchor.children];
+}
+
 function nearestByType(node: EvalNode, pred: (t: string | undefined) => boolean): EvalNode | null {
   for (let n: EvalNode | null = node; n; n = n.parent) {
     if (pred(n.entry.type)) return n;
@@ -65,13 +81,13 @@ function scopeNodes(
     case "parent": {
       if (!node) return [];
       const anchor = node.parent ?? node;
-      return subtree(anchor, spec.includeChildSelections);
+      return containerScope(anchor, spec.includeChildSelections);
     }
     case "root-entry": {
       if (!node) return [];
       let top = node;
       while (top.parent) top = top.parent;
-      return subtree(top, spec.includeChildSelections);
+      return containerScope(top, spec.includeChildSelections);
     }
     case "ancestor": {
       if (!node) return [];
@@ -89,7 +105,7 @@ function scopeNodes(
           ? (t: string | undefined) => t === "model" || t === "unit"
           : (t: string | undefined) => t === spec.scope;
       const anchor = nearestByType(node, pred);
-      return anchor ? subtree(anchor, spec.includeChildSelections) : [];
+      return anchor ? containerScope(anchor, spec.includeChildSelections) : [];
     }
     // A non-keyword scope is a foreign-id scope: the entry id of an ancestor-or-self node
     // (e.g. a unit priced by its own model count carries scope = its own entry id). Resolve
@@ -99,7 +115,9 @@ function scopeNodes(
     default: {
       if (!node) return [];
       const anchor = nearestByEntryId(node, spec.scope);
-      return anchor ? subtree(anchor, spec.includeChildSelections) : [];
+      // A foreign-id scope is also a container (an ancestor-or-self node counted by
+      // its contents), so it takes the same direct-children semantics as parent.
+      return anchor ? containerScope(anchor, spec.includeChildSelections) : [];
     }
   }
 }
