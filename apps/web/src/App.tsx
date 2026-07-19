@@ -10,8 +10,13 @@ import { AddUnitPicker } from "./components/AddUnitPicker";
 import { SetupWizard } from "./components/SetupWizard";
 import { SetupBar } from "./components/SetupBar";
 import { LegalityPanel } from "./components/LegalityPanel";
-import { bundledDescriptor, loadRegistry, loadCatalogueFor, type CatalogueDescriptor } from "./registry/catalogueRegistry";
+import { bundledDescriptor, loadRegistry, loadCatalogueFor, normalizeBase, type CatalogueDescriptor } from "./registry/catalogueRegistry";
 import mini40k from "./mini40k.ir.json";
+
+// Where catalogue data is served from. Defaults to the app's own origin (Vite's
+// BASE_URL); set VITE_CATALOGUES_BASE to an absolute URL (e.g. a GitHub Pages host)
+// to fetch a hosted, auto-updated library — decoupling data refreshes from app deploys.
+const CATALOGUES_BASE = normalizeBase(import.meta.env.VITE_CATALOGUES_BASE || import.meta.env.BASE_URL);
 
 // The setup wizard auto-opens for a fresh army when the catalogue models detachments
 // but none is chosen yet (matched-play requires a detachment).
@@ -44,10 +49,9 @@ export function App() {
   // degrades to bundled-only (loadRegistry never throws).
   useEffect(() => {
     if (!boundFetch) return;
-    const base = import.meta.env.BASE_URL;
     // Only replace the bundled-only default when the manifest actually adds factions,
     // so a missing/empty manifest is a no-op (no needless re-render).
-    void loadRegistry(bundled, boundFetch, `${base}catalogues.json`).then((reg) => {
+    void loadRegistry(bundled, boundFetch, `${CATALOGUES_BASE}catalogues.json`).then((reg) => {
       if (reg.length > 1) setRegistry(reg);
     });
   }, []);
@@ -75,7 +79,7 @@ export function App() {
     setFactionError(undefined);
     // boundFetch may be undefined; loadCatalogueFor still resolves bundled sources and
     // rejects a remote one without fetch → caught below as a load error.
-    void loadCatalogueFor(desc, boundFetch, import.meta.env.BASE_URL)
+    void loadCatalogueFor(desc, boundFetch, CATALOGUES_BASE)
       .then((next) => applyCatalogue(next, desc.id))
       .catch(() => setFactionError(`Couldn't load ${desc.name}`));
   };
