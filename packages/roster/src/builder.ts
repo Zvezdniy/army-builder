@@ -166,6 +166,90 @@ function profileKey(p: IrProfile): string {
   return `${p.typeName}|${p.name}|${chars}`;
 }
 
+/** First "N+" save token in a string, or undefined. Handles a bare "4+", a sentence
+ *  ("The bearer has a 5+ invulnerable save"), and a footnoted "4+\n* …". */
+function extractSavePlus(text: string): string | undefined {
+  const m = text.match(/(\d+)\+/);
+  return m ? `${m[1]}+` : undefined;
+}
+
+/** A resolved invulnerable save for the statline chip: its value ("4+"), the granting
+ *  profile's name, and whether the source text is a BARE save (just the value) — a bare
+ *  one is redundant with the chip and dropped from the Abilities list by the web. */
+export interface InvulnSave {
+  value: string;
+  sourceName: string;
+  bare: boolean;
+}
+
+interface InvulnCandidate extends InvulnSave {
+  rank: number;  // numeric save (4 for "4+"); lower is better (invulns don't stack)
+  named: boolean; // class 1/2 (trusted by name) beats class 3 (text-scanned) on a tie
+}
+
+/**
+ * Resolve a unit's invulnerable save from its selected subtree, PROVENANCE-AWARE.
+ * Three candidate classes, best (lowest) wins:
+ *  1. any source — a `typeName === "Invulnerable Save"` profile (legacy/synthetic);
+ *  2. any source — an `Abilities` profile named /^invulnerable save/i (the infoLink/native
+ *     form, e.g. Logan Grimnar — trusted by NAME regardless of provenance);
+ *  3. WARGEAR source ONLY (a selection at depth>0 whose entry is not a model body — an
+ *     equipped item or enhancement) — an `Abilities` profile whose Description mentions an
+ *     invulnerable save with an `N+`.
+ * Class 3 is provenance-gated so faction/army rules collated onto the unit's OWN entry
+ * (e.g. "Veil of Ancients"), which share the phrasing, never leak in. `undefined` when no
+ * candidate parses to a save value (a broken chip never shows).
+ */
+export function invulnSave(
+  catalogue: IrCatalogue,
+  selection: RosterSelection,
+): InvulnSave | undefined {
+  const candidates: InvulnCandidate[] = [];
+  const consider = (value: string | undefined, sourceName: string, bare: boolean, named: boolean): void => {
+    if (!value) return;
+    const rank = parseInt(value, 10);
+    if (Number.isNaN(rank)) return;
+    candidates.push({ value, sourceName, bare, rank, named });
+  };
+
+  const visit = (sel: RosterSelection, depth: number): void => {
+    const entry = catalogueEntry(catalogue, sel.entryId)!;
+    const profiles = entry.profiles ?? [];
+    const isBody = profiles.some((p) => p.typeName === "Unit");
+    const isWargear = depth > 0 && !isBody;
+    for (const p of profiles) {
+      // Class 1: dedicated section — value is its single characteristic.
+      if (p.typeName === "Invulnerable Save") {
+        const raw = p.characteristics[0]?.value ?? "";
+        consider(extractSavePlus(raw) ?? (raw.trim() || undefined), p.name, true, true);
+        continue;
+      }
+      if (p.typeName !== "Abilities") continue;
+      const desc = p.characteristics.find((c) => c.name === "Description")?.value ?? "";
+      // Class 2: ability literally named "Invulnerable Save" — trusted by name.
+      if (/^invulnerable save/i.test(p.name)) {
+        const v = extractSavePlus(desc);
+        consider(v, p.name, desc.trim() === v, true);
+        continue;
+      }
+      // Class 3: wargear-sourced ability whose text grants an invuln (provenance-gated).
+      if (isWargear && /invulnerable save/i.test(desc)) {
+        consider(extractSavePlus(desc), p.name, false, false);
+      }
+    }
+    for (const child of sel.selections) visit(child, depth + 1);
+  };
+
+  visit(selection, 0);
+  if (candidates.length === 0) return undefined;
+  // Best save first; tie-break prefers a bare (unconditional) then a named candidate.
+  candidates.sort(
+    (a, b) => a.rank - b.rank || Number(b.bare) - Number(a.bare) || Number(b.named) - Number(a.named),
+  );
+  const best = candidates[0]!;
+  return { value: best.value, sourceName: best.sourceName, bare: best.bare };
+}
+
 /** What can be added under a selection: the entry's child options and its choose-N groups. */
 export function optionsFor(
   roster: Roster,
