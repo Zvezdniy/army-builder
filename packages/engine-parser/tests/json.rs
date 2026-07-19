@@ -131,6 +131,71 @@ fn modifier_groups_flatten_into_owning_entry_modifiers_with_group_conditions_and
 }
 
 #[test]
+fn alias_null_is_treated_as_no_alias() {
+    // Real BSData sometimes encodes `alias` as explicit JSON `null` rather
+    // than omitting the key or using a string/array. This must not crash
+    // `string_or_string_seq` the way an array once crashed a `String`-typed
+    // field (the bug fixed in bef0350) — null should mean "no alias".
+    let json = br#"{"gameSystem":{"id":"gs","name":"GS","revision":1,
+      "rules":[{"id":"r","name":"N","alias":null,"description":"d"}]}}"#;
+    let raw = parse_raw_json(json, &mut Vec::new()).unwrap();
+    assert_eq!(raw.rules.get("N").map(String::as_str), Some("d"));
+    assert_eq!(raw.rules.len(), 1, "no extra alias key inserted for a null alias");
+}
+
+#[test]
+fn modifier_group_or_type_emits_diagnostic() {
+    // Every modifierGroup observed in real wh40k-11e data uses "type":"and",
+    // but the reader must not silently mis-flatten a non-"and" group (that
+    // would widen OR semantics into AND). It should still flatten as AND
+    // (best-effort) while loudly diagnosing the unsupported type.
+    let json = br#"{"catalogue":{"id":"c","name":"C","revision":1,
+      "selectionEntries":[{"id":"e.u","name":"U","type":"unit",
+        "modifierGroups":[{
+          "type":"or",
+          "modifiers":[{"type":"set","value":6,"field":"target.1"}]
+        }]}]}}"#;
+    let mut diags = Vec::new();
+    let raw = parse_raw_json(json, &mut diags).unwrap();
+    let u = raw.entries.iter().find(|e| e.id == "e.u").unwrap();
+    assert_eq!(u.modifiers.len(), 1, "still flattened as AND (best-effort)");
+    assert!(
+        diags.iter().any(|d| d.code == "modifier_group.non_and_unsupported" && d.message.contains("or")),
+        "expected a diagnostic naming the unsupported type; got {diags:?}"
+    );
+}
+
+#[test]
+fn modifier_group_conditions_and_condition_groups_both_anded_onto_each_modifier() {
+    // A modifierGroup can carry BOTH group-level `conditions` and group-level
+    // `conditionGroups` at once (seen in Leagues of Votann, Imperial Knights
+    // Library, Necrons, Thousand Sons) — both must be ANDed onto every
+    // flattened child modifier's respective lists.
+    let json = br#"{"catalogue":{"id":"c","name":"C","revision":1,
+      "selectionEntries":[{"id":"e.u","name":"U","type":"unit",
+        "modifierGroups":[{
+          "type":"and",
+          "conditions":[{"type":"atLeast","value":1,"field":"selections","scope":"self",
+            "childId":"child.1"}],
+          "conditionGroups":[{"type":"or","conditions":[
+            {"type":"instanceOf","value":1,"field":"selections","scope":"self","childId":"child.9"}]}],
+          "modifiers":[
+            {"type":"set","value":6,"field":"target.1"},
+            {"type":"increment","value":2,"field":"target.2"}
+          ]
+        }]}]}}"#;
+    let mut diags = Vec::new();
+    let raw = parse_raw_json(json, &mut diags).unwrap();
+    let u = raw.entries.iter().find(|e| e.id == "e.u").unwrap();
+    assert_eq!(u.modifiers.len(), 2);
+    for m in &u.modifiers {
+        assert!(m.conditions.iter().any(|c| c.child_id == "child.1"), "group-level conditions anded on");
+        assert_eq!(m.condition_groups.len(), 1, "group-level conditionGroups anded on");
+        assert_eq!(m.condition_groups[0].conditions[0].child_id, "child.9");
+    }
+}
+
+#[test]
 fn xml_and_json_produce_identical_ir() {
     let (xml_ir, _) = engine_parser::parse_file(Path::new("tests/fixtures/parity/twin.cat"), None).unwrap();
     let (json_ir, _) = engine_parser::parse_file(Path::new("tests/fixtures/parity/twin.json"), None).unwrap();

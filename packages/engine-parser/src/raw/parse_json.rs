@@ -65,6 +65,11 @@ where
             while let Some(s) = seq.next_element::<String>()? { out.push(s); }
             Ok(out)
         }
+        fn visit_unit<E: serde::de::Error>(self) -> Result<Self::Value, E> {
+            // Explicit JSON `null` (as opposed to an absent key) — treat as
+            // "no alias", the same as an empty array or a missing field.
+            Ok(Vec::new())
+        }
     }
     deserializer.deserialize_any(V)
 }
@@ -134,17 +139,18 @@ struct JsonModifier {
 }
 
 /// A `modifierGroup` bundles several sibling `modifiers` under one shared
-/// `conditions` list (BS-JSON never nests `conditionGroups` inside a real
-/// modifierGroup in observed data, but the field is accepted for symmetry
-/// with `JsonModifier`/`JsonConditionGroup`). All 218 modifierGroups observed
-/// in the real wh40k-11e Space Marines catalogue use `"type": "and"`, so this
-/// reader treats the group's conditions as ANDing onto each contained
-/// modifier's own conditions (see `flatten_modifier_groups`) rather than
-/// modelling `type`/`or` semantics.
+/// `conditions` list, and — as also seen in real data (e.g. Leagues of
+/// Votann, Imperial Knights Library, Necrons, Thousand Sons) — a shared
+/// `conditionGroups` list too. Both are ANDed onto each flattened child
+/// modifier's own conditions/conditionGroups (see `flatten_modifier_groups`).
+/// All 218 modifierGroups observed in the real wh40k-11e Space Marines
+/// catalogue use `"type": "and"`; a non-"and" `type` is diagnosed (see
+/// `flatten_modifier_groups`) rather than modelled, and is still flattened
+/// as AND on a best-effort basis.
 #[derive(Deserialize, Default)]
 #[serde(default, rename_all = "camelCase")]
 struct JsonModifierGroup {
-    #[serde(rename = "type")] _kind: String,
+    #[serde(rename = "type")] kind: String,
     modifiers: Vec<JsonModifier>,
     conditions: Vec<JsonCondition>,
     condition_groups: Vec<JsonConditionGroup>,
@@ -211,7 +217,7 @@ fn map_cat(c: JsonCat, diags: &mut Vec<Diagnostic>) -> RawCatalogue {
         catalogue_links: c.catalogue_links.iter()
             .map(|l| RawCatalogueLink { target_id: l.target_id.clone(), import_root_entries: l.import_root_entries })
             .collect(),
-        entry_links: c.entry_links.iter().map(map_entry_link).collect(),
+        entry_links: c.entry_links.iter().map(|l| map_entry_link(l, diags)).collect(),
     }
 }
 
@@ -227,10 +233,10 @@ fn map_entry(e: &JsonEntry, diags: &mut Vec<Diagnostic>) -> RawEntry {
         costs: map_costs(&e.costs),
         category_links: map_category_links(&e.category_links),
         constraints: map_constraints(&e.constraints),
-        modifiers: map_modifiers(&e.modifiers, &e.modifier_groups),
+        modifiers: map_modifiers(&e.modifiers, &e.modifier_groups, diags),
         entries: e.selection_entries.iter().map(|c| map_entry(c, diags)).collect(),
         groups: e.selection_entry_groups.iter().map(|g| map_group(g, diags)).collect(),
-        entry_links: e.entry_links.iter().map(map_entry_link).collect(),
+        entry_links: e.entry_links.iter().map(|l| map_entry_link(l, diags)).collect(),
         profiles: map_profiles(&e.profiles),
     }
 }
@@ -241,17 +247,17 @@ fn map_group(g: &JsonGroup, diags: &mut Vec<Diagnostic>) -> RawGroup {
         default_selection_entry_id: g.default_selection_entry_id.clone(), hidden: g.hidden,
         entries: g.selection_entries.iter().map(|c| map_entry(c, diags)).collect(),
         groups: g.selection_entry_groups.iter().map(|sg| map_group(sg, diags)).collect(),
-        entry_links: g.entry_links.iter().map(map_entry_link).collect(),
+        entry_links: g.entry_links.iter().map(|l| map_entry_link(l, diags)).collect(),
         constraints: map_constraints(&g.constraints),
-        modifiers: map_modifiers(&g.modifiers, &g.modifier_groups),
+        modifiers: map_modifiers(&g.modifiers, &g.modifier_groups, diags),
         profiles: map_profiles(&g.profiles),
     }
 }
 
-fn map_entry_link(l: &JsonEntryLink) -> RawEntryLink {
+fn map_entry_link(l: &JsonEntryLink, diags: &mut Vec<Diagnostic>) -> RawEntryLink {
     RawEntryLink {
         id: l.id.clone(), target_id: l.target_id.clone(), link_type: l.link_type.clone(),
-        hidden: l.hidden, modifiers: map_modifiers(&l.modifiers, &l.modifier_groups),
+        hidden: l.hidden, modifiers: map_modifiers(&l.modifiers, &l.modifier_groups, diags),
     }
 }
 
@@ -364,9 +370,15 @@ fn map_one_modifier(m: &JsonModifier) -> RawModifier {
 /// conditionGroups are appended (ANDed) onto it and the group's `repeats`
 /// (if any) ORs into its `has_repeats` flag. The flattened modifiers are
 /// appended to the owning entry/group's own `modifiers` list.
-fn flatten_modifier_groups(groups: &[JsonModifierGroup]) -> Vec<RawModifier> {
+fn flatten_modifier_groups(groups: &[JsonModifierGroup], diags: &mut Vec<Diagnostic>) -> Vec<RawModifier> {
     let mut out = Vec::new();
     for g in groups {
+        if !g.kind.is_empty() && g.kind != "and" {
+            diags.push(Diagnostic {
+                code: "modifier_group.non_and_unsupported".into(),
+                message: format!("modifier group with type {:?} flattened as AND (unsupported)", g.kind),
+            });
+        }
         let group_conditions = map_conditions(&g.conditions);
         let group_condition_groups = map_condition_groups(&g.condition_groups);
         let group_has_repeats = !g.repeats.is_empty();
@@ -381,9 +393,9 @@ fn flatten_modifier_groups(groups: &[JsonModifierGroup]) -> Vec<RawModifier> {
     out
 }
 
-fn map_modifiers(ms: &[JsonModifier], groups: &[JsonModifierGroup]) -> Vec<RawModifier> {
+fn map_modifiers(ms: &[JsonModifier], groups: &[JsonModifierGroup], diags: &mut Vec<Diagnostic>) -> Vec<RawModifier> {
     let mut out: Vec<RawModifier> = ms.iter().map(map_one_modifier).collect();
-    out.extend(flatten_modifier_groups(groups));
+    out.extend(flatten_modifier_groups(groups, diags));
     out
 }
 
@@ -410,6 +422,14 @@ mod tests {
     }
 
     #[test]
+    fn alias_null_deserializes_as_empty_vec() {
+        let r: JsonRule = serde_json::from_str(
+            r#"{"id":"r","name":"N","alias":null,"description":"d"}"#,
+        ).unwrap();
+        assert!(r.alias.is_empty());
+    }
+
+    #[test]
     fn map_modifier_carries_repeats_and_nested_conditions() {
         let m = JsonModifier {
             kind: "set".into(), field: "hidden".into(), value: serde_json::json!(true),
@@ -417,7 +437,7 @@ mod tests {
                 scope: "roster".into(), value: 1.0, child_id: "x".into(), include_child_selections: true }],
             condition_groups: vec![], repeats: vec![serde_json::json!({})],
         };
-        let out = map_modifiers(std::slice::from_ref(&m), &[]);
+        let out = map_modifiers(std::slice::from_ref(&m), &[], &mut Vec::new());
         assert_eq!((out[0].kind.as_str(), out[0].value, out[0].value_raw.as_str()), ("set", 0.0, "true"));
         assert!(out[0].has_repeats);
         assert_eq!(out[0].conditions[0].comparator, "instanceOf");
