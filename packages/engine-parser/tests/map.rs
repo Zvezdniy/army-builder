@@ -111,6 +111,9 @@ fn maps_force_constraints_nested_in_each_category_link() {
 /// represents "sum over the whole force" directly, so it is mapped, not dropped.
 /// (Regression guard for the walking-skeleton behaviour this replaces: such a
 /// constraint used to be diagnostic-dropped with no IR representation.)
+/// Uses field="selections" (not a points/pts cost type) so this exercises the
+/// force-global mapping mechanism in isolation from the points-sentinel skip
+/// covered separately by `skips_force_global_points_sentinel_constraint`.
 #[test]
 fn maps_force_global_constraint_with_force_target_type() {
     let xml = br#"<?xml version="1.0" encoding="utf-8"?>
@@ -119,7 +122,7 @@ fn maps_force_global_constraint_with_force_target_type() {
   <forceEntries>
     <forceEntry id="fe" name="Detachment">
       <constraints>
-        <constraint id="fg.max" type="max" value="2000" field="pts" scope="force"/>
+        <constraint id="fg.max" type="max" value="20" field="selections" scope="force"/>
       </constraints>
     </forceEntry>
   </forceEntries>
@@ -130,9 +133,9 @@ fn maps_force_global_constraint_with_force_target_type() {
         .unwrap_or_else(|| panic!("force-global constraint fg.max missing (dropped): {:?}", ir.force_constraints));
     assert_eq!(c.target_type, "force");
     assert_eq!(c.target_id, "fe");
-    assert_eq!(c.field, "points");
+    assert_eq!(c.field, "selections");
     assert_eq!(c.scope, "force");
-    assert_eq!(c.value, 2000.0);
+    assert_eq!(c.value, 20.0);
     assert!(!diags.iter().any(|d| d.code == "constraint.force_global_unrepresentable"),
         "force-global constraint should no longer be diagnosed as unrepresentable: {:?}", diags);
 }
@@ -168,6 +171,55 @@ fn maps_force_global_enhancements_cost_type_constraint() {
         "cost-type field should map to its name, not drop: {:?}", diags);
     assert!(!diags.iter().any(|d| d.code == "constraint.force_global_unrepresentable"),
         "force-global constraint should no longer be diagnosed as unrepresentable: {:?}", diags);
+}
+
+/// A force-level constraint whose mapped field is the POINTS cost type (e.g. a
+/// sibling Crusade Force's `max 0 pts` at scope=force) is a BattleScribe
+/// accounting/game-size sentinel, not a matched-play rule — mapping it would
+/// flag every non-empty roster as "too many pts, max 0". It must be skipped
+/// (not emitted into forceConstraints) with a
+/// `constraint.force_points_sentinel_skipped` diagnostic, while a sibling
+/// non-points force constraint on the same forceEntry (e.g. "max 2
+/// Enhancements") still maps normally.
+#[test]
+fn skips_force_global_points_sentinel_constraint() {
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <costTypes>
+    <costType id="pts" name="pts"/>
+    <costType id="ct.enh" name="Enhancements"/>
+  </costTypes>
+  <forceEntries>
+    <forceEntry id="fe.crusade" name="Crusade Force">
+      <constraints>
+        <constraint id="fc.pts.sentinel" type="max" value="0" field="pts" scope="force"/>
+        <constraint id="fc.max2enh" type="max" value="2" field="ct.enh" scope="force"/>
+      </constraints>
+    </forceEntry>
+  </forceEntries>
+</catalogue>"#;
+    let raw = resolve(parse_raw(xml).unwrap()).unwrap();
+    let (ir, diags) = to_ir(&raw);
+    // the points sentinel is NOT emitted into forceConstraints
+    assert!(
+        !ir.force_constraints.iter().any(|c| c.id == "fc.pts.sentinel"),
+        "points-sentinel force constraint must be dropped: {:?}",
+        ir.force_constraints
+    );
+    // ...and a diagnostic fires for it
+    assert!(
+        diags.iter().any(|d| d.code == "constraint.force_points_sentinel_skipped"
+            && d.message.contains("fc.pts.sentinel")),
+        "expected force_points_sentinel_skipped diagnostic: {:?}",
+        diags
+    );
+    // the sibling non-points force constraint still maps normally
+    let enh = ir.force_constraints.iter().find(|c| c.id == "fc.max2enh")
+        .unwrap_or_else(|| panic!("non-points force constraint fc.max2enh missing: {:?}", ir.force_constraints));
+    assert_eq!(enh.field, "Enhancements");
+    assert_eq!(enh.target_type, "force");
+    assert_eq!(enh.value, 2.0);
 }
 
 #[test]

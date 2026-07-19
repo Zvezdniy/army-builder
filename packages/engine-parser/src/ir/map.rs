@@ -42,6 +42,23 @@ fn map_force_constraints(force: &crate::raw::RawForce, cat: &RawCatalogue, diags
     }
     for c in &force.constraints {
         if let Some(mapped) = map_constraint(c, "force", &force.id, cat, diags) {
+            // A force-level constraint on the POINTS cost type is a BattleScribe
+            // accounting/game-size sentinel (e.g. the Army Roster's inert `max 0 pts`,
+            // or a sibling Crusade Force's `max 0 pts` at force scope), never a
+            // matched-play rule — the real points ceiling is the roster's user-chosen
+            // pointsLimit. Emitting it would flag every non-empty roster as "too many
+            // pts, max 0" (the Crusade one is scope=force, so eval does evaluate it).
+            // Drop it; keep every non-points force rule (e.g. "max 2 Enhancements").
+            if mapped.field == "pts" || mapped.field == "points" {
+                diags.push(Diagnostic {
+                    code: "constraint.force_points_sentinel_skipped".to_string(),
+                    message: format!(
+                        "force {} constraint {} caps the points cost type ({}); dropped as a game-size sentinel",
+                        force.id, mapped.id, mapped.field
+                    ),
+                });
+                continue;
+            }
             out.push(mapped);
         }
     }

@@ -56,9 +56,21 @@ export function checkConstraint(
   const violated = constraint.type === "max" ? limit >= 0 && actual > limit : actual < limit;
   if (!violated) return null;
 
-  // Prefer a resolved human name; without a resolver fall back to the raw id.
-  const name = nameOf ? nameOf(constraint.targetType, constraint.targetId) : constraint.targetId;
-  const target = `${constraint.targetType} "${name}"`;
+  // A force-target constraint (targetType: "force") sums over the whole force
+  // with no category/entry filter — its targetId is just the forceEntry's raw
+  // GUID, which is meaningless to a user (e.g. `force "bb9d-299a-ed60-2d8a"`).
+  // Its `field` is the actual human-facing subject (a cost-type name like
+  // "Enhancements", or "selections" for a plain army-wide selection count), so
+  // use that as the label instead. Category/entry targets keep the id-derived
+  // `${targetType} "${name}"` form below.
+  let target: string;
+  if (constraint.targetType === "force") {
+    target = constraint.field === "selections" ? "army selections" : constraint.field;
+  } else {
+    // Prefer a resolved human name; without a resolver fall back to the raw id.
+    const name = nameOf ? nameOf(constraint.targetType, constraint.targetId) : constraint.targetId;
+    target = `${constraint.targetType} "${name}"`;
+  }
   const message =
     constraint.type === "max"
       ? `Too many ${target}: ${actual} exceeds max ${limit}`
