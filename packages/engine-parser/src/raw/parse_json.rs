@@ -33,7 +33,41 @@ struct JsonCategoryEntry { id: String, name: String }
 
 #[derive(Deserialize, Default)]
 #[serde(default, rename_all = "camelCase")]
-struct JsonRule { id: String, name: String, alias: String, description: String }
+struct JsonRule {
+    id: String, name: String,
+    #[serde(deserialize_with = "string_or_string_seq")] alias: Vec<String>,
+    description: String,
+}
+
+/// Real BSData JSON encodes a rule's `alias` as either a single string (the
+/// hand-written mini fixtures) or an array of strings (real wh40k-11e data,
+/// e.g. `"alias": ["PISTOL"]` — a rule can have multiple alias keywords).
+/// This is the field that made the raw SM 11e catalogue fail to parse:
+/// `serde` rejected the JSON array against a `String`-typed field.
+fn string_or_string_seq<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    struct V;
+    impl<'de> serde::de::Visitor<'de> for V {
+        type Value = Vec<String>;
+        fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            f.write_str("a string or an array of strings")
+        }
+        fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<Self::Value, E> {
+            Ok(vec![v.to_string()])
+        }
+        fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+        where
+            A: serde::de::SeqAccess<'de>,
+        {
+            let mut out = Vec::new();
+            while let Some(s) = seq.next_element::<String>()? { out.push(s); }
+            Ok(out)
+        }
+    }
+    deserializer.deserialize_any(V)
+}
 
 #[derive(Deserialize, Default)]
 #[serde(default, rename_all = "camelCase")]
@@ -41,6 +75,7 @@ struct JsonEntry {
     id: String, name: String, #[serde(rename = "type")] entry_type: String, hidden: bool,
     costs: Vec<JsonCost>, category_links: Vec<JsonCategoryLink>,
     constraints: Vec<JsonConstraint>, modifiers: Vec<JsonModifier>,
+    modifier_groups: Vec<JsonModifierGroup>,
     selection_entries: Vec<JsonEntry>, selection_entry_groups: Vec<JsonGroup>,
     entry_links: Vec<JsonEntryLink>, profiles: Vec<JsonProfile>,
     rules: Vec<JsonRule>, associations: Vec<serde_json::Value>,
@@ -52,14 +87,15 @@ struct JsonGroup {
     id: String, name: String, default_selection_entry_id: String, hidden: bool,
     selection_entries: Vec<JsonEntry>, selection_entry_groups: Vec<JsonGroup>,
     entry_links: Vec<JsonEntryLink>, constraints: Vec<JsonConstraint>,
-    modifiers: Vec<JsonModifier>, profiles: Vec<JsonProfile>, rules: Vec<JsonRule>,
+    modifiers: Vec<JsonModifier>, modifier_groups: Vec<JsonModifierGroup>,
+    profiles: Vec<JsonProfile>, rules: Vec<JsonRule>,
 }
 
 #[derive(Deserialize, Default)]
 #[serde(default, rename_all = "camelCase")]
 struct JsonEntryLink {
     id: String, target_id: String, #[serde(rename = "type")] link_type: String,
-    hidden: bool, modifiers: Vec<JsonModifier>,
+    hidden: bool, modifiers: Vec<JsonModifier>, modifier_groups: Vec<JsonModifierGroup>,
 }
 
 #[derive(Deserialize, Default)]
@@ -94,6 +130,24 @@ struct JsonModifier {
     #[serde(rename = "type")] kind: String, field: String,
     value: serde_json::Value,
     conditions: Vec<JsonCondition>, condition_groups: Vec<JsonConditionGroup>,
+    repeats: Vec<serde_json::Value>,
+}
+
+/// A `modifierGroup` bundles several sibling `modifiers` under one shared
+/// `conditions` list (BS-JSON never nests `conditionGroups` inside a real
+/// modifierGroup in observed data, but the field is accepted for symmetry
+/// with `JsonModifier`/`JsonConditionGroup`). All 218 modifierGroups observed
+/// in the real wh40k-11e Space Marines catalogue use `"type": "and"`, so this
+/// reader treats the group's conditions as ANDing onto each contained
+/// modifier's own conditions (see `flatten_modifier_groups`) rather than
+/// modelling `type`/`or` semantics.
+#[derive(Deserialize, Default)]
+#[serde(default, rename_all = "camelCase")]
+struct JsonModifierGroup {
+    #[serde(rename = "type")] _kind: String,
+    modifiers: Vec<JsonModifier>,
+    conditions: Vec<JsonCondition>,
+    condition_groups: Vec<JsonConditionGroup>,
     repeats: Vec<serde_json::Value>,
 }
 
@@ -173,7 +227,7 @@ fn map_entry(e: &JsonEntry, diags: &mut Vec<Diagnostic>) -> RawEntry {
         costs: map_costs(&e.costs),
         category_links: map_category_links(&e.category_links),
         constraints: map_constraints(&e.constraints),
-        modifiers: map_modifiers(&e.modifiers),
+        modifiers: map_modifiers(&e.modifiers, &e.modifier_groups),
         entries: e.selection_entries.iter().map(|c| map_entry(c, diags)).collect(),
         groups: e.selection_entry_groups.iter().map(|g| map_group(g, diags)).collect(),
         entry_links: e.entry_links.iter().map(map_entry_link).collect(),
@@ -189,7 +243,7 @@ fn map_group(g: &JsonGroup, diags: &mut Vec<Diagnostic>) -> RawGroup {
         groups: g.selection_entry_groups.iter().map(|sg| map_group(sg, diags)).collect(),
         entry_links: g.entry_links.iter().map(map_entry_link).collect(),
         constraints: map_constraints(&g.constraints),
-        modifiers: map_modifiers(&g.modifiers),
+        modifiers: map_modifiers(&g.modifiers, &g.modifier_groups),
         profiles: map_profiles(&g.profiles),
     }
 }
@@ -197,7 +251,7 @@ fn map_group(g: &JsonGroup, diags: &mut Vec<Diagnostic>) -> RawGroup {
 fn map_entry_link(l: &JsonEntryLink) -> RawEntryLink {
     RawEntryLink {
         id: l.id.clone(), target_id: l.target_id.clone(), link_type: l.link_type.clone(),
-        hidden: l.hidden, modifiers: map_modifiers(&l.modifiers),
+        hidden: l.hidden, modifiers: map_modifiers(&l.modifiers, &l.modifier_groups),
     }
 }
 
@@ -231,7 +285,9 @@ fn collect_rules(c: &JsonCat, out: &mut BTreeMap<String, String>) {
 fn insert_rule(r: &JsonRule, out: &mut BTreeMap<String, String>) {
     if r.description.is_empty() { return; }
     if !r.name.is_empty() { out.insert(r.name.clone(), r.description.clone()); }
-    if !r.alias.is_empty() { out.insert(r.alias.clone(), r.description.clone()); }
+    for alias in &r.alias {
+        if !alias.is_empty() { out.insert(alias.clone(), r.description.clone()); }
+    }
 }
 fn collect_rules_entry(e: &JsonEntry, out: &mut BTreeMap<String, String>) {
     for r in &e.rules { insert_rule(r, out); }
@@ -290,16 +346,45 @@ fn map_condition_groups(gs: &[JsonConditionGroup]) -> Vec<RawConditionGroup> {
         groups: map_condition_groups(&g.condition_groups),
     }).collect()
 }
-fn map_modifiers(ms: &[JsonModifier]) -> Vec<RawModifier> {
-    ms.iter().map(|m| {
-        let (value, value_raw) = modifier_value(&m.value);
-        RawModifier {
-            kind: m.kind.clone(), field: m.field.clone(), value, value_raw,
-            conditions: map_conditions(&m.conditions),
-            condition_groups: map_condition_groups(&m.condition_groups),
-            has_repeats: !m.repeats.is_empty(),
+fn map_one_modifier(m: &JsonModifier) -> RawModifier {
+    let (value, value_raw) = modifier_value(&m.value);
+    RawModifier {
+        kind: m.kind.clone(), field: m.field.clone(), value, value_raw,
+        conditions: map_conditions(&m.conditions),
+        condition_groups: map_condition_groups(&m.condition_groups),
+        has_repeats: !m.repeats.is_empty(),
+    }
+}
+
+/// BS-JSON's `modifierGroups` bundles sibling `modifiers` under a shared
+/// `conditions` list (and, rarely, a shared `repeats`). Every modifierGroup
+/// observed in real wh40k-11e data uses `"type": "and"`, so — as a faithful
+/// but simple first cut — each contained modifier is mapped exactly as a
+/// standalone `<modifier>` would be, then the group's own conditions/
+/// conditionGroups are appended (ANDed) onto it and the group's `repeats`
+/// (if any) ORs into its `has_repeats` flag. The flattened modifiers are
+/// appended to the owning entry/group's own `modifiers` list.
+fn flatten_modifier_groups(groups: &[JsonModifierGroup]) -> Vec<RawModifier> {
+    let mut out = Vec::new();
+    for g in groups {
+        let group_conditions = map_conditions(&g.conditions);
+        let group_condition_groups = map_condition_groups(&g.condition_groups);
+        let group_has_repeats = !g.repeats.is_empty();
+        for m in &g.modifiers {
+            let mut rm = map_one_modifier(m);
+            rm.conditions.extend(group_conditions.iter().cloned());
+            rm.condition_groups.extend(group_condition_groups.iter().cloned());
+            rm.has_repeats = rm.has_repeats || group_has_repeats;
+            out.push(rm);
         }
-    }).collect()
+    }
+    out
+}
+
+fn map_modifiers(ms: &[JsonModifier], groups: &[JsonModifierGroup]) -> Vec<RawModifier> {
+    let mut out: Vec<RawModifier> = ms.iter().map(map_one_modifier).collect();
+    out.extend(flatten_modifier_groups(groups));
+    out
 }
 
 #[cfg(test)]
@@ -332,7 +417,7 @@ mod tests {
                 scope: "roster".into(), value: 1.0, child_id: "x".into(), include_child_selections: true }],
             condition_groups: vec![], repeats: vec![serde_json::json!({})],
         };
-        let out = map_modifiers(std::slice::from_ref(&m));
+        let out = map_modifiers(std::slice::from_ref(&m), &[]);
         assert_eq!((out[0].kind.as_str(), out[0].value, out[0].value_raw.as_str()), ("set", 0.0, "true"));
         assert!(out[0].has_repeats);
         assert_eq!(out[0].conditions[0].comparator, "instanceOf");

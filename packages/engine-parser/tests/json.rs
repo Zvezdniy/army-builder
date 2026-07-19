@@ -74,6 +74,63 @@ fn maps_full_entry_tree_with_links_groups_and_associations_drop() {
 }
 
 #[test]
+fn rule_alias_as_array_is_indexed_by_each_alias() {
+    // Real wh40k-11e BSData encodes a rule's `alias` as an array of strings
+    // (e.g. `"alias": ["PISTOL"]`), not a plain string like the mini
+    // fixtures above. This is the true root cause of the real SM 11e parse
+    // failure: `invalid type: sequence, expected a string` at the `alias`
+    // field of `gameSystem.sharedRules[0]`.
+    let json = br#"{"gameSystem":{"id":"gs","name":"GS","revision":1,
+      "sharedRules":[{"id":"r1","name":"Pistol","alias":["PISTOL","SIDEARM"],
+        "description":"Pistol rules text."}]}}"#;
+    let raw = parse_raw_json(json, &mut Vec::new()).unwrap();
+    assert_eq!(raw.rules.get("Pistol").map(String::as_str), Some("Pistol rules text."));
+    assert_eq!(raw.rules.get("PISTOL").map(String::as_str), Some("Pistol rules text."));
+    assert_eq!(raw.rules.get("SIDEARM").map(String::as_str), Some("Pistol rules text."));
+}
+
+#[test]
+fn modifier_groups_flatten_into_owning_entry_modifiers_with_group_conditions_anded() {
+    // Mirrors the real shape found around line 6117 of the wh40k-11e Space
+    // Marines catalogue: a `selectionEntry` with `modifierGroups`, each
+    // group holding one or more `modifiers`, one of which carries a
+    // `repeats` array (a rare per-modifier-group repeat, as well as a
+    // per-modifier repeat) and `conditionGroups`.
+    let json = br#"{"catalogue":{"id":"c","name":"C","revision":1,
+      "selectionEntries":[{"id":"e.u","name":"U","type":"unit",
+        "modifierGroups":[{
+          "type":"and",
+          "conditions":[{"type":"atLeast","value":1,"field":"selections","scope":"self",
+            "childId":"child.1","shared":true,"includeChildSelections":true}],
+          "modifiers":[
+            {"type":"set","value":6,"field":"target.1",
+              "conditionGroups":[{"type":"or","conditions":[
+                {"type":"instanceOf","value":1,"field":"selections","scope":"self",
+                  "childId":"child.2","shared":true,"includeChildSelections":true}]}]},
+            {"type":"increment","value":2,"field":"target.2",
+              "repeats":[{"value":1,"repeats":1,"field":"selections","scope":"self",
+                "childId":"child.3","shared":true,"roundUp":false,"includeChildSelections":true}]}
+          ]
+        }]}]}}"#;
+    let mut diags = Vec::new();
+    let raw = parse_raw_json(json, &mut diags).unwrap();
+    let u = raw.entries.iter().find(|e| e.id == "e.u").unwrap();
+    assert_eq!(u.modifiers.len(), 2, "both modifiers from the modifierGroup land on the owning entry");
+
+    let set_mod = u.modifiers.iter().find(|m| m.field == "target.1").unwrap();
+    assert_eq!(set_mod.kind, "set");
+    // The modifierGroup's own condition is ANDed onto the modifier's own conditions.
+    assert!(set_mod.conditions.iter().any(|c| c.child_id == "child.1"));
+    assert_eq!(set_mod.condition_groups.len(), 1);
+    assert_eq!(set_mod.condition_groups[0].conditions[0].child_id, "child.2");
+
+    let inc_mod = u.modifiers.iter().find(|m| m.field == "target.2").unwrap();
+    assert_eq!(inc_mod.kind, "increment");
+    assert!(inc_mod.has_repeats, "the modifier's own repeats array is preserved through flattening");
+    assert!(inc_mod.conditions.iter().any(|c| c.child_id == "child.1"), "group condition still ANDed on");
+}
+
+#[test]
 fn xml_and_json_produce_identical_ir() {
     let (xml_ir, _) = engine_parser::parse_file(Path::new("tests/fixtures/parity/twin.cat"), None).unwrap();
     let (json_ir, _) = engine_parser::parse_file(Path::new("tests/fixtures/parity/twin.json"), None).unwrap();
