@@ -16,6 +16,7 @@ struct JsonCat {
     rules: Vec<JsonRule>, shared_rules: Vec<JsonRule>,
     shared_selection_entries: Vec<JsonEntry>,
     shared_selection_entry_groups: Vec<JsonGroup>,
+    shared_profiles: Vec<JsonProfile>,
     selection_entries: Vec<JsonEntry>,
     entry_links: Vec<JsonEntryLink>,
     catalogue_links: Vec<JsonCatalogueLink>,
@@ -179,4 +180,32 @@ fn collect_rules_group(g: &JsonGroup, out: &mut BTreeMap<String, String>) {
     for r in &g.rules { insert_rule(r, out); }
     for c in g.selection_entries.iter() { collect_rules_entry(c, out); }
     for sg in &g.selection_entry_groups { collect_rules_group(sg, out); }
+}
+
+/// Maps BS-JSON profiles to `RawProfile`s, taking each characteristic's value
+/// from the `$text` field. Not yet wired into `RawCatalogue` entries — Task 5
+/// calls this from `map_entry`.
+#[allow(dead_code)]
+fn map_profiles(ps: &[JsonProfile]) -> Vec<RawProfile> {
+    ps.iter().map(|p| RawProfile {
+        id: p.id.clone(), name: p.name.clone(), type_name: p.type_name.clone(),
+        characteristics: p.characteristics.iter()
+            .map(|c| RawCharacteristic { name: c.name.clone(), value: c.text.clone() })
+            .collect(),
+    }).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn map_profiles_uses_text_as_value() {
+        let p = JsonProfile {
+            id: "p".into(), name: "U".into(), type_name: "Unit".into(),
+            characteristics: vec![JsonCharacteristic { name: "InSv".into(), text: "4+".into() }],
+        };
+        let out = map_profiles(std::slice::from_ref(&p));
+        assert_eq!(out[0].characteristics[0].value, "4+");
+        assert_eq!(out[0].type_name, "Unit");
+    }
 }
