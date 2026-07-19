@@ -73,3 +73,71 @@ describe("Datasheet", () => {
     expect(screen.getByText(/allocated to a Character/i)).toBeInTheDocument();
   });
 });
+
+// Real BSData encodes the invuln as an "Abilities" profile named "Invulnerable
+// Save", value in Description — not a dedicated typeName. These cover that shape.
+function realInvulnCat(abilityName: string, description: string): IrCatalogue {
+  return {
+    id: "c", name: "C", gameSystemId: "gs", revision: 1,
+    entries: [
+      { id: "e.hero", name: "Hero", costs: [], categories: [], constraints: [], children: [], groups: [],
+        profiles: [
+          { name: "Hero", typeName: "Unit",
+            characteristics: [{ name: "M", value: '6"' }, { name: "T", value: "4" }, { name: "SV", value: "3+" }] },
+          { name: abilityName, typeName: "Abilities",
+            characteristics: [{ name: "Description", value: description }] },
+          { name: "Rites of Battle", typeName: "Abilities",
+            characteristics: [{ name: "Description", value: "Re-roll one Hit roll." }] },
+        ] },
+    ],
+  } as unknown as IrCatalogue;
+}
+
+describe("Datasheet invulnerable save from real (Abilities-encoded) data", () => {
+  it("shows the chip for a bare 'N+' invuln ability and de-dups it from Abilities", () => {
+    const c = realInvulnCat("Invulnerable Save", "6+");
+    const { unmount } = render(<UnitStatline catalogue={c} selection={sel("e.hero")} />);
+    expect(screen.getByText("6+")).toBeInTheDocument(); // chip value
+    expect(screen.getByText("Invulnerable Save")).toBeInTheDocument(); // chip label
+    unmount();
+    // In the datasheet body the bare invuln line is dropped (chip already shows it),
+    // but other abilities remain.
+    render(<Datasheet catalogue={c} selection={sel("e.hero")} />);
+    expect(screen.getByText(/Rites of Battle/)).toBeInTheDocument();
+    expect(screen.queryByText(/Invulnerable Save\./)).not.toBeInTheDocument();
+  });
+
+  it("parses the save out of a qualified sentence and keeps the ability line", () => {
+    const c = realInvulnCat("Invulnerable Save", "This model has a 5+ invulnerable save against ranged attacks.");
+    render(<UnitStatline catalogue={c} selection={sel("e.hero")} />);
+    expect(screen.getByText("5+")).toBeInTheDocument(); // parsed from the sentence
+    // The qualifier matters, so the full ability stays in the datasheet body.
+    render(<Datasheet catalogue={c} selection={sel("e.hero")} />);
+    expect(screen.getByText(/against ranged attacks/)).toBeInTheDocument();
+  });
+
+  it("handles a footnoted '4+\\n* …' invuln: chip shows 4+, footnote kept in Abilities", () => {
+    const c = realInvulnCat("Invulnerable Save*", "4+\n* This model has a 4+ invulnerable save against melee attacks.");
+    render(<UnitStatline catalogue={c} selection={sel("e.hero")} />);
+    expect(screen.getByText("4+")).toBeInTheDocument();
+    render(<Datasheet catalogue={c} selection={sel("e.hero")} />);
+    expect(screen.getByText(/against melee attacks/)).toBeInTheDocument(); // not de-duped (qualified)
+  });
+
+  it("shows no invuln chip when the unit has none", () => {
+    const c = realInvulnCat("Feel No Pain", "5+"); // an unrelated ability that happens to hold "5+"
+    render(<UnitStatline catalogue={c} selection={sel("e.hero")} />);
+    expect(screen.queryByText("Invulnerable Save")).not.toBeInTheDocument();
+  });
+
+  it("shows no chip when a matching ability has no parseable save, keeping the line", () => {
+    // Name matches but the Description carries no "N+" → no chip (never a broken one),
+    // and the ability is NOT de-duped from Abilities (nothing replaced it).
+    const c = realInvulnCat("Invulnerable Save", "This model cannot be targeted by ranged attacks.");
+    const { unmount } = render(<UnitStatline catalogue={c} selection={sel("e.hero")} />);
+    expect(screen.queryByText("Invulnerable Save")).not.toBeInTheDocument(); // no chip label
+    unmount();
+    render(<Datasheet catalogue={c} selection={sel("e.hero")} />);
+    expect(screen.getByText(/cannot be targeted/)).toBeInTheDocument(); // line preserved
+  });
+});
