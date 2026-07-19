@@ -1,6 +1,7 @@
-import { Fragment, useState } from "react";
-import type { IrCatalogue, RosterSelection } from "@muster/domain";
-import { datasheet, unitLoadout, invulnSave, type DatasheetSection } from "@muster/roster";
+import { Fragment, useMemo, useState } from "react";
+import type { IrCatalogue, Roster, RosterSelection } from "@muster/domain";
+import { unitLoadout, invulnSave } from "@muster/roster";
+import { effectiveDatasheet, type DatasheetSection } from "@muster/engine-eval";
 
 /** Devices that can hover (desktop) show rule popups on hover; touch shows on tap. */
 const canHover =
@@ -26,8 +27,17 @@ function Statline({ section }: { section: DatasheetSection }) {
 
 /** The unit's statline bar with the invulnerable-save chip hanging under the
  *  Toughness column, the way a datasheet shows it. */
-export function UnitStatline({ catalogue, selection }: { catalogue: IrCatalogue; selection: RosterSelection }) {
-  const sections = datasheet(catalogue, selection);
+export function UnitStatline({
+  catalogue, roster, selection,
+}: {
+  catalogue: IrCatalogue;
+  roster: Roster;
+  selection: RosterSelection;
+}) {
+  const sections = useMemo(
+    () => effectiveDatasheet(catalogue, roster, selection.id),
+    [catalogue, roster, selection.id],
+  );
   const unit = sections.find((s) => s.typeName === "Unit");
   const invuln = invulnSave(catalogue, selection);
   if (!unit) return null;
@@ -166,12 +176,16 @@ const RESERVED = new Set(["Unit", "Invulnerable Save", "Abilities"]);
 /** The two-column datasheet body: weapons on the left; composition, abilities and
  *  special rules on the right. The statline/invuln sit above it (UnitStatline). */
 export function Datasheet({
-  catalogue, selection,
+  catalogue, roster, selection,
 }: {
   catalogue: IrCatalogue;
+  roster: Roster;
   selection: RosterSelection;
 }) {
-  const all = datasheet(catalogue, selection);
+  const all = useMemo(
+    () => effectiveDatasheet(catalogue, roster, selection.id),
+    [catalogue, roster, selection.id],
+  );
   const weapons = all.filter((s) => WEAPON_TYPES.has(s.typeName));
   const specials = all.filter((s) => !WEAPON_TYPES.has(s.typeName) && !RESERVED.has(s.typeName));
   const loadout = unitLoadout(catalogue, selection);
