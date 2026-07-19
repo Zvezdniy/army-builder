@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use crate::error::{Diagnostic, ParseError};
 use crate::limits::{MAX_RESOLVED_NODES, MAX_RESOLVE_DEPTH};
-use crate::raw::{RawCatalogue, RawEntry, RawEntryLink, RawGroup};
+use crate::raw::{RawCatalogue, RawEntry, RawEntryLink, RawGroup, RawInfoLink, RawProfile};
 use super::symbols::SymbolTable;
 
 struct Budget { nodes: u64, max_nodes: u64, max_depth: usize }
@@ -157,6 +157,27 @@ fn apply_link_modifiers(link: &RawEntryLink, resolved: &mut RawEntry) {
     }
 }
 
+/// Inline each `type="profile"` infoLink's target profile into `profiles`.
+/// Non-`profile` link types are skipped (rule text is global; infoGroup unmodeled);
+/// hidden links are skipped; an unresolvable target is diagnosed and dropped.
+fn resolve_info_links(
+    info_links: &[RawInfoLink], symbols: &SymbolTable,
+    diags: &mut Vec<Diagnostic>, profiles: &mut Vec<RawProfile>,
+) {
+    for link in info_links {
+        if link.link_type != "profile" || link.hidden {
+            continue;
+        }
+        match symbols.profile(&link.target_id) {
+            Some(p) => profiles.push(p.clone()),
+            None => diags.push(Diagnostic {
+                code: "infolink.unresolved".to_string(),
+                message: format!("infoLink target {} not found (dropped)", link.target_id),
+            }),
+        }
+    }
+}
+
 fn resolve_entry(entry: &RawEntry, symbols: &SymbolTable, path: &mut HashSet<String>,
     budget: &mut Budget, diags: &mut Vec<Diagnostic>, depth: usize) -> Result<RawEntry, ParseError> {
     budget.check_depth(depth)?;
@@ -173,9 +194,11 @@ fn resolve_entry(entry: &RawEntry, symbols: &SymbolTable, path: &mut HashSet<Str
     for link in &entry.entry_links {
         resolve_link(link, symbols, path, budget, diags, depth, &mut children, &mut groups)?;
     }
+    resolve_info_links(&entry.info_links, symbols, diags, &mut out.profiles);
     out.entries = children;
     out.groups = groups;
     out.entry_links = Vec::new();
+    out.info_links = Vec::new();
     Ok(out)
 }
 
@@ -195,6 +218,7 @@ fn resolve_group(group: &RawGroup, symbols: &SymbolTable, path: &mut HashSet<Str
     for link in &group.entry_links {
         resolve_link(link, symbols, path, budget, diags, depth, &mut children, &mut groups)?;
     }
+    resolve_info_links(&group.info_links, symbols, diags, &mut out.profiles);
     // A group's `defaultSelectionEntryId` may name one of its `<entryLink>`s by the
     // LINK's own id, but link members are inlined under their TARGET id (that is
     // what map_group emits as memberEntryIds and what lands in children). Remap the
@@ -213,6 +237,7 @@ fn resolve_group(group: &RawGroup, symbols: &SymbolTable, path: &mut HashSet<Str
     out.entries = children;
     out.groups = groups;
     out.entry_links = Vec::new();
+    out.info_links = Vec::new();
     Ok(out)
 }
 
