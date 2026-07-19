@@ -149,6 +149,40 @@ fn maps_cost_modifier_with_condition() {
 }
 
 #[test]
+fn drops_cost_modifier_with_unsupported_value_kind() {
+    // Real catalogues (e.g. Chaos Space Marines) carry `floor`/`ceil` value clamps
+    // the engine has no IR form for. The modifier must be dropped with a diagnostic,
+    // not passed through verbatim — an unknown type sinks the whole domain parse.
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <costTypes><costType id="pts" name="Points"/></costTypes>
+  <selectionEntries>
+    <selectionEntry id="e.u" name="Unit" type="unit">
+      <costs><cost name="pts" typeId="pts" value="10"/></costs>
+      <modifiers>
+        <modifier type="floor" field="pts" value="5"/>
+        <modifier type="increment" field="pts" value="2"/>
+      </modifiers>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let raw = resolve(parse_raw(xml).unwrap()).unwrap();
+    let (ir, diags) = to_ir(&raw);
+    let u = ir.entries.iter().find(|e| e.id == "e.u").unwrap();
+    // Only the supported increment survives; floor is gone.
+    let mods = u.costs[0].modifiers.as_ref().unwrap();
+    assert_eq!(mods.len(), 1);
+    assert_eq!(mods[0].type_, "increment");
+    assert!(!mods.iter().any(|m| m.type_ == "floor"), "floor modifier leaked into IR");
+    assert!(
+        diags.iter().any(|d| d.code == "modifier.value_type_unsupported"),
+        "expected a value_type_unsupported diagnostic, got: {:?}",
+        diags
+    );
+}
+
+#[test]
 fn maps_group_choose_n_and_flattens_members() {
     let raw = resolve(parse_raw(include_bytes!("fixtures/mini40k.cat")).unwrap()).unwrap();
     let (ir, diags) = to_ir(&raw);
