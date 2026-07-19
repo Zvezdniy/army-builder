@@ -327,8 +327,10 @@ fn drops_group_limit_modifier_with_unmappable_condition() {
 }
 
 #[test]
-fn drops_roster_scope_group_constraint_with_limit_modifier() {
-    // A roster-scope limit with an owner-relative gate cannot be anchored → drop.
+fn drops_roster_scope_group_constraint_with_owner_relative_modifier_gate() {
+    // A roster-wide limit is one army rule evaluated in a single placement's context;
+    // a self-scoped (owner-relative) gate would make it depend on which placement was
+    // picked → drop loudly. (Contrast the army-wide case below, which now maps.)
     let xml = br#"<?xml version="1.0" encoding="utf-8"?>
 <catalogue id="c" name="C" revision="1" gameSystemId="gs"
            xmlns="http://www.battlescribe.net/schema/catalogueSchema">
@@ -352,10 +354,113 @@ fn drops_roster_scope_group_constraint_with_limit_modifier() {
 </catalogue>"#;
     let (ir, diags) = to_ir(&resolve(parse_raw(xml).unwrap()).unwrap());
     let u = ir.entries.iter().find(|e| e.id == "e.u").unwrap();
-    assert!(u.groups.iter().all(|g| g.id != "g"), "roster-scope + modifier must be dropped");
+    assert!(u.groups.iter().all(|g| g.id != "g"), "roster-scope + owner-relative gate must be dropped");
     assert_eq!(diags.iter().filter(|d| d.code == "group.constraint_dropped").count(), 1, "{:?}", diags);
     assert!(
-        diags.iter().any(|d| d.code == "group.constraint_dropped" && d.message.contains("roster-scope limit carries a modifier")),
+        diags.iter().any(|d| d.code == "group.constraint_dropped" && d.message.contains("owner-relative modifier gate")),
+        "{:?}", diags
+    );
+}
+
+#[test]
+fn maps_roster_scope_group_constraint_with_army_wide_modifier_gate() {
+    // A roster-wide relic limit (max 3 across the army) that a Crusade-force gate
+    // lifts. The modifier's condition is army-wide (field=forces, scope=roster), so
+    // it evaluates identically for every placement → the limit + modifier both map.
+    // In a matched-play (forceless) roster the gate is false and the base limit holds.
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <selectionEntries>
+    <selectionEntry id="e.u" name="Unit" type="unit">
+      <selectionEntryGroups>
+        <selectionEntryGroup id="g" name="Relics">
+          <constraints><constraint id="g.max" type="max" value="3" field="selections" scope="roster"/></constraints>
+          <modifiers>
+            <modifier type="set" field="g.max" value="-1">
+              <conditions>
+                <condition type="atLeast" value="1" field="forces" scope="roster" childId="cac3-crusade"/>
+              </conditions>
+            </modifier>
+          </modifiers>
+          <selectionEntries><selectionEntry id="e.w" name="W" type="upgrade"/></selectionEntries>
+        </selectionEntryGroup>
+      </selectionEntryGroups>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let (ir, diags) = to_ir(&resolve(parse_raw(xml).unwrap()).unwrap());
+    let u = ir.entries.iter().find(|e| e.id == "e.u").unwrap();
+    let g = u.groups.iter().find(|g| g.id == "g").expect("roster-scope + army-wide gate now maps");
+    let c = &g.constraints[0];
+    assert_eq!((c.scope.as_str(), c.type_.as_str(), c.value), ("roster", "max", 3.0));
+    let mods = c.modifiers.as_ref().expect("army-wide limit modifier attached");
+    assert_eq!(mods.len(), 1);
+    assert_eq!((mods[0].type_.as_str(), mods[0].value), ("set", -1.0));
+    assert_eq!(mods[0].conditions.as_ref().unwrap()[0].field, "forces");
+    assert!(!diags.iter().any(|d| d.code == "group.constraint_dropped"), "unexpected drop: {:?}", diags);
+}
+
+#[test]
+fn maps_roster_scope_group_constraint_with_unconditional_modifier() {
+    // An UNCONDITIONAL modifier on a roster limit (no gate at all) is army-wide by
+    // definition — it changes the cap identically for every placement → maps.
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <selectionEntries>
+    <selectionEntry id="e.u" name="Unit" type="unit">
+      <selectionEntryGroups>
+        <selectionEntryGroup id="g" name="Relics">
+          <constraints><constraint id="g.max" type="max" value="1" field="selections" scope="roster"/></constraints>
+          <modifiers><modifier type="increment" field="g.max" value="2"/></modifiers>
+          <selectionEntries><selectionEntry id="e.w" name="W" type="upgrade"/></selectionEntries>
+        </selectionEntryGroup>
+      </selectionEntryGroups>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let (ir, diags) = to_ir(&resolve(parse_raw(xml).unwrap()).unwrap());
+    let u = ir.entries.iter().find(|e| e.id == "e.u").unwrap();
+    let g = u.groups.iter().find(|g| g.id == "g").expect("roster-scope + unconditional modifier maps");
+    let mods = g.constraints[0].modifiers.as_ref().expect("modifier attached");
+    assert_eq!((mods[0].type_.as_str(), mods[0].value), ("increment", 2.0));
+    assert!(mods[0].conditions.is_none(), "unconditional → no conditions");
+    assert!(!diags.iter().any(|d| d.code == "group.constraint_dropped"), "unexpected drop: {:?}", diags);
+}
+
+#[test]
+fn drops_roster_scope_group_constraint_with_mixed_gate() {
+    // One modifier gated by BOTH an army-wide (roster) and an owner-relative (self)
+    // condition. The owner-relative one poisons the whole gate → drop loudly; a
+    // roster-wide rule must not depend on a single placement's local context.
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <selectionEntries>
+    <selectionEntry id="e.u" name="Unit" type="unit">
+      <selectionEntryGroups>
+        <selectionEntryGroup id="g" name="Relics">
+          <constraints><constraint id="g.max" type="max" value="1" field="selections" scope="roster"/></constraints>
+          <modifiers>
+            <modifier type="increment" field="g.max" value="1">
+              <conditions>
+                <condition type="atLeast" value="1" field="selections" scope="roster" childId="e.tok"/>
+                <condition type="atLeast" value="1" field="selections" scope="self" childId="e.sgt"/>
+              </conditions>
+            </modifier>
+          </modifiers>
+          <selectionEntries><selectionEntry id="e.w" name="W" type="upgrade"/></selectionEntries>
+        </selectionEntryGroup>
+      </selectionEntryGroups>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let (ir, diags) = to_ir(&resolve(parse_raw(xml).unwrap()).unwrap());
+    let u = ir.entries.iter().find(|e| e.id == "e.u").unwrap();
+    assert!(u.groups.iter().all(|g| g.id != "g"), "mixed gate must drop");
+    assert!(
+        diags.iter().any(|d| d.code == "group.constraint_dropped" && d.message.contains("owner-relative modifier gate")),
         "{:?}", diags
     );
 }

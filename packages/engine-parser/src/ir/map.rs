@@ -288,13 +288,42 @@ fn collect_groups(g: &RawGroup, cat: &RawCatalogue, diags: &mut Vec<Diagnostic>,
     }
 }
 
+/// An army-wide condition scope resolves to the same army-level set no matter
+/// which owner node anchors it: `roster` (and `primary-catalogue`, which the IR
+/// aliases to roster) is the whole army. Owner-relative scopes (self/parent/
+/// ancestor/unit/model/model-or-unit/upgrade, or a foreign entry-id) depend on a
+/// specific placement, so a roster-wide group limit gated on one is ambiguous
+/// (see map_group_constraint). `force` is deliberately EXCLUDED: engine-eval's
+/// walking-skeleton currently collapses force to the whole roster, but the moment
+/// multiple forces/detachments land it must narrow to the owning force's nodes
+/// (documented in scopes.ts) — at which point a force gate becomes owner-relative
+/// and this classification would be unsound. Real catalogues gate these roster
+/// limits on `roster`, not `force`, so excluding it costs nothing today and keeps
+/// the guard robust against that change.
+fn condition_scope_is_army_wide(scope: &str) -> bool {
+    matches!(scope, "roster" | "primary-catalogue")
+}
+
+/// True when every condition gating this modifier — flat and nested — is
+/// army-wide. A modifier with no conditions is trivially army-wide (it changes
+/// the limit unconditionally, the same for every owner).
+fn modifier_gate_is_army_wide(m: &RawModifier) -> bool {
+    m.conditions.iter().all(|c| condition_scope_is_army_wide(&c.scope))
+        && m.condition_groups.iter().all(condition_group_is_army_wide)
+}
+
+fn condition_group_is_army_wide(g: &RawConditionGroup) -> bool {
+    g.conditions.iter().all(|c| condition_scope_is_army_wide(&c.scope))
+        && g.groups.iter().all(condition_group_is_army_wide)
+}
+
 /// A group choose-N limit maps when it is a selections min/max on a
 /// group-local (or roster) scope. A modifier on the limit itself is now
 /// strict-mapped — all-or-nothing across its kind, conditions, and repeats —
 /// and attached to the constraint. The whole constraint is dropped loudly
 /// (never a guessed static value) when the base, scope, or a limit modifier
 /// (including any of its conditions) is unmappable, or when the scope is
-/// roster and a limit modifier is present at all.
+/// roster and a limit modifier carries an OWNER-RELATIVE gate (see below).
 fn map_group_constraint(c: &RawConstraint, g: &RawGroup, cat: &RawCatalogue, diags: &mut Vec<Diagnostic>) -> Option<IrGroupConstraint> {
     let drop = |why: String| Diagnostic {
         code: "group.constraint_dropped".to_string(),
@@ -325,8 +354,19 @@ fn map_group_constraint(c: &RawConstraint, g: &RawGroup, cat: &RawCatalogue, dia
     };
     let has_limit_mod = g.modifiers.iter().any(|m| m.field == c.id);
     let modifiers = if has_limit_mod {
-        if scope == "roster" {
-            diags.push(drop("roster-scope limit carries a modifier (unsupported)".to_string()));
+        // A roster-wide limit is one army rule that the engine evaluates ONCE — at
+        // the first placement of a (possibly shared) group. Its limit modifier is
+        // applied in that placement's node context, so a gate anchored to a single
+        // owner (self/parent/ancestor/unit/model/… or a foreign entry-id scope)
+        // would make the army-wide value depend on which placement was picked —
+        // ambiguous. Only army-wide gates (roster/primary-catalogue, which
+        // resolve to the same army-level set for every owner) map faithfully; an
+        // owner-relative gate on a roster limit drops loudly. (Group-local scopes
+        // are per-owner anyway, so they impose no such restriction.)
+        if scope == "roster"
+            && !g.modifiers.iter().filter(|m| m.field == c.id).all(modifier_gate_is_army_wide)
+        {
+            diags.push(drop("roster-scope limit has an owner-relative modifier gate (unsupported)".to_string()));
             return None;
         }
         let mut mapped: Vec<IrModifier> = Vec::new();
