@@ -134,9 +134,15 @@ pub fn parse_raw_json(bytes: &[u8], _diags: &mut Vec<Diagnostic>) -> Result<RawC
 
 fn map_cat(c: JsonCat) -> RawCatalogue {
     let mut cost_types = HashMap::new();
-    for ct in &c.cost_types { cost_types.insert(ct.id.clone(), ct.name.clone()); }
+    for ct in &c.cost_types {
+        if ct.id.is_empty() { continue; }
+        cost_types.insert(ct.id.clone(), ct.name.clone());
+    }
     let mut categories = HashMap::new();
-    for ce in &c.category_entries { categories.insert(ce.id.clone(), ce.name.clone()); }
+    for ce in &c.category_entries {
+        if ce.id.is_empty() { continue; }
+        categories.insert(ce.id.clone(), ce.name.clone());
+    }
     let mut rules = BTreeMap::new();
     collect_rules(&c, &mut rules);
     RawCatalogue {
@@ -160,6 +166,7 @@ fn collect_rules(c: &JsonCat, out: &mut BTreeMap<String, String>) {
     for f in &c.force_entries { for r in &f.rules { insert_rule(r, out); } }
 }
 fn insert_rule(r: &JsonRule, out: &mut BTreeMap<String, String>) {
+    if r.description.is_empty() { return; }
     if !r.name.is_empty() { out.insert(r.name.clone(), r.description.clone()); }
     if !r.alias.is_empty() { out.insert(r.alias.clone(), r.description.clone()); }
 }

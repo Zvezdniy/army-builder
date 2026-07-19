@@ -29,3 +29,15 @@ fn maps_costtypes_categories_and_nested_rules() {
     assert_eq!(raw.rules.get("Oath").map(String::as_str), Some("Re-roll hits."));
     assert_eq!(raw.rules.get("Deep Strike").map(String::as_str), Some("Arrive from reserves."));
 }
+
+#[test]
+fn rule_without_description_is_skipped_matching_xml() {
+    let json = br#"{"gameSystem":{"id":"gs","name":"GS","revision":1,
+      "rules":[
+        {"id":"r1","name":"Oath","description":"Re-roll hits."},
+        {"id":"r2","name":"Stealth"}
+      ]}}"#;
+    let raw = parse_raw_json(json, &mut Vec::new()).unwrap();
+    assert_eq!(raw.rules.get("Oath"), Some(&"Re-roll hits.".to_string()));
+    assert!(raw.rules.get("Stealth").is_none());
+}
