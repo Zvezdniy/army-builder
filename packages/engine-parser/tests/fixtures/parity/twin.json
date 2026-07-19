@@ -1,6 +1,8 @@
 {"catalogue":{"type":"catalogue","id":"c","name":"Twin","revision":1,"gameSystemId":"gs",
+  "categoryEntries":[{"id":"cat.hq","name":"HQ"}],
   "selectionEntries":[{"id":"e.u","name":"U","type":"model",
     "costs":[{"typeId":"pts","value":90}],
+    "categoryLinks":[{"id":"cl.hq","name":"HQ","targetId":"cat.hq","primary":true}],
     "profiles":[{"id":"p","name":"U","typeName":"Unit","typeId":"pt","characteristics":[
       {"name":"T","typeId":"t","$text":"4"},{"name":"InSv","typeId":"i","$text":"4+"}]}],
     "selectionEntryGroups":[{"id":"g","name":"Wargear",

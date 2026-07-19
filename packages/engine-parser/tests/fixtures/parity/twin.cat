@@ -1,9 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <catalogue id="c" name="Twin" revision="1" gameSystemId="gs"
            xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <categoryEntries><categoryEntry id="cat.hq" name="HQ"/></categoryEntries>
   <selectionEntries>
     <selectionEntry id="e.u" name="U" type="model">
       <costs><cost name="pts" typeId="pts" value="90"/></costs>
+      <categoryLinks><categoryLink id="cl.hq" name="HQ" targetId="cat.hq" primary="true"/></categoryLinks>
       <profiles><profile id="p" name="U" typeName="Unit" typeId="pt">
         <characteristics>
           <characteristic name="T" typeId="t">4</characteristic>
