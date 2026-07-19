@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="Twin" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <selectionEntries>
+    <selectionEntry id="e.u" name="U" type="model">
+      <costs><cost name="pts" typeId="pts" value="90"/></costs>
+      <profiles><profile id="p" name="U" typeName="Unit" typeId="pt">
+        <characteristics>
+          <characteristic name="T" typeId="t">4</characteristic>
+          <characteristic name="InSv" typeId="i">4+</characteristic>
+        </characteristics></profile></profiles>
+      <selectionEntryGroups>
+        <selectionEntryGroup id="g" name="Wargear">
+          <constraints><constraint id="g.max" type="max" value="1" field="selections" scope="parent"/></constraints>
+          <selectionEntries>
+            <selectionEntry id="e.a" name="A" type="upgrade"><costs><cost name="pts" typeId="pts" value="5"/></costs></selectionEntry>
+            <selectionEntry id="e.b" name="B" type="upgrade"><costs><cost name="pts" typeId="pts" value="10"/></costs></selectionEntry>
+          </selectionEntries>
+        </selectionEntryGroup>
+      </selectionEntryGroups>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>

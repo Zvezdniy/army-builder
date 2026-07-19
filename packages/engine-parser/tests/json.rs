@@ -74,6 +74,17 @@ fn maps_full_entry_tree_with_links_groups_and_associations_drop() {
 }
 
 #[test]
+fn xml_and_json_produce_identical_ir() {
+    let (xml_ir, _) = engine_parser::parse_file(Path::new("tests/fixtures/parity/twin.cat"), None).unwrap();
+    let (json_ir, _) = engine_parser::parse_file(Path::new("tests/fixtures/parity/twin.json"), None).unwrap();
+    assert_eq!(
+        serde_json::to_value(&xml_ir).unwrap(),
+        serde_json::to_value(&json_ir).unwrap(),
+        "JSON front-end must produce IR identical to the XML front-end",
+    );
+}
+
+#[test]
 fn parse_system_files_reads_json_faction_plus_gamesystem() {
     let (ir, diags) = parse_system_files(
         Path::new("tests/fixtures/mini11e.catalogue.json"),
