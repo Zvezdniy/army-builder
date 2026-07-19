@@ -63,6 +63,11 @@ pub struct IrGroup {
     pub default_member_entry_id: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub member_entry_ids: Vec<String>,
+    /// Transitive closure of member entry ids over this group and all nested
+    /// sub-groups (⊇ member_entry_ids). The set engine-eval counts a group's
+    /// selections limit over — see map_group / groups.ts.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub descendant_entry_ids: Vec<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub constraints: Vec<IrGroupConstraint>,
 }

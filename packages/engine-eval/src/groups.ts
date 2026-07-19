@@ -13,13 +13,19 @@ export function checkGroupConstraint(
   state: EvalState,
 ): Issue | null {
   const isRoster = gc.scope === "roster";
+  // A group's selections limit counts its whole subtree — direct members AND
+  // those nested in sub-groups (BattleScribe semantics). `descendantEntryIds`
+  // is that transitive set; it is empty only on pre-descendant packed IR, where
+  // we fall back to the direct members so old catalogues keep working.
+  const counted =
+    group.descendantEntryIds?.length ? group.descendantEntryIds : group.memberEntryIds;
   const actual = isRoster
     ? state.all.reduce(
-        (sum, n) => (group.memberEntryIds.includes(n.entry.id) ? sum + n.effectiveCount : sum),
+        (sum, n) => (counted.includes(n.entry.id) ? sum + n.effectiveCount : sum),
         0,
       )
     : node.children.reduce(
-        (sum, c) => (group.memberEntryIds.includes(c.entry.id) ? sum + c.effectiveCount : sum),
+        (sum, c) => (counted.includes(c.entry.id) ? sum + c.effectiveCount : sum),
         0,
       );
   const limit = applyModifiers(gc.value, gc.modifiers, node, state);

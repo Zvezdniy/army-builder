@@ -274,6 +274,93 @@ describe("roster-scope group constraints", () => {
   });
 });
 
+describe("group limits count nested sub-group members (descendantEntryIds)", () => {
+  // The "Enhancements" shape as the parser now emits it: an outer group with NO
+  // direct members carries the real limits (≤1 per character = self, ≤3 per army
+  // = roster); the actual options live in per-detachment sub-groups and are
+  // flattened into the character's children. descendantEntryIds spans them, so
+  // both limits count nested selections rather than the (empty) direct members.
+  const enhCat = (constraints: IrCatalogue["entries"][number]["groups"][number]["constraints"]): IrCatalogue =>
+    ({
+      id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [],
+      entries: [{
+        id: "e.char", name: "Character", costs: [], categories: [], constraints: [],
+        children: [
+          { id: "e.enh.a1", name: "A1", costs: [], categories: [], constraints: [], children: [], groups: [] },
+          { id: "e.enh.a2", name: "A2", costs: [], categories: [], constraints: [], children: [], groups: [] },
+          { id: "e.enh.b1", name: "B1", costs: [], categories: [], constraints: [], children: [], groups: [] },
+        ],
+        groups: [{
+          id: "g.enh", name: "Enhancements",
+          memberEntryIds: [], descendantEntryIds: ["e.enh.a1", "e.enh.a2", "e.enh.b1"],
+          constraints,
+        }],
+      }],
+    }) as unknown as IrCatalogue;
+
+  const twoChars = (enhEach: string[][]): Roster => ({
+    id: "r", name: "R", gameSystemId: "gs", catalogueId: "c", catalogueRevision: 1, pointsLimit: 2000,
+    selections: enhEach.map((enh, h) => ({
+      id: `h${h}`, entryId: "e.char", count: 1,
+      selections: enh.map((e, i) => ({ id: `h${h}e${i}`, entryId: e, count: 1, selections: [] })),
+    })),
+  }) as unknown as Roster;
+
+  it("roster-scope max 3 counts enhancements nested across sub-groups (4 total → flags)", () => {
+    // Two characters, 2 enhancements each = 4 army-wide > 3. Direct members are
+    // empty, so this only flags because descendants are counted.
+    const r = evaluate(
+      twoChars([["e.enh.a1", "e.enh.a2"], ["e.enh.b1", "e.enh.a1"]]),
+      enhCat([{ id: "g.enh.roster", type: "max", value: 3, scope: "roster" }]),
+    );
+    const issues = r.issues.filter((i) => i.constraintId === "g.enh.roster");
+    expect(issues.length).toBe(1);
+    expect(issues[0]!.code).toBe("group.max");
+    expect(issues[0]!.message).toContain("exceeds max 3");
+    expect(issues[0]!.selectionId).toBeUndefined();
+  });
+
+  it("roster-scope max 3 satisfied at exactly 3 nested enhancements", () => {
+    const r = evaluate(
+      twoChars([["e.enh.a1", "e.enh.a2"], ["e.enh.b1"]]),
+      enhCat([{ id: "g.enh.roster", type: "max", value: 3, scope: "roster" }]),
+    );
+    expect(r.issues.some((i) => i.constraintId === "g.enh.roster")).toBe(false);
+  });
+
+  it("self-scope max 1 counts a single character's nested enhancements (2 → flags that character)", () => {
+    const r = evaluate(
+      twoChars([["e.enh.a1", "e.enh.a2"], []]),
+      enhCat([{ id: "g.enh.self", type: "max", value: 1, scope: "self" }]),
+    );
+    const issue = r.issues.find((i) => i.constraintId === "g.enh.self");
+    expect(issue?.code).toBe("group.max");
+    expect(issue?.message).toContain("exceeds max 1");
+    expect(issue?.selectionId).toBe("h0"); // the offending character, not army-level
+  });
+
+  it("falls back to direct members when descendantEntryIds is absent (pre-descendant IR)", () => {
+    // Old packed IR carries no descendantEntryIds; the engine must still count the
+    // direct memberEntryIds so existing catalogues keep enforcing.
+    const legacy = {
+      id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [],
+      entries: [{
+        id: "e.char", name: "Character", costs: [], categories: [], constraints: [],
+        children: [
+          { id: "e.enh.a1", name: "A1", costs: [], categories: [], constraints: [], children: [], groups: [] },
+          { id: "e.enh.a2", name: "A2", costs: [], categories: [], constraints: [], children: [], groups: [] },
+        ],
+        groups: [{
+          id: "g.enh", name: "Enhancements", memberEntryIds: ["e.enh.a1", "e.enh.a2"],
+          constraints: [{ id: "g.enh.self", type: "max", value: 1, scope: "self" }],
+        }],
+      }],
+    } as unknown as IrCatalogue;
+    const r = evaluate(twoChars([["e.enh.a1", "e.enh.a2"], []]), legacy);
+    expect(r.issues.find((i) => i.constraintId === "g.enh.self")?.message).toContain("exceeds max 1");
+  });
+});
+
 function modCat(): IrCatalogue {
   return {
     id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [],
