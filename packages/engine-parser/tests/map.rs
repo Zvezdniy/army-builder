@@ -1999,7 +1999,7 @@ fn maps_cross_entry_set_characteristic_modifier() {
     assert_eq!(cm.kind, "set");
     assert_eq!(cm.value, "2+");
     assert_eq!(cm.target_scope, "model");
-    assert_eq!(cm.target_entry_id.as_deref(), Some("e.model"));
+    assert_eq!(cm.target_id.as_deref(), Some("e.model"));
     assert!(cm.recursive);
     assert!(cm.conditions.is_none());
     assert!(cm.condition_groups.is_none());
@@ -2050,7 +2050,7 @@ fn maps_recursive_broadcast_characteristic_modifier_without_target_id() {
     assert_eq!(cm.kind, "increment");
     assert_eq!(cm.value, "1");
     assert_eq!(cm.target_scope, "model");
-    assert!(cm.target_entry_id.is_none());
+    assert!(cm.target_id.is_none());
     assert!(cm.recursive);
 }
 
@@ -2082,7 +2082,7 @@ fn maps_direct_children_characteristic_modifier() {
     let cm = &enh.characteristic_modifiers[0];
     assert_eq!(cm.kind, "decrement");
     assert_eq!(cm.target_scope, "parent");
-    assert!(cm.target_entry_id.is_none());
+    assert!(cm.target_id.is_none());
     assert!(!cm.recursive, "self.entries.profiles.X (no `recursive` keyword) means direct children only");
 }
 
@@ -2218,7 +2218,7 @@ fn maps_own_entry_bare_profiles_characteristic_modifier() {
     assert_eq!(cm.kind, "set");
     assert_eq!(cm.value, "2+");
     assert_eq!(cm.target_scope, "self", "bare profiles.X hardcodes target_scope=self, ignoring the modifier's own `scope` attribute");
-    assert!(cm.target_entry_id.is_none());
+    assert!(cm.target_id.is_none());
     assert!(!cm.recursive);
     assert!(
         !diags.iter().any(|d| d.code == "modifier.target_unmapped" && d.message.contains("e.enh")),
@@ -2261,7 +2261,7 @@ fn maps_foreign_entry_non_recursive_characteristic_modifier() {
     assert_eq!(cm.profile_type, "Ranged Weapons");
     assert_eq!(cm.kind, "increment");
     assert_eq!(cm.target_scope, "upgrade", "target_scope comes from the modifier's own scope attribute");
-    assert_eq!(cm.target_entry_id.as_deref(), Some("e993-e086-6de1-12af"));
+    assert_eq!(cm.target_id.as_deref(), Some("e993-e086-6de1-12af"));
     assert!(!cm.recursive);
     assert!(
         !diags.iter().any(|d| d.code == "modifier.target_unmapped" && d.message.contains("e.enh")),

@@ -115,7 +115,10 @@ function buildSections(nodes: EvalNode[], working: Map<EvalNode, IrProfile[]>): 
  *  3. Resolve `targetScope` from the owning node to an anchor/subtree of nodes
  *     (reusing `scopes.ts`'s `scopeNodes` — the exact anchor-walk conditions
  *     and constraints already use for the same scope vocabulary), filtered to
- *     `profileType` and optional `targetEntryId`.
+ *     `profileType` and an optional `targetId` — which real 11e data proves is
+ *     usually a CATEGORY id, not an entry id (see `characteristics.ts`'s own
+ *     matching below), so a candidate node matches when `targetId` is absent,
+ *     equals `node.entry.id`, OR appears in `node.categories`.
  *  4. Apply in modifier-declaration order: `set` replaces the value outright;
  *     `increment`/`decrement` parse a leading integer out of the CURRENT
  *     value, apply the delta, and splice the new number back before the
@@ -179,7 +182,17 @@ export function effectiveDatasheet(catalogue: IrCatalogue, roster: Roster, selec
       state,
     );
     const targetNodes = anchorNodes.filter((n) => {
-      if (modifier.targetEntryId && n.entry.id !== modifier.targetEntryId) return false;
+      // `targetId` is a raw id captured off the `affects` path — real 11e
+      // data shows it's overwhelmingly a CATEGORY id (e.g. "Character"), not
+      // an entry id, though the entry-id shape is also observed. Match
+      // either, same precedent as `scopes.ts`'s `matchesTarget`.
+      if (
+        modifier.targetId &&
+        n.entry.id !== modifier.targetId &&
+        !n.categories.includes(modifier.targetId)
+      ) {
+        return false;
+      }
       return (n.entry.profiles ?? []).some((p) => p.typeName === modifier.profileType);
     });
 

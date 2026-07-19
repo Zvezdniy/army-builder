@@ -802,11 +802,17 @@ fn map_category_modifier(m: &RawModifier, cat: &RawCatalogue) -> Option<IrCatego
 /// (plus its `scope` attribute, needed because the resolved `target_scope`
 /// depends on WHICH shape matched — see below) into the pieces
 /// `IrCharacteristicModifier` needs: whether the target is the scope anchor's
-/// whole subtree or just its direct children (`recursive`), an optional
-/// specific descendant entry id to restrict to, the profile typeName the
-/// target profile must have, and the resolved `target_scope`. Three shapes are
-/// understood, confirmed against real 11e BSData
-/// (`/private/tmp/wh40k-11e-probe/`) rather than guessed:
+/// whole subtree or just its direct children (`recursive`), an optional id
+/// (`target_id`) to restrict the resolved subtree to, the profile typeName
+/// the target profile must have, and the resolved `target_scope`. The
+/// `<id>` token in the shapes below is captured VERBATIM and NOT resolved
+/// here — real 11e BSData (Space Marines) measurement shows it is
+/// overwhelmingly a CATEGORY id (e.g. "Character", "Psychic Weapon", "Extra
+/// Attacks Weapon"; ~88% of a 1306-modifier sample), not an entry id (0% in
+/// that sample); engine-eval matches `target_id` against both `entry.id` and
+/// `categories`, never assume it's an entry id. Three shapes are understood,
+/// confirmed against real 11e BSData (`/private/tmp/wh40k-11e-probe/`)
+/// rather than guessed:
 ///
 /// - `self.entries[.recursive][.<entryId>].profiles.<TypeName>` (the majority
 ///   shape, ~1435 raw occurrences sampled) — `target_scope` comes from the
@@ -841,7 +847,7 @@ fn parse_affects(affects: &str, scope: &str) -> Option<(bool, Option<String>, St
             Some(r) => (true, r),
             None => (false, rest),
         };
-        let (target_entry_id, profile_type) = match rest.strip_prefix("profiles.") {
+        let (target_id, profile_type) = match rest.strip_prefix("profiles.") {
             Some(type_name) => (None, type_name),
             None => {
                 let idx = rest.find(".profiles.")?;
@@ -853,7 +859,7 @@ fn parse_affects(affects: &str, scope: &str) -> Option<(bool, Option<String>, St
         if profile_type.is_empty() {
             return None;
         }
-        return Some((recursive, target_entry_id, profile_type.to_string(), map_condition_scope(scope)));
+        return Some((recursive, target_id, profile_type.to_string(), map_condition_scope(scope)));
     }
 
     if let Some(type_name) = affects.strip_prefix("profiles.") {
@@ -904,7 +910,7 @@ fn map_characteristic_modifier(
     if !matches!(m.kind.as_str(), "set" | "increment" | "decrement") {
         return None;
     }
-    let (recursive, target_entry_id, profile_type, target_scope) = parse_affects(&m.affects, &m.scope)?;
+    let (recursive, target_id, profile_type, target_scope) = parse_affects(&m.affects, &m.scope)?;
 
     Some(IrCharacteristicModifier {
         characteristic: characteristic.to_string(),
@@ -912,7 +918,7 @@ fn map_characteristic_modifier(
         kind: m.kind.clone(),
         value: m.value_raw.clone(),
         target_scope,
-        target_entry_id,
+        target_id,
         recursive,
         conditions: ir_mod.conditions,
         condition_groups: ir_mod.condition_groups,

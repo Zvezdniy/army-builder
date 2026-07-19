@@ -254,13 +254,13 @@ describe("effectiveDatasheet", () => {
     warn.mockRestore();
   });
 
-  it("targetEntryId restricts a broadcast to one specific descendant entry", () => {
+  it("targetId as an entry id restricts a broadcast to one specific descendant entry", () => {
     const cat = catalogue([
       entry({
         id: "e.squad", name: "Squad", type: "unit",
         characteristicModifiers: [charMod({
           characteristic: "R", profileType: "Ranged Weapons", kind: "increment", value: "2",
-          targetScope: "self", recursive: true, targetEntryId: "e.trooperA",
+          targetScope: "self", recursive: true, targetId: "e.trooperA",
         })],
         children: [
           entry({ id: "e.trooperA", name: "Trooper A", type: "model",
@@ -276,6 +276,58 @@ describe("effectiveDatasheet", () => {
 
     const weapons = out.find((s) => s.typeName === "Ranged Weapons");
     expect(weapons?.profiles.map((p) => p.characteristics[0]?.value)).toEqual(['26"', '24"']);
+  });
+
+  it("targetId as a CATEGORY id (the real-data shape) applies to a node carrying that category", () => {
+    const cat = catalogue([
+      entry({
+        id: "e.squad", name: "Squad", type: "unit",
+        characteristicModifiers: [charMod({
+          characteristic: "Sv", profileType: "Unit", kind: "set", value: "2+",
+          targetScope: "self", recursive: true, targetId: "cat.character",
+        })],
+        children: [
+          entry({
+            id: "e.leader", name: "Leader", type: "model", categories: ["cat.character"],
+            profiles: [{ name: "Leader", typeName: "Unit", characteristics: [{ name: "Sv", value: "3+" }] }],
+          }),
+          entry({
+            id: "e.trooper", name: "Trooper", type: "model", categories: [],
+            profiles: [{ name: "Trooper", typeName: "Unit", characteristics: [{ name: "Sv", value: "3+" }] }],
+          }),
+        ],
+      }),
+    ]);
+    const r = roster([sel("e.squad", [sel("e.leader"), sel("e.trooper")])]);
+
+    const out = effectiveDatasheet(cat, r, r.selections[0]!.id);
+
+    const unit = out.find((s) => s.typeName === "Unit");
+    expect(unit?.profiles.map((p) => p.characteristics[0]?.value)).toEqual(["2+", "3+"]);
+  });
+
+  it("targetId as a CATEGORY id does NOT apply to a node lacking that category", () => {
+    const cat = catalogue([
+      entry({
+        id: "e.squad", name: "Squad", type: "unit",
+        characteristicModifiers: [charMod({
+          characteristic: "Sv", profileType: "Unit", kind: "set", value: "2+",
+          targetScope: "self", recursive: true, targetId: "cat.character",
+        })],
+        children: [
+          entry({
+            id: "e.trooper", name: "Trooper", type: "model", categories: [],
+            profiles: [{ name: "Trooper", typeName: "Unit", characteristics: [{ name: "Sv", value: "3+" }] }],
+          }),
+        ],
+      }),
+    ]);
+    const r = roster([sel("e.squad", [sel("e.trooper")])]);
+
+    const out = effectiveDatasheet(cat, r, r.selections[0]!.id);
+
+    const unit = out.find((s) => s.typeName === "Unit");
+    expect(unit?.profiles[0]?.characteristics).toEqual([{ name: "Sv", value: "3+" }]);
   });
 
   it("a modifier resolving outside the datasheet's own subtree (roster scope) is silently skipped", () => {

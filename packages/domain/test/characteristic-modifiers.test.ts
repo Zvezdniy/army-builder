@@ -9,7 +9,7 @@ describe("IrCharacteristicModifier", () => {
       kind: "set",
       value: "2+",
       targetScope: "model",
-      targetEntryId: "9cfd-entry-id",
+      targetId: "9cfd-entry-id",
       recursive: true,
     });
     expect(parsed.characteristic).toBe("Sv");
@@ -17,16 +17,16 @@ describe("IrCharacteristicModifier", () => {
     expect(parsed.kind).toBe("set");
     expect(parsed.value).toBe("2+");
     expect(parsed.targetScope).toBe("model");
-    expect(parsed.targetEntryId).toBe("9cfd-entry-id");
+    expect(parsed.targetId).toBe("9cfd-entry-id");
     expect(parsed.recursive).toBe(true);
   });
 
-  it("targetEntryId is optional", () => {
+  it("targetId is optional", () => {
     const parsed = IrCharacteristicModifier.parse({
       characteristic: "S", profileType: "Melee Weapons", kind: "increment",
       value: "1", targetScope: "self", recursive: false,
     });
-    expect(parsed.targetEntryId).toBeUndefined();
+    expect(parsed.targetId).toBeUndefined();
   });
 
   it("carries a gating condition", () => {

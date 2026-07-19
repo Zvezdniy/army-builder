@@ -120,7 +120,7 @@ describe("rehydrateCatalogue", () => {
           kind: "set",
           value: "2+",
           targetScope: "model",
-          targetEntryId: "w",
+          targetId: "w",
           recursive: true,
           conditions: [
             {
