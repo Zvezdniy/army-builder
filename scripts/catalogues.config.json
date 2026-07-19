@@ -10,10 +10,208 @@
       "libraries": []
     },
     {
+      "slug": "blood-angels",
+      "name": "Blood Angels",
+      "primary": "Imperium - Blood Angels.cat",
+      "libraries": ["Imperium - Space Marines.cat"]
+    },
+    {
+      "slug": "dark-angels",
+      "name": "Dark Angels",
+      "primary": "Imperium - Dark Angels.cat",
+      "libraries": ["Imperium - Space Marines.cat"]
+    },
+    {
+      "slug": "space-wolves",
+      "name": "Space Wolves",
+      "primary": "Imperium - Space Wolves.cat",
+      "libraries": ["Imperium - Space Marines.cat"]
+    },
+    {
+      "slug": "black-templars",
+      "name": "Black Templars",
+      "primary": "Imperium - Black Templars.cat",
+      "libraries": ["Imperium - Space Marines.cat"]
+    },
+    {
+      "slug": "deathwatch",
+      "name": "Deathwatch",
+      "primary": "Imperium - Deathwatch.cat",
+      "libraries": ["Imperium - Space Marines.cat"]
+    },
+    {
+      "slug": "ultramarines",
+      "name": "Ultramarines",
+      "primary": "Imperium - Ultramarines.cat",
+      "libraries": ["Imperium - Space Marines.cat"]
+    },
+    {
+      "slug": "imperial-fists",
+      "name": "Imperial Fists",
+      "primary": "Imperium - Imperial Fists.cat",
+      "libraries": ["Imperium - Space Marines.cat"]
+    },
+    {
+      "slug": "iron-hands",
+      "name": "Iron Hands",
+      "primary": "Imperium - Iron Hands.cat",
+      "libraries": ["Imperium - Space Marines.cat"]
+    },
+    {
+      "slug": "raven-guard",
+      "name": "Raven Guard",
+      "primary": "Imperium - Raven Guard.cat",
+      "libraries": ["Imperium - Space Marines.cat"]
+    },
+    {
+      "slug": "salamanders",
+      "name": "Salamanders",
+      "primary": "Imperium - Salamanders.cat",
+      "libraries": ["Imperium - Space Marines.cat"]
+    },
+    {
+      "slug": "white-scars",
+      "name": "White Scars",
+      "primary": "Imperium - White Scars.cat",
+      "libraries": ["Imperium - Space Marines.cat"]
+    },
+    {
+      "slug": "grey-knights",
+      "name": "Grey Knights",
+      "primary": "Imperium - Grey Knights.cat",
+      "libraries": []
+    },
+    {
+      "slug": "adepta-sororitas",
+      "name": "Adepta Sororitas",
+      "primary": "Imperium - Adepta Sororitas.cat",
+      "libraries": []
+    },
+    {
+      "slug": "adeptus-custodes",
+      "name": "Adeptus Custodes",
+      "primary": "Imperium - Adeptus Custodes.cat",
+      "libraries": []
+    },
+    {
+      "slug": "adeptus-mechanicus",
+      "name": "Adeptus Mechanicus",
+      "primary": "Imperium - Adeptus Mechanicus.cat",
+      "libraries": []
+    },
+    {
       "slug": "astra-militarum",
       "name": "Astra Militarum",
       "primary": "Imperium - Astra Militarum.cat",
       "libraries": ["Imperium - Astra Militarum - Library.cat"]
+    },
+    {
+      "slug": "agents-of-the-imperium",
+      "name": "Agents of the Imperium",
+      "primary": "Imperium - Agents of the Imperium.cat",
+      "libraries": []
+    },
+    {
+      "slug": "imperial-knights",
+      "name": "Imperial Knights",
+      "primary": "Imperium - Imperial Knights.cat",
+      "libraries": ["Imperium - Imperial Knights - Library.cat"]
+    },
+    {
+      "slug": "chaos-space-marines",
+      "name": "Chaos Space Marines",
+      "primary": "Chaos - Chaos Space Marines.cat",
+      "libraries": []
+    },
+    {
+      "slug": "death-guard",
+      "name": "Death Guard",
+      "primary": "Chaos - Death Guard.cat",
+      "libraries": []
+    },
+    {
+      "slug": "thousand-sons",
+      "name": "Thousand Sons",
+      "primary": "Chaos - Thousand Sons.cat",
+      "libraries": []
+    },
+    {
+      "slug": "world-eaters",
+      "name": "World Eaters",
+      "primary": "Chaos - World Eaters.cat",
+      "libraries": []
+    },
+    {
+      "slug": "emperors-children",
+      "name": "Emperor's Children",
+      "primary": "Chaos - Emperor's Children.cat",
+      "libraries": []
+    },
+    {
+      "slug": "chaos-daemons",
+      "name": "Chaos Daemons",
+      "primary": "Chaos - Chaos Daemons.cat",
+      "libraries": ["Chaos - Chaos Daemons Library.cat"]
+    },
+    {
+      "slug": "chaos-knights",
+      "name": "Chaos Knights",
+      "primary": "Chaos - Chaos Knights.cat",
+      "libraries": ["Chaos - Chaos Knights Library.cat"]
+    },
+    {
+      "slug": "aeldari",
+      "name": "Aeldari (Craftworlds)",
+      "primary": "Aeldari - Craftworlds.cat",
+      "libraries": ["Aeldari - Aeldari Library.cat"]
+    },
+    {
+      "slug": "drukhari",
+      "name": "Drukhari",
+      "primary": "Aeldari - Drukhari.cat",
+      "libraries": ["Aeldari - Aeldari Library.cat"]
+    },
+    {
+      "slug": "ynnari",
+      "name": "Ynnari",
+      "primary": "Aeldari - Ynnari.cat",
+      "libraries": ["Aeldari - Aeldari Library.cat"]
+    },
+    {
+      "slug": "necrons",
+      "name": "Necrons",
+      "primary": "Necrons.cat",
+      "libraries": []
+    },
+    {
+      "slug": "orks",
+      "name": "Orks",
+      "primary": "Orks.cat",
+      "libraries": []
+    },
+    {
+      "slug": "tau-empire",
+      "name": "T'au Empire",
+      "primary": "T'au Empire.cat",
+      "libraries": []
+    },
+    {
+      "slug": "tyranids",
+      "name": "Tyranids",
+      "primary": "Tyranids.cat",
+      "libraries": ["Library - Tyranids.cat"]
+    },
+    {
+      "slug": "genestealer-cults",
+      "name": "Genestealer Cults",
+      "primary": "Genestealer Cults.cat",
+      "libraries": []
+    },
+    {
+      "slug": "leagues-of-votann",
+      "name": "Leagues of Votann",
+      "primary": "Leagues of Votann.cat",
+      "libraries": []
     }
   ]
 }

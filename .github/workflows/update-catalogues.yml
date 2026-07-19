@@ -1,12 +1,14 @@
 name: Update catalogues
 
 # Refresh the parsed catalogue library from BSData and publish it to GitHub Pages.
-# Runs on a schedule (BSData tracks GW balance updates within days) and on demand.
+# Update-aware: a lightweight `check` job resolves BSData's latest commit and only
+# runs the (heavy) parse/pack/deploy when that revision — or our config — has
+# changed since the last successful publish. Runs on a schedule and on demand.
 # Publishes ONLY catalogue data (manifest + packed IR), not the web app.
 
 on:
   schedule:
-    - cron: "0 6 * * *" # daily at 06:00 UTC
+    - cron: "0 */6 * * *" # every 6 hours; the no-op path is cheap, so updates land fast
   workflow_dispatch: {}
 
 permissions:
@@ -20,7 +22,48 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Decide whether there is anything new to build. Resolve BSData's HEAD commit and
+  # probe a cache marker keyed by (upstream SHA + config hash). A hit means we have
+  # already published exactly this revision with exactly this faction set → skip.
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.marker.outputs.cache-hit != 'true' }}
+      sha: ${{ steps.upstream.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: upstream
+        name: Resolve latest BSData revision
+        env:
+          # Authenticate the API call: unauthenticated requests share the runner's
+          # egress IP under a 60/hour limit and can intermittently 403.
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          REPO=$(jq -r .repo scripts/catalogues.config.json)
+          REF=$(jq -r .ref scripts/catalogues.config.json)
+          SHA=$(curl -sf -H "Authorization: Bearer $GH_TOKEN" "https://api.github.com/repos/$REPO/commits/$REF" | jq -r .sha)
+          if [ -z "$SHA" ] || [ "$SHA" = "null" ]; then
+            echo "Could not resolve upstream SHA for $REPO@$REF" >&2
+            exit 1
+          fi
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "BSData $REPO@$REF is at $SHA"
+
+      - id: marker
+        name: Already published this revision + config?
+        uses: actions/cache/restore@v4
+        with:
+          path: .bsdata-built
+          key: bsdata-${{ steps.upstream.outputs.sha }}-${{ hashFiles('scripts/catalogues.config.json') }}
+          lookup-only: true
+
+      - if: steps.marker.outputs.cache-hit == 'true'
+        run: echo "No change since the last successful publish — skipping the rebuild."
+
   build:
+    needs: check
+    if: needs.check.outputs.changed == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -61,7 +104,8 @@ jobs:
           path: apps/web/public
 
   deploy:
-    needs: build
+    needs: [check, build]
+    if: needs.check.outputs.changed == 'true'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
@@ -69,3 +113,18 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
+
+  # Record the revision we just published, so the next `check` skips it. Runs only
+  # after a fully successful build+deploy — a failed run leaves no marker, so the
+  # next scheduled run retries the same revision instead of silently giving up.
+  record:
+    needs: [check, build, deploy]
+    if: needs.check.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: echo "${{ needs.check.outputs.sha }}" > .bsdata-built
+      - uses: actions/cache/save@v4
+        with:
+          path: .bsdata-built
+          key: bsdata-${{ needs.check.outputs.sha }}-${{ hashFiles('scripts/catalogues.config.json') }}
