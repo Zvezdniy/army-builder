@@ -1,5 +1,5 @@
 import { Fragment, useMemo, useState } from "react";
-import type { IrCatalogue, IrCharacteristic, Roster, RosterSelection } from "@muster/domain";
+import type { IrCatalogue, IrCharacteristic, IrProfile, Roster, RosterSelection } from "@muster/domain";
 import { unitLoadout, invulnSave } from "@muster/roster";
 import { effectiveDatasheet, type DatasheetSection } from "@muster/engine-eval";
 
@@ -38,8 +38,17 @@ function nativeInvuln(characteristics: IrCharacteristic[]): string | undefined {
   return value ? value : undefined;
 }
 
-/** The unit's statline bar with the invulnerable-save chip hanging under the
- *  Toughness column, the way a datasheet shows it. */
+/** The unit's statline bars — ONE PER MODEL PROFILE, each with its own
+ *  invulnerable-save chip hanging under the Toughness column, the way a datasheet
+ *  shows it.
+ *
+ *  A mixed unit genuinely has several statlines (Wolf Guard Terminators: a Pack
+ *  Leader plus two differently-armed Terminators), and 667 of ~700 real 10e units
+ *  and 668 of ~700 in 11e carry more than one. Rendering only `profiles[0]` showed
+ *  ONE arbitrary model — whichever selection happened to sort first — and, since
+ *  11e stores the invuln per model, silently took the chip with it: zeroing the
+ *  default Terminators left the Pack Leader (who has no invuln) first, so a unit
+ *  whose every other model has a 4+ displayed none at all. */
 export function UnitStatline({
   catalogue, roster, selection,
 }: {
@@ -53,15 +62,33 @@ export function UnitStatline({
   );
   const unit = sections.find((s) => s.typeName === "Unit");
   if (!unit) return null;
-  const all = unit.profiles[0]?.characteristics ?? [];
-  // Prefer 11e's native characteristic — it comes from `effectiveDatasheet`, so a
-  // wargear/enhancement modifier that changes the save is already applied. 10e has
-  // no such characteristic and falls back to the Abilities-derived lookup.
-  const invulnValue = nativeInvuln(all) ?? invulnSave(catalogue, selection)?.value;
-  const chars = all.filter((c) => c.name !== INVULN_CHARACTERISTIC);
+  // 10e keeps the invuln in a unit-wide Abilities profile, so it backs EVERY model
+  // row; 11e's per-model `InSv` (already modifier-applied, since it comes from
+  // effectiveDatasheet) wins for the row that carries one.
+  const unitWide = invulnSave(catalogue, selection)?.value;
+  return (
+    <>
+      {unit.profiles.map((profile, i) => (
+        <ModelStatline key={`${profile.name}-${i}`} profile={profile}
+          showName={unit.profiles.length > 1} unitWideInvuln={unitWide} />
+      ))}
+    </>
+  );
+}
+
+function ModelStatline({
+  profile, showName, unitWideInvuln,
+}: {
+  profile: IrProfile;
+  showName: boolean;
+  unitWideInvuln: string | undefined;
+}) {
+  const invulnValue = nativeInvuln(profile.characteristics) ?? unitWideInvuln;
+  const chars = profile.characteristics.filter((c) => c.name !== INVULN_CHARACTERISTIC);
   const tIndex = chars.findIndex((c) => c.name === "T");
   return (
     <div className="ds-statwrap">
+      {showName && <div className="ds-model-name">{profile.name}</div>}
       <Statline characteristics={chars} />
       {invulnValue && chars.length > 0 && (
         <div className="ds-invuln-row" style={{ gridTemplateColumns: `repeat(${chars.length}, 1fr)` }}>

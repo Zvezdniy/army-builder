@@ -87,6 +87,9 @@ section { background: var(--panel); border: 1px solid var(--line); border-radius
 }
 /* Invulnerable-save chip, hanging under the Toughness column of the statline. */
 .ds-statwrap { margin: 10px 0 14px; }
+/* Only shown when a unit has more than one model statline, to say which is which. */
+.ds-model-name { margin: 0 0 4px; font-size: 11px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--muted); }
 .ds-invuln-row { display: grid; }
 .ds-invuln { justify-self: start; margin-top: -1px; display: inline-flex; align-items: stretch; white-space: nowrap;
   border: 1px solid var(--line); border-top: none; border-radius: 0 0 8px 8px; overflow: hidden; }

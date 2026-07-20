@@ -204,3 +204,48 @@ describe("Datasheet invulnerable save from a native 11e InSv characteristic", ()
     expect(labels).toEqual(["M", "T", "Sv"]);
   });
 });
+
+// Regression: a mixed unit has SEVERAL model statlines, and 11e stores the invuln
+// per model. Rendering only profiles[0] showed one arbitrary model and took the
+// chip with it — reported on Wolf Guard Terminators: zeroing the default
+// Terminators left the Pack Leader (no invuln) first, so a unit whose every other
+// model has a 4+ displayed none. 667/668 real units carry multiple profiles.
+const mixedUnitCat = {
+  id: "c", name: "C", gameSystemId: "gs", revision: 1,
+  entries: [
+    { id: "e.pack", name: "Terminators", costs: [], categories: [], constraints: [], groups: [], profiles: [],
+      children: [
+        { id: "e.leader", name: "Pack Leader", costs: [], categories: [], constraints: [], children: [], groups: [],
+          profiles: [{ name: "Pack Leader", typeName: "Unit", characteristics: [
+            { name: "T", value: "5" }, { name: "Sv", value: "2+" }, { name: "InSv", value: "" }] }] },
+        { id: "e.shield", name: "Terminator w/ storm shield", costs: [], categories: [], constraints: [], children: [], groups: [],
+          profiles: [{ name: "Terminator (Storm shield)", typeName: "Unit", characteristics: [
+            { name: "T", value: "5" }, { name: "Sv", value: "2+" }, { name: "InSv", value: "4+" }] }] },
+      ] },
+  ],
+} as unknown as IrCatalogue;
+
+describe("Datasheet with several model statlines", () => {
+  it("renders one statline per model and keeps each model's own invuln", () => {
+    // Pack Leader first — the exact order that used to hide the storm-shield 4+.
+    const unit = sel("e.pack", [sel("e.leader"), sel("e.shield")]);
+    const { container } = render(
+      <UnitStatline catalogue={mixedUnitCat} roster={rosterOf(unit)} selection={unit} />,
+    );
+    expect(container.querySelectorAll(".ds-statline")).toHaveLength(2);
+    expect(screen.getByText("Pack Leader")).toBeInTheDocument();
+    expect(screen.getByText("Terminator (Storm shield)")).toBeInTheDocument();
+    // Exactly one chip: the storm-shield model's. The Pack Leader has none.
+    const chips = [...container.querySelectorAll(".ds-invuln-value")].map((e) => e.textContent);
+    expect(chips).toEqual(["4+"]);
+  });
+
+  it("does not label the model when the unit has a single statline", () => {
+    const unit = sel("e.pack", [sel("e.shield")]);
+    const { container } = render(
+      <UnitStatline catalogue={mixedUnitCat} roster={rosterOf(unit)} selection={unit} />,
+    );
+    expect(container.querySelectorAll(".ds-statline")).toHaveLength(1);
+    expect(container.querySelector(".ds-model-name")).toBeNull();
+  });
+});
