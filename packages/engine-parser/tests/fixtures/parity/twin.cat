@@ -22,6 +22,9 @@
       <costs><cost name="pts" typeId="pts" value="45"/></costs>
       <categoryLinks><categoryLink id="cl.s" name="HQ" targetId="cat.hq"/></categoryLinks>
     </selectionEntry>
+    <selectionEntry id="e.nested" name="Nested" type="upgrade">
+      <costs><cost name="pts" typeId="pts" value="3"/></costs>
+    </selectionEntry>
   </sharedSelectionEntries>
   <selectionEntries>
     <selectionEntry id="e.u" name="U" type="model">
@@ -52,8 +55,10 @@
         </selectionEntryGroup>
       </selectionEntryGroups>
       <!-- An entryLink carrying its own content: an inline selectionEntry, a link
-           constraint, a cost repeating the target's (must replace, not double) and
-           a categoryLink repeating the target's (must de-duplicate). -->
+           constraint, a cost repeating the target's (must replace, not double), a
+           categoryLink repeating the target's (must de-duplicate), a nested
+           entryLinks (resolves through the same recursion as a target's own), an
+           inline profile and an infoLink to a shared profile. -->
       <entryLinks>
         <entryLink id="lnk.s" name="S" hidden="false" type="selectionEntry" targetId="e.shared">
           <constraints><constraint id="lnk.max" type="max" value="1" field="selections" scope="parent"/></constraints>
@@ -64,6 +69,17 @@
               <costs><cost name="pts" typeId="pts" value="7"/></costs>
             </selectionEntry>
           </selectionEntries>
+          <entryLinks>
+            <entryLink id="lnk.nested" name="Nested" type="selectionEntry" targetId="e.nested"/>
+          </entryLinks>
+          <profiles>
+            <profile id="p.linkprofile" name="Link Profile" typeName="Abilities" typeId="pt2">
+              <characteristics><characteristic name="Description" typeId="d">Link text</characteristic></characteristics>
+            </profile>
+          </profiles>
+          <infoLinks>
+            <infoLink name="Invulnerable Save" hidden="false" type="profile" id="il2" targetId="p.inv"/>
+          </infoLinks>
         </entryLink>
       </entryLinks>
     </selectionEntry>

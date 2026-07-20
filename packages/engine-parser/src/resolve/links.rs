@@ -106,6 +106,20 @@ fn resolve_link(
             Some(t) => t,
             None => { diags.push(unresolved_link_diag(&link.target_id)); return Ok(()); }
         };
+        // STRICT cycle guard: unlike the softer diagnose-and-drop treatment
+        // `resolve_link_children` gives a link's own directly-nested `entryLinks`
+        // (see the comment there), this check does not distinguish a genuine
+        // cross-catalogue cycle from an inline entry/group whose OWN ordinary
+        // subtree (its normal `<entryLinks>`, resolved the standard way via
+        // `resolve_entry`/`resolve_group`) links back to `link.target_id`. That
+        // shape would abort as a typed `ReferenceCycle` here instead of being
+        // dropped. Risk knowingly accepted: no real catalogue (10e or 11e) has
+        // it today, unlike the direct nested-link case, which real data does
+        // exercise (`Chaos - Chaos Knights Library`'s "Warlord", see below) and
+        // which is why THAT case gets the relaxation and this one does not.
+        // Widening this guard to cover arbitrary subtrees risks the same
+        // duplicate-id-under-itself hazard the nested-link relaxation avoids. If
+        // a real faction ever vanishes here, that is the signal to revisit.
         if path.contains(&link.target_id) {
             return Err(ParseError::ReferenceCycle(link.target_id.clone()));
         }
@@ -120,8 +134,8 @@ fn resolve_link(
         resolve_link_children(link, symbols, path, budget, diags, depth + 1,
             &mut inline_entries, &mut inline_groups)?;
         path.remove(&link.target_id);
-        diagnose_inline_duplicate_ids(&link.target_id, &resolved.entries, &inline_entries,
-            &resolved.groups, &inline_groups, diags);
+        drop_inline_duplicate_ids(&link.target_id, &resolved.entries, &mut inline_entries,
+            &resolved.groups, &mut inline_groups, diags);
         resolved.entries.extend(inline_entries);
         resolved.groups.extend(inline_groups);
         // Link constraints are additions, never overrides (verified across 11e:
@@ -163,6 +177,12 @@ fn resolve_link(
             Some(t) => t,
             None => { diags.push(unresolved_link_diag(&link.target_id)); return Ok(()); }
         };
+        // STRICT cycle guard — same narrow-acceptance shape as the group branch
+        // above: an inline entry/group's own ordinary subtree linking back to
+        // `link.target_id` (as opposed to a link's directly-nested `entryLinks`,
+        // which get the softer treatment in `resolve_link_children`) still lands
+        // here and aborts as `ReferenceCycle`. No real catalogue has this shape
+        // today; see the group-branch comment above for the full reasoning.
         if path.contains(&link.target_id) {
             return Err(ParseError::ReferenceCycle(link.target_id.clone()));
         }
@@ -189,13 +209,17 @@ fn resolve_link(
 ///   appended after the target's own, sharing the cycle path-set, node budget and
 ///   depth cap (`depth` here is the CLONE's depth). A nested `entry_link` back to
 ///   something already on the path is dropped with a diagnostic, not a cycle error
-///   — see `resolve_link_children`.
+///   — see `resolve_link_children`. An inline entry/group whose id the clone
+///   already carries is diagnosed and DROPPED, not kept — see
+///   `drop_inline_duplicate_ids`.
 /// - `constraints` — appended; a link constraint is always an addition (across all
 ///   of 11e, no link constraint shares an id with one on its target).
 /// - `costs` — merged by cost-type id with the link's value WINNING, never
 ///   appended: a link that repeats its target's `pts 45` must not charge 90.
-/// - `category_links` — appended, skipping a category the clone already has, since
-///   a repeat is meaningless and would inflate category-scoped counts.
+/// - `category_links` — merged by target category id: a repeat is skipped (never
+///   appended a second time, since that would inflate category-scoped counts),
+///   but its `constraints` are still merged onto the surviving link so a repeat
+///   never silently discards a per-category limit.
 /// - `profiles`/`info_links` — appended through the same path an entry uses.
 #[allow(clippy::too_many_arguments)]
 fn apply_link_content(
@@ -213,8 +237,8 @@ fn apply_link_content(
     let mut inline_groups: Vec<RawGroup> = Vec::new();
     resolve_link_children(link, symbols, path, budget, diags, depth,
         &mut inline_entries, &mut inline_groups)?;
-    diagnose_inline_duplicate_ids(&link.target_id, &resolved.entries, &inline_entries,
-        &resolved.groups, &inline_groups, diags);
+    drop_inline_duplicate_ids(&link.target_id, &resolved.entries, &mut inline_entries,
+        &resolved.groups, &mut inline_groups, diags);
     resolved.entries.extend(inline_entries);
     resolved.groups.extend(inline_groups);
 
@@ -228,10 +252,17 @@ fn apply_link_content(
     }
 
     for cl in &link.category_links {
-        if resolved.category_links.iter().any(|e| e.target_id == cl.target_id) {
-            continue;
+        // A repeated category target is meaningless and would inflate any
+        // category-scoped count if kept as a second entry — so the DUPLICATE
+        // is what gets dropped, never its `constraints`: those are merged onto
+        // the category link that survives, so a link's own per-category
+        // min/max is never silently discarded just because the category
+        // itself was already named (map_entry concatenates a categoryLink's
+        // constraints onto the entry, keyed off the surviving link).
+        match resolved.category_links.iter_mut().find(|e| e.target_id == cl.target_id) {
+            Some(existing) => existing.constraints.extend(cl.constraints.iter().cloned()),
+            None => resolved.category_links.push(cl.clone()),
         }
-        resolved.category_links.push(cl.clone());
     }
 
     resolved.profiles.extend(link.profiles.iter().cloned());
@@ -290,37 +321,56 @@ fn resolve_link_children(
     Ok(())
 }
 
-/// Diagnose an inline entry/group whose id the placement already carries — either
-/// from the target's own children or from a sibling nested link. There is no merge
-/// rule here on purpose: the node is still appended, and the diagnostic exists so a
-/// real-data repack surfaces the shape if it ever occurs, instead of silently
-/// producing a clone with two children under one id.
-fn diagnose_inline_duplicate_ids(
+/// Drop an inline entry/group whose id the placement already carries — either
+/// from the target's own children or from a sibling nested link (both are
+/// already present in `existing_*`/earlier in `inline_*` by the time this runs,
+/// since `resolve_link_children` folds a nested entryLink's resolved output into
+/// the same `inline_entries`/`inline_groups` sink before this is called). On real
+/// data this fires 56 times across 26 factions in both editions — e.g. Chaos -
+/// Thousand Sons' shared `Autopistol` (`71c8-…`) already carries an entryLink to
+/// the `Weapon Modifications` group (`f9da-…`); two separate placement links to
+/// Autopistol each also declare a nested entryLink to that SAME group, so without
+/// this drop the clone gets `f9da-…` twice, byte-identical. All 56 observed cases
+/// are byte-identical duplicates, so nothing is lost by keeping only the first —
+/// a genuine duplicate-id sibling would otherwise reach the IR, and downstream
+/// consumers that key by id (`UnitConfig.tsx`'s `key={g.id}`, `builder.ts`'s
+/// last-wins `Map` vs `engine-eval`'s first-wins `Map`) disagree about which
+/// clone is meant. The diagnostic still fires so a real-data repack surfaces the
+/// shape.
+fn drop_inline_duplicate_ids(
     target_id: &str,
-    existing_entries: &[RawEntry], inline_entries: &[RawEntry],
-    existing_groups: &[RawGroup], inline_groups: &[RawGroup],
+    existing_entries: &[RawEntry], inline_entries: &mut Vec<RawEntry>,
+    existing_groups: &[RawGroup], inline_groups: &mut Vec<RawGroup>,
     diags: &mut Vec<Diagnostic>,
 ) {
-    let mut push = |id: &str| {
-        diags.push(Diagnostic {
-            code: "entryLink.inline_duplicate_id".to_string(),
-            message: format!(
-                "entryLink to {} declares inline content with id {}, which this placement already has (kept)",
-                target_id, id),
-        });
-    };
-    let mut seen: HashSet<&str> = existing_entries.iter().map(|e| e.id.as_str()).collect();
-    for e in inline_entries {
-        if !seen.insert(e.id.as_str()) {
-            push(&e.id);
+    let mut seen: HashSet<String> = existing_entries.iter().map(|e| e.id.clone()).collect();
+    inline_entries.retain(|e| {
+        if seen.insert(e.id.clone()) {
+            true
+        } else {
+            diags.push(Diagnostic {
+                code: "entryLink.inline_duplicate_id".to_string(),
+                message: format!(
+                    "entryLink to {} declares inline content with id {}, which this placement already has (dropped)",
+                    target_id, e.id),
+            });
+            false
         }
-    }
-    let mut seen: HashSet<&str> = existing_groups.iter().map(|g| g.id.as_str()).collect();
-    for g in inline_groups {
-        if !seen.insert(g.id.as_str()) {
-            push(&g.id);
+    });
+    let mut seen: HashSet<String> = existing_groups.iter().map(|g| g.id.clone()).collect();
+    inline_groups.retain(|g| {
+        if seen.insert(g.id.clone()) {
+            true
+        } else {
+            diags.push(Diagnostic {
+                code: "entryLink.inline_duplicate_id".to_string(),
+                message: format!(
+                    "entryLink to {} declares inline content with id {}, which this placement already has (dropped)",
+                    target_id, g.id),
+            });
+            false
         }
-    }
+    });
 }
 
 /// Inline each `type="profile"` infoLink's target profile into `profiles`.
@@ -770,6 +820,36 @@ mod tests {
     }
 
     #[test]
+    fn link_duplicate_category_still_merges_its_constraints() {
+        // Finding 3: skipping a duplicate categoryLink must not drop the
+        // `constraints` it carries — those are merged onto the surviving link
+        // (`map_entry` in ir/map.rs concatenates a categoryLink's constraints
+        // onto the entry, keyed off the target category id, so a dropped
+        // constraint here is a silently-vanished per-category min/max).
+        let mut target = entry("t", vec![]);
+        target.category_links.push(RawCategoryLink {
+            target_id: "c1".into(), constraints: vec![constraint("t.cat.max", 2.0)], ..Default::default()
+        });
+        let mut rich = link("t");
+        rich.category_links.push(RawCategoryLink {
+            target_id: "c1".into(), constraints: vec![constraint("lnk.cat.max", 1.0)], ..Default::default()
+        });
+        let owner = RawEntry {
+            id: "owner".into(), entry_type: "unit".into(),
+            entry_links: vec![rich], ..Default::default()
+        };
+        let cat = RawCatalogue {
+            id: "c".into(), entries: vec![owner], shared_entries: vec![target], ..Default::default()
+        };
+        let resolved = resolve(cat).unwrap();
+        let clone = &resolved.entries[0].entries[0];
+        assert_eq!(clone.category_links.len(), 1, "still de-duplicated to one categoryLink for c1");
+        let ids: Vec<&str> = clone.category_links[0].constraints.iter().map(|c| c.id.as_str()).collect();
+        assert_eq!(ids, vec!["t.cat.max", "lnk.cat.max"],
+            "the duplicate's constraint is merged onto the surviving categoryLink, not dropped");
+    }
+
+    #[test]
     fn link_profile_and_infolink_reach_the_clone() {
         let target = entry("t", vec![]);
         let mut rich = link("t");
@@ -947,13 +1027,19 @@ mod tests {
     }
 
     #[test]
-    fn link_inline_duplicate_id_is_diagnosed() {
-        // The link declares an inline entry whose id the target already contributes.
+    fn link_inline_duplicate_id_is_dropped_not_kept() {
+        // Finding 1 (real-data regression, 56x across 26 factions/both editions):
+        // the link declares an inline entry AND an inline group whose ids the
+        // target already carries — the Chaos - Thousand Sons "Autopistol" shape,
+        // where a placement link's nested entryLink re-declares a group the
+        // target's own entryLink already contributed. The duplicate must be
+        // DROPPED, yielding exactly ONE child/group with that id, not kept as a
+        // genuine duplicate-id sibling.
         let mut target = entry("t", vec![]);
         target.entries.push(entry("dup", vec![]));
+        target.groups.push(RawGroup { id: "gdup".into(), ..Default::default() });
         let mut rich = link("t");
         rich.entries.push(entry("dup", vec![]));
-        rich.groups.push(RawGroup { id: "gdup".into(), ..Default::default() });
         rich.groups.push(RawGroup { id: "gdup".into(), ..Default::default() });
         let owner = RawEntry {
             id: "owner".into(), entry_type: "unit".into(),
@@ -967,12 +1053,39 @@ mod tests {
         let hits: Vec<&Diagnostic> = diags.iter()
             .filter(|d| d.code == "entryLink.inline_duplicate_id").collect();
         assert_eq!(hits.len(), 2, "one for the duplicate entry id, one for the duplicate group id");
-        assert!(hits.iter().any(|d| d.message.contains("dup")));
-        assert!(hits.iter().any(|d| d.message.contains("gdup")));
-        // No merge rule: the nodes are still there, just flagged.
+        assert!(hits.iter().any(|d| d.message.contains("dup") && d.message.contains("dropped")));
+        assert!(hits.iter().any(|d| d.message.contains("gdup") && d.message.contains("dropped")));
         let clone = &resolved.entries[0].entries[0];
-        assert_eq!(clone.entries.len(), 2);
-        assert_eq!(clone.groups.len(), 2);
+        assert_eq!(clone.entries.iter().filter(|e| e.id == "dup").count(), 1,
+            "exactly one child carries the duplicate id, the inline copy was dropped");
+        assert_eq!(clone.groups.iter().filter(|g| g.id == "gdup").count(), 1,
+            "exactly one group carries the duplicate id, the inline copy was dropped");
+    }
+
+    #[test]
+    fn link_inline_duplicate_id_within_the_links_own_content_is_also_dropped() {
+        // Neither duplicate comes from the target this time — both "gdup" groups
+        // are declared by the SAME link (the sibling-nested-link shape from real
+        // data: two separate entryLinks under one link each resolving to a group
+        // with the same id). The second occurrence must still be dropped.
+        let target = entry("t", vec![]);
+        let mut rich = link("t");
+        rich.groups.push(RawGroup { id: "gdup".into(), ..Default::default() });
+        rich.groups.push(RawGroup { id: "gdup".into(), ..Default::default() });
+        let owner = RawEntry {
+            id: "owner".into(), entry_type: "unit".into(),
+            entry_links: vec![rich], ..Default::default()
+        };
+        let cat = RawCatalogue {
+            id: "c".into(), entries: vec![owner], shared_entries: vec![target], ..Default::default()
+        };
+        let mut diags = Vec::new();
+        let resolved = resolve_with_diags(cat, &mut diags).unwrap();
+        assert!(diags.iter().any(|d| d.code == "entryLink.inline_duplicate_id"
+            && d.message.contains("gdup") && d.message.contains("dropped")));
+        let clone = &resolved.entries[0].entries[0];
+        assert_eq!(clone.groups.iter().filter(|g| g.id == "gdup").count(), 1,
+            "the second inline group with the same id was dropped");
     }
 
     #[test]
