@@ -143,4 +143,71 @@ describe("SetupWizard", () => {
     );
     expect(screen.getByText("Space Marines")).toBeTruthy();
   });
+
+  const twoEditionRegistry = [
+    { id: "10e:a", catalogueId: "a", name: "Alpha", edition: "10e", editionName: "10th Edition", source: { kind: "bundled" as const, data: {} } },
+    { id: "10e:b", catalogueId: "b", name: "Beta", edition: "10e", editionName: "10th Edition", source: { kind: "manifest" as const, file: "b.ir.json" } },
+    { id: "11e:a", catalogueId: "a", name: "Alpha", edition: "11e", editionName: "11th Edition", source: { kind: "manifest" as const, file: "a11.ir.json" } },
+  ];
+
+  it("renders one segment per edition with the active descriptor's edition selected", () => {
+    render(
+      <SetupWizard catalogue={cat} roster={createRoster(cat, 2000)} initialStep={1}
+        registry={twoEditionRegistry} activeDescriptorId="10e:a" onSelectFaction={noop}
+        onSetPoints={noop} onSetDetachment={noop} onClose={noop} />,
+    );
+    const picker = screen.getByTestId("edition-picker");
+    const tenE = screen.getByText("10th Edition").closest("button") as HTMLElement;
+    const elevenE = screen.getByText("11th Edition").closest("button") as HTMLElement;
+    expect(picker.contains(tenE)).toBe(true);
+    expect(picker.contains(elevenE)).toBe(true);
+    expect(tenE.getAttribute("aria-pressed")).toBe("true");
+    expect(elevenE.getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("shows only the selected edition's factions in the grid", () => {
+    render(
+      <SetupWizard catalogue={cat} roster={createRoster(cat, 2000)} initialStep={1}
+        registry={twoEditionRegistry} activeDescriptorId="10e:a" onSelectFaction={noop}
+        onSetPoints={noop} onSetDetachment={noop} onClose={noop} />,
+    );
+    // 10e has Alpha + Beta; 11e's Alpha is a distinct descriptor and must not appear
+    // alongside them even though it shares the display name.
+    expect(screen.getAllByText("Alpha")).toHaveLength(1);
+    expect(screen.getByText("Beta")).toBeTruthy();
+  });
+
+  it("clicking another edition segment switches the grid without selecting a faction", () => {
+    const onSelectFaction = vi.fn();
+    render(
+      <SetupWizard catalogue={cat} roster={createRoster(cat, 2000)} initialStep={1}
+        registry={twoEditionRegistry} activeDescriptorId="10e:a" onSelectFaction={onSelectFaction}
+        onSetPoints={noop} onSetDetachment={noop} onClose={noop} />,
+    );
+    fireEvent.click(screen.getByText("11th Edition"));
+    expect(screen.getByText("Alpha")).toBeTruthy();
+    expect(screen.queryByText("Beta")).toBeNull();
+    expect(onSelectFaction).not.toHaveBeenCalled();
+  });
+
+  it("clicking a faction after switching edition calls onSelectFaction with the composite id", () => {
+    const onSelectFaction = vi.fn();
+    render(
+      <SetupWizard catalogue={cat} roster={createRoster(cat, 2000)} initialStep={1}
+        registry={twoEditionRegistry} activeDescriptorId="10e:a" onSelectFaction={onSelectFaction}
+        onSetPoints={noop} onSetDetachment={noop} onClose={noop} />,
+    );
+    fireEvent.click(screen.getByText("11th Edition"));
+    fireEvent.click(screen.getByText("Alpha"));
+    expect(onSelectFaction).toHaveBeenCalledWith("11e:a");
+  });
+
+  it("hides the edition picker with a single-edition registry", () => {
+    render(
+      <SetupWizard catalogue={cat} roster={createRoster(cat, 2000)} initialStep={1}
+        registry={registry} activeDescriptorId="a" onSelectFaction={noop}
+        onSetPoints={noop} onSetDetachment={noop} onClose={noop} />,
+    );
+    expect(screen.queryByTestId("edition-picker")).toBeNull();
+  });
 });

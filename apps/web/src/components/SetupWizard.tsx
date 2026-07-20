@@ -49,6 +49,21 @@ export function SetupWizard({
   const chosen = selectedDetachment(roster, catalogue);
   const [customPts, setCustomPts] = useState("");
 
+  // Edition list derived from the registry, first-appearance order preserved.
+  const editions = registry
+    ? registry.reduce<{ id: string; name: string }[]>((acc, d) => (
+        acc.some((e) => e.id === d.edition) ? acc : [...acc, { id: d.edition, name: d.editionName }]
+      ), [])
+    : [];
+  const activeEdition = registry?.find((d) => d.id === activeDescriptorId)?.edition ?? editions[0]?.id;
+  // `undefined` means "the user hasn't picked an edition locally yet" — the displayed
+  // edition then tracks `activeEdition` for free. Once the user clicks a segment this
+  // holds their explicit choice instead. A useEffect to resync on `activeEdition` changes
+  // would fight that explicit choice (e.g. right after `onSelectFaction` updates the active
+  // descriptor), so we deliberately don't add one — the derived fallback covers it.
+  const [edition, setEdition] = useState<string | undefined>(undefined);
+  const displayedEdition = edition ?? activeEdition;
+
   const canFinish = !hasDetachmentStep || chosen !== undefined;
   const next = () => (step < lastStep ? setStep(step + 1) : onClose());
   const preview = (() => {
@@ -99,9 +114,21 @@ export function SetupWizard({
           {step === 1 && (
             <div data-testid="step-faction">
               <p className="wizard-lead">Choose the faction this army is built from.</p>
+              {editions.length > 1 && (
+                <div className="edition-picker" data-testid="edition-picker">
+                  {editions.map((e) => (
+                    <button key={e.id} type="button"
+                      className={`step-tab${e.id === displayedEdition ? " active" : ""}`}
+                      aria-pressed={e.id === displayedEdition}
+                      onClick={() => setEdition(e.id)}>
+                      <span className="step-lbl">{e.name}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
               <div className="faction-grid">
                 {registry
-                  ? registry.map((d) => (
+                  ? registry.filter((d) => d.edition === displayedEdition).map((d) => (
                       <button key={d.id}
                         className={`faction-card${d.id === activeDescriptorId ? " chosen" : ""}`}
                         aria-pressed={d.id === activeDescriptorId}
