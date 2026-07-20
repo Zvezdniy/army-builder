@@ -237,22 +237,38 @@ export function SetupWizard({
                       </div>
                     </>
                   )}
-                  {previews.map(({ detachment, enhancements }) => (
-                    <div key={detachment.id} className="det-preview-section">
-                      <div className="ds-section-head">{detachment.name}</div>
-                      <div className="preview-body">
-                        {enhancements.length === 0 && (
-                          <div className="preview-empty">No enhancement preview.</div>
-                        )}
-                        {enhancements.map((e) => (
-                          <div key={e.id} className="enh-line">
-                            <span className="enh-name">{e.name}</span>
-                            <span className="enh-pts">{pointsCost(e)?.value ?? 0}</span>
-                          </div>
-                        ))}
+                  {previews.map(({ detachment, enhancements }) => {
+                    const rules = (detachment.ruleNames ?? []).map((name) => ({
+                      name, text: catalogue.ruleTexts?.[name],
+                    }));
+                    return (
+                      <div key={detachment.id} className="det-preview-section">
+                        <div className="ds-section-head">{detachment.name}</div>
+                        <div className="preview-body">
+                          {rules.length > 0 && (
+                            <div className="det-rules">
+                              {rules.map((r) => (
+                                <div key={r.name} className="det-rule">
+                                  <div className="det-rule-name">{r.name}</div>
+                                  {r.text && <p className="det-rule-text">{r.text}</p>}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          <div className="preview-subhead">Enhancements</div>
+                          {enhancements.length === 0 && (
+                            <div className="preview-empty">No enhancement preview.</div>
+                          )}
+                          {enhancements.map((e) => (
+                            <div key={e.id} className="enh-line">
+                              <span className="enh-name">{e.name}</span>
+                              <span className="enh-pts">{pointsCost(e)?.value ?? 0}</span>
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </aside>
               </div>
             </div>

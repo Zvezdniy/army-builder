@@ -162,6 +162,37 @@ const orderedEnhCat: IrCatalogue = {
   ],
 };
 
+// A catalogue exercising the detachment RULES preview (Task 3): one detachment whose
+// entry carries `ruleNames` with a matching `ruleTexts` body (the real 11e Space Wolves
+// shape — hard line breaks + a blank-line paragraph split), one with no `ruleNames` at
+// all, and one whose `ruleNames` entry has no matching `ruleTexts` body.
+const ruleCat: IrCatalogue = {
+  id: "c.rules", name: "Space Wolves", gameSystemId: "gs", revision: 1, forceConstraints: [], categoryNames: {},
+  ruleTexts: {
+    "Loping Charge": "Friendly ADEPTUS ASTARTES TERMINATOR units have +1 to charge rolls.\n\n\nRestrictions: Your army can include SPACE WOLVES units, but it\ncannot include any ADEPTUS ASTARTES units drawn from any\nother Chapter.",
+  },
+  entries: [
+    {
+      id: "e.det", name: "Detachment", type: "upgrade", costs: [], categories: [], constraints: [],
+      groups: [{
+        id: "g.det", name: "Detachment", memberEntryIds: ["e.saga", "e.anvil", "e.unknown"],
+        constraints: [{ id: "c.min1", type: "min", value: 1, scope: "self" }],
+      }],
+      children: [
+        {
+          id: "e.saga", name: "Legends of Saga and Song", type: "upgrade", costs: [], categories: [], constraints: [], children: [],
+          ruleNames: ["Loping Charge"],
+        },
+        { id: "e.anvil", name: "Anvil Siege Force", type: "upgrade", costs: [], categories: [], constraints: [], children: [] },
+        {
+          id: "e.unknown", name: "Unknown Rule Detachment", type: "upgrade", costs: [], categories: [], constraints: [], children: [],
+          ruleNames: ["Mystery Rule"],
+        },
+      ],
+    },
+  ],
+};
+
 const noop = () => {};
 
 describe("SetupWizard", () => {
@@ -211,6 +242,29 @@ describe("SetupWizard", () => {
     const { container } = render(<SetupWizard catalogue={orderedEnhCat} roster={roster} initialStep={2} onSetPoints={noop} onToggleDetachment={noop} onClose={noop} />);
     const names = Array.from(container.querySelectorAll(".enh-name")).map((el) => el.textContent);
     expect(names).toEqual(["Iron Halo", "Artificer Armour"]);
+  });
+
+  it("previews a chosen detachment's rule name AND its text, preserving line breaks", () => {
+    const roster = toggleDetachment(createRoster(ruleCat, 2000), "e.saga", ruleCat);
+    const { container } = render(<SetupWizard catalogue={ruleCat} roster={roster} initialStep={2} onSetPoints={noop} onToggleDetachment={noop} onClose={noop} />);
+    expect(screen.getByText("Loping Charge")).toBeTruthy();
+    const text = container.querySelector(".det-rule-text") as HTMLElement;
+    expect(text).toBeTruthy();
+    expect(text.textContent).toBe(ruleCat.ruleTexts!["Loping Charge"]);
+  });
+
+  it("a detachment with no rules renders no rules block at all", () => {
+    const roster = toggleDetachment(createRoster(ruleCat, 2000), "e.anvil", ruleCat);
+    const { container } = render(<SetupWizard catalogue={ruleCat} roster={roster} initialStep={2} onSetPoints={noop} onToggleDetachment={noop} onClose={noop} />);
+    expect(container.querySelector(".det-rules")).toBeNull();
+    expect(container.querySelector(".det-rule-name")).toBeNull();
+  });
+
+  it("a rule name with no matching ruleTexts entry renders the name without inventing text", () => {
+    const roster = toggleDetachment(createRoster(ruleCat, 2000), "e.unknown", ruleCat);
+    const { container } = render(<SetupWizard catalogue={ruleCat} roster={roster} initialStep={2} onSetPoints={noop} onToggleDetachment={noop} onClose={noop} />);
+    expect(screen.getByText("Mystery Rule")).toBeTruthy();
+    expect(container.querySelector(".det-rule-text")).toBeNull();
   });
 
   it("Start building is disabled until a detachment is chosen, then finishes", () => {

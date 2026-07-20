@@ -316,6 +316,15 @@ section { background: var(--panel); border: 1px solid var(--line); border-radius
 .det-preview-section + .det-preview-section { border-top: 1px solid var(--line); }
 .preview-body { padding: 8px 12px; display: flex; flex-direction: column; }
 .preview-empty { color: var(--muted); font-size: 12.5px; padding: 4px 0; }
+/* Sub-heading distinguishing a block within a .preview-body from the section's own
+   .ds-section-head bar above it (e.g. "Enhancements" under the detachment's rules). */
+.preview-subhead { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--muted); margin: 6px 0 2px; }
+.preview-subhead:first-child { margin-top: 0; }
+.det-rules { display: flex; flex-direction: column; gap: 6px; padding-bottom: 4px; border-bottom: 1px dashed var(--line); margin-bottom: 2px; }
+.det-rule-name { font-size: 12.5px; font-weight: 700; }
+/* Preserves the source's hard line breaks and blank-line paragraph split verbatim. */
+.det-rule-text { font-size: 12.5px; line-height: 1.45; white-space: pre-line; color: var(--ink); margin: 2px 0 0; }
 .enh-line { display: flex; justify-content: space-between; gap: 8px; font-size: 12.5px; padding: 5px 0; border-bottom: 1px dashed var(--line); }
 .enh-line:last-child { border-bottom: none; }
 .enh-name { font-weight: 600; }
