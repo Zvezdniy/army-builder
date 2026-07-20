@@ -89,8 +89,8 @@ describe("SetupWizard", () => {
   });
 
   const registry = [
-    { id: "a", name: "Alpha", source: { kind: "bundled" as const, data: {} } },
-    { id: "b", name: "Beta", source: { kind: "manifest" as const, file: "b.ir.json" } },
+    { id: "a", catalogueId: "a", name: "Alpha", edition: "10e", editionName: "10th Edition", source: { kind: "bundled" as const, data: {} } },
+    { id: "b", catalogueId: "b", name: "Beta", edition: "10e", editionName: "10th Edition", source: { kind: "manifest" as const, file: "b.ir.json" } },
   ];
 
   it("renders a card per registry faction and marks the active one", () => {
@@ -129,7 +129,7 @@ describe("SetupWizard", () => {
   it("shows a faction load error when provided", () => {
     render(
       <SetupWizard catalogue={cat} roster={createRoster(cat, 2000)} initialStep={1}
-        registry={[{ id: "a", name: "Alpha", source: { kind: "bundled" as const, data: {} } }]}
+        registry={[{ id: "a", catalogueId: "a", name: "Alpha", edition: "10e", editionName: "10th Edition", source: { kind: "bundled" as const, data: {} } }]}
         activeDescriptorId="a" onSelectFaction={noop} factionError="Couldn't load Beta"
         onSetPoints={noop} onSetDetachment={noop} onClose={noop} />,
     );
