@@ -32,7 +32,7 @@ jobs:
       changed: ${{ steps.marker.outputs.cache-hit != 'true' }}
       fingerprint: ${{ steps.upstream.outputs.fingerprint }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - id: upstream
         name: Resolve latest BSData revision per edition
@@ -77,7 +77,7 @@ jobs:
 
       - id: marker
         name: Already published this revision + config + pipeline code?
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           # Rebuild when the upstream data (fingerprint — one SHA per edition) OR
           # anything that shapes our output changes: the faction config + pipeline
@@ -95,22 +95,25 @@ jobs:
     if: needs.check.outputs.changed == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Version is taken from package.json "packageManager" (pnpm@9.12.0); specifying
       # it here too triggers ERR_PNPM_BAD_PM_VERSION on a mismatch.
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 20
+          # `cache: pnpm` must stay EXPLICIT: since setup-node v6 the automatic
+          # package-manager detection only enables caching for npm, so dropping this
+          # input silently loses the pnpm store cache rather than defaulting to it.
           cache: pnpm
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache cargo registry
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           # Cache only downloaded crates, NOT packages/engine-parser/target. Caching
           # the build output keyed on Cargo.toml alone served a stale binary when only
@@ -126,10 +129,10 @@ jobs:
       - name: Build the catalogue library
         run: pnpm run update-catalogues
 
-      - uses: actions/configure-pages@v5
+      - uses: actions/configure-pages@v6
 
       - name: Upload catalogue library as the Pages artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v5
         with:
           # apps/web/public is gitignored → in CI it holds only what the pipeline
           # just wrote: catalogues.json + catalogues/*.ir.json.
@@ -144,7 +147,7 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
 
   # Record the revision we just published, so the next `check` skips it. Runs only
   # after a fully successful build+deploy — a failed run leaves no marker, so the
@@ -154,9 +157,9 @@ jobs:
     if: needs.check.outputs.changed == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: echo "${{ needs.check.outputs.fingerprint }}" > .bsdata-built
-      - uses: actions/cache/save@v4
+      - uses: actions/cache/save@v6
         with:
           # Must match the check job's restore key exactly (byte-for-byte) or the
           # marker written here is never found by the next run's lookup.
