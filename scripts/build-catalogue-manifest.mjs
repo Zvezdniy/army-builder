@@ -38,7 +38,9 @@ function collect(dir, edition, prefix) { // prefix: path recorded in the manifes
 }
 
 const catalogues = [];
-for (const entry of readdirSync(dir, { withFileTypes: true })) {
+// Sorted so the manifest is reproducible: readdir order is filesystem-dependent.
+const top = readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name));
+for (const entry of top) {
   if (entry.isDirectory()) {
     catalogues.push(...collect(join(dir, entry.name), entry.name, `catalogues/${entry.name}/`));
   } else if (entry.isFile() && entry.name.endsWith(".ir.json")) {
