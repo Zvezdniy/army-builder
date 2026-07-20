@@ -25,6 +25,9 @@ const PARSER_DIR = join(ROOT, "packages/engine-parser");
 const PARSER_BIN = join(PARSER_DIR, "target/release/muster-parse");
 const OUT_DIR = join(ROOT, "apps/web/public/catalogues");
 const MIN_ROOTS = 5; // a healthy faction has dozens of roots; fewer = likely a missing library
+// The edition a pre-edition (flat) layout is attributed to. Must match the fallback in
+// editionsOf() and the loose-file branch of scripts/build-catalogue-manifest.mjs.
+const LEGACY_EDITION = "10e";
 
 function arg(name, fallback) {
   const i = process.argv.indexOf(name);
@@ -64,7 +67,7 @@ function assertCatalogueFile(path, kind) { // kind: "catalogue" | "gameSystem"
 // still used by ad-hoc smoke configs — treat them as a lone 10th-edition entry.
 function editionsOf(config) {
   if (Array.isArray(config.editions)) return config.editions;
-  return [{ id: "10e", name: "10th Edition", repo: config.repo, ref: config.ref,
+  return [{ id: LEGACY_EDITION, name: "10th Edition", repo: config.repo, ref: config.ref,
             gameSystem: config.gameSystem, catalogues: config.catalogues }];
 }
 
@@ -172,6 +175,7 @@ function main() {
 
   let built = 0;
   let total = 0;
+  const builtEditions = new Set();
   try {
     console.log(`Building parser (cargo build --release)...`);
     run("cargo", ["build", "--release", "--bin", "muster-parse"], { cwd: PARSER_DIR });
@@ -183,7 +187,9 @@ function main() {
         // `catalogues` must be warned-and-skipped like any other edition failure,
         // not throw a TypeError that aborts every other edition's build.
         total += edition.catalogues?.length ?? 0;
-        built += buildEdition(edition, tmp);
+        const n = buildEdition(edition, tmp);
+        built += n;
+        if (n > 0) builtEditions.add(edition.id);
       } catch (err) {
         // One edition's upstream outage (bad clone, missing/renamed gameSystem file)
         // must not lose the other edition's factions.
@@ -192,11 +198,12 @@ function main() {
     }
 
     // Sweep loose *.ir.json left directly under OUT_DIR by the pre-edition layout.
-    // Only once something built successfully this run, so a totally failed run
-    // (e.g. no network) doesn't wipe out a previously-good flat-layout library
-    // before any per-edition replacement exists. Edition subdirectories are never
-    // touched here — buildEdition() already sweeps stale files within its own dir.
-    if (built > 0) {
+    // Gated on the edition those files are ATTRIBUTED to (the manifest builder reads
+    // loose files as LEGACY_EDITION) having actually built this run: a partial run in
+    // which that edition's clone fails but another succeeds must not delete the only
+    // copy of its library. Edition subdirectories are never touched here —
+    // buildEdition() already sweeps stale files within its own dir.
+    if (builtEditions.has(LEGACY_EDITION)) {
       for (const entry of readdirSync(OUT_DIR, { withFileTypes: true })) {
         if (entry.isFile() && entry.name.endsWith(".ir.json")) {
           rmSync(join(OUT_DIR, entry.name));
