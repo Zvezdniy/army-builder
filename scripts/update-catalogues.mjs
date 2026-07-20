@@ -177,14 +177,31 @@ function main() {
     run("cargo", ["build", "--release", "--bin", "muster-parse"], { cwd: PARSER_DIR });
 
     for (const edition of editions) {
-      total += edition.catalogues.length;
       try {
         console.log(`\n=== Edition ${edition.id} (${edition.name}) ===`);
+        // Kept inside the try: an edition whose config entry is missing/malformed
+        // `catalogues` must be warned-and-skipped like any other edition failure,
+        // not throw a TypeError that aborts every other edition's build.
+        total += edition.catalogues?.length ?? 0;
         built += buildEdition(edition, tmp);
       } catch (err) {
         // One edition's upstream outage (bad clone, missing/renamed gameSystem file)
         // must not lose the other edition's factions.
         console.warn(`skipped edition ${edition.id}: ${err.message}`);
+      }
+    }
+
+    // Sweep loose *.ir.json left directly under OUT_DIR by the pre-edition layout.
+    // Only once something built successfully this run, so a totally failed run
+    // (e.g. no network) doesn't wipe out a previously-good flat-layout library
+    // before any per-edition replacement exists. Edition subdirectories are never
+    // touched here — buildEdition() already sweeps stale files within its own dir.
+    if (built > 0) {
+      for (const entry of readdirSync(OUT_DIR, { withFileTypes: true })) {
+        if (entry.isFile() && entry.name.endsWith(".ir.json")) {
+          rmSync(join(OUT_DIR, entry.name));
+          console.log(`Removed stale pre-edition file ${entry.name} (superseded by apps/web/public/catalogues/<edition>/).`);
+        }
       }
     }
 

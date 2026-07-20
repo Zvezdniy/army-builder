@@ -44,9 +44,33 @@ describe("loadRegistry", () => {
     expect(await loadRegistry(bundled, f, manifestUrl)).toEqual([bundled]);
   });
 
-  it("degrades to bundled-only when version is not 1", async () => {
+  it("degrades to bundled-only when a v2 body has no editions array", async () => {
     const f = fakeFetch({ [manifestUrl]: { ok: true, body: { version: 2, catalogues: [] } } });
     expect(await loadRegistry(bundled, f, manifestUrl)).toEqual([bundled]);
+  });
+
+  it("degrades to bundled-only for a genuinely unsupported version", async () => {
+    const f = fakeFetch({ [manifestUrl]: { ok: true, body: { version: 3, catalogues: [] } } });
+    expect(await loadRegistry(bundled, f, manifestUrl)).toEqual([bundled]);
+  });
+
+  it("invalidates a v2 manifest whose catalogue entry has a missing or non-string edition, rather than defaulting it to 10e", async () => {
+    const editions = [{ id: "10e", name: "10th Edition" }];
+    const missingEdition = fakeFetch({
+      [manifestUrl]: {
+        ok: true,
+        body: { version: 2, editions, catalogues: [{ id: "sm", name: "Space Marines", file: "catalogues/10e/space-marines.ir.json" } /* no edition */] },
+      },
+    });
+    expect(await loadRegistry(bundled, missingEdition, manifestUrl)).toEqual([bundled]);
+
+    const nonStringEdition = fakeFetch({
+      [manifestUrl]: {
+        ok: true,
+        body: { version: 2, editions, catalogues: [{ id: "sm", edition: 10, name: "Space Marines", file: "catalogues/10e/space-marines.ir.json" }] },
+      },
+    });
+    expect(await loadRegistry(bundled, nonStringEdition, manifestUrl)).toEqual([bundled]);
   });
 
   it("does not let a manifest entry shadow the bundled id", async () => {

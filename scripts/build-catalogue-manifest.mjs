@@ -27,7 +27,15 @@ if (existsSync(configPath)) {
 function collect(dir, edition, prefix) { // prefix: path recorded in the manifest
   const out = [];
   for (const f of readdirSync(dir).filter((n) => n.endsWith(".ir.json")).sort()) {
-    const json = JSON.parse(readFileSync(join(dir, f), "utf8"));
+    let json;
+    try {
+      json = JSON.parse(readFileSync(join(dir, f), "utf8"));
+    } catch (err) {
+      // A truncated/corrupt file must not abort manifest generation for the other
+      // (potentially dozens of) good catalogues at the tail of a long pipeline run.
+      console.warn(`Skipping ${f}: ${err.message}`);
+      continue;
+    }
     if (typeof json.id !== "string" || typeof json.name !== "string") {
       console.warn(`Skipping ${f}: missing id/name`);
       continue;
@@ -46,7 +54,13 @@ for (const entry of top) {
   } else if (entry.isFile() && entry.name.endsWith(".ir.json")) {
     // A stale flat output directory (pre-edition layout) degrades to edition 10e
     // instead of vanishing.
-    const json = JSON.parse(readFileSync(join(dir, entry.name), "utf8"));
+    let json;
+    try {
+      json = JSON.parse(readFileSync(join(dir, entry.name), "utf8"));
+    } catch (err) {
+      console.warn(`Skipping ${entry.name}: ${err.message}`);
+      continue;
+    }
     if (typeof json.id !== "string" || typeof json.name !== "string") {
       console.warn(`Skipping ${entry.name}: missing id/name`);
       continue;
