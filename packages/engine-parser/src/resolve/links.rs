@@ -219,7 +219,10 @@ fn resolve_link(
 /// - `category_links` — merged by target category id: a repeat is skipped (never
 ///   appended a second time, since that would inflate category-scoped counts),
 ///   but its `constraints` are still merged onto the surviving link so a repeat
-///   never silently discards a per-category limit.
+///   never silently discards a per-category limit — unless that merge would
+///   itself put two constraints sharing an id on the entry, in which case the
+///   repeat's constraint is diagnosed and dropped instead (the id guard in the
+///   loop below).
 /// - `profiles`/`info_links` — appended through the same path an entry uses.
 #[allow(clippy::too_many_arguments)]
 fn apply_link_content(
@@ -343,11 +346,16 @@ fn resolve_link_children(
     Ok(())
 }
 
-/// Drop an inline entry/group whose id the placement already carries — either
-/// from the target's own children or from a sibling nested link (both are
-/// already present in `existing_*`/earlier in `inline_*` by the time this runs,
-/// since `resolve_link_children` folds a nested entryLink's resolved output into
-/// the same `inline_entries`/`inline_groups` sink before this is called). On real
+/// Drop an inline entry/group whose id the placement already carries — from the
+/// target's own children, from a sibling nested link, or from any group's member
+/// tree (existing or itself just inlined) reachable at this placement; both
+/// entry ids and GROUP ids can collide this way. The target's own content and a
+/// sibling nested link's content are already present in `existing_*`/earlier in
+/// `inline_*` by the time this runs, since `resolve_link_children` folds a
+/// nested entryLink's resolved output into the same `inline_entries`/
+/// `inline_groups` sink before this is called. The GROUPS check runs before the
+/// ENTRIES check (see the two passes below) so a group dropped for colliding
+/// does not go on reserving its members' ids against the entries pass. On real
 /// data this fires 56 times across 26 factions in both editions — e.g. Chaos -
 /// Thousand Sons' shared `Autopistol` (`71c8-…`) already carries an entryLink to
 /// the `Weapon Modifications` group (`f9da-…`); two separate placement links to
@@ -365,16 +373,55 @@ fn drop_inline_duplicate_ids(
     existing_groups: &[RawGroup], inline_groups: &mut Vec<RawGroup>,
     diags: &mut Vec<Diagnostic>,
 ) {
-    // `flatten_group_members` (ir/map.rs) hoists a group's members — recursively
-    // through its own sub-groups — into the OWNING ENTRY's IR children. So an id
-    // that reaches this placement only via a group's member tree is exactly as
-    // "already on this placement" as a top-level entry id, even though it never
-    // appears in `existing_entries`/`inline_entries` themselves. Seed the entries
-    // `seen` set with every id in that reachable member tree — BOTH from
+    // GROUPS pass first. `collect_groups` (ir/map.rs) emits an IrGroup for a
+    // group AND, recursively, for every nested sub-group — exactly the walk
+    // `collect_group_member_ids` below does for MEMBERS. So a group id already
+    // used by an EXISTING group's nested sub-group is exactly as "already on
+    // this placement" as a top-level existing group id, even though it never
+    // appears in `existing_groups` itself (only its top-level entries do).
+    // `collect_group_ids` mirrors `collect_group_member_ids`'s recursive walk to
+    // seed the check with the whole existing tree, not just its top level. An
+    // accepted inline group's own id — and its nested sub-group ids — are folded
+    // into `seen` too as the retain proceeds, so a later sibling inline group
+    // colliding with an earlier one's nested sub-group is caught the same way.
+    //
+    // This pass must run BEFORE the entries pass below: an inline entry can be
+    // seeded out by a group whose own id collides and is about to be dropped
+    // here. Seeding the entries pass from `inline_groups` only after this
+    // retain has run means a doomed group's members no longer reserve ids they
+    // will never actually occupy.
+    let mut seen_groups: HashSet<String> = HashSet::new();
+    for g in existing_groups {
+        collect_group_ids(g, &mut seen_groups);
+    }
+    inline_groups.retain(|g| {
+        if seen_groups.contains(&g.id) {
+            diags.push(Diagnostic {
+                code: "entryLink.inline_duplicate_id".to_string(),
+                message: format!(
+                    "entryLink to {} declares inline content with id {}, which this placement already has (dropped)",
+                    target_id, g.id),
+            });
+            false
+        } else {
+            collect_group_ids(g, &mut seen_groups);
+            true
+        }
+    });
+
+    // ENTRIES pass. `flatten_group_members` (ir/map.rs) hoists a group's
+    // members — recursively through its own sub-groups — into the OWNING
+    // ENTRY's IR children. So an id that reaches this placement only via a
+    // group's member tree is exactly as "already on this placement" as a
+    // top-level entry id, even though it never appears in
+    // `existing_entries`/`inline_entries` themselves. Seed the entries `seen`
+    // set with every id in that reachable member tree — BOTH from
     // `existing_groups` (already on the target before this link) AND from
-    // `inline_groups` (this SAME link's own additions, already fully resolved by
-    // the time this runs) — or an inline entry repeating one survives the check
-    // below and reaches `children` a second time.
+    // `inline_groups` (this SAME link's own additions, already fully resolved
+    // by the time this runs, and by now filtered to the groups that SURVIVED
+    // the pass above — a group dropped for colliding no longer reserves its
+    // members' ids) — or an inline entry repeating one survives the check below
+    // and reaches `children` a second time.
     //
     // Real case (`Imperium - Space Marines.json`): the placement link to "Twin
     // lightning claws" declares two of its OWN nested entryLinks — one straight to
@@ -388,23 +435,25 @@ fn drop_inline_duplicate_ids(
     // is a collision between a link's own two nested declarations, not a
     // pre-existing-target-group collision.
     //
-    // Symmetric case deliberately NOT closed here: two DIFFERENT (non-colliding by
-    // their own ids) groups — existing/existing, existing/inline or inline/inline —
-    // whose MEMBER trees collide with each other without either colliding with a
-    // top-level entry id. An id-collision on a group's own id can just drop the
-    // whole group, like any other duplicate; a collision buried inside two
-    // otherwise-legitimate groups' members cannot be resolved by dropping either
-    // group whole without also discarding its other, non-colliding members and
-    // corrupting its own choose-N accounting (member count, default) — that needs
-    // per-member surgery this function does not attempt. No real 10e/11e catalogue
-    // exercises this narrower shape (verified over both editions against the same
-    // `main` baseline); if one ever does, this is the place to extend the check.
-    let mut seen: HashSet<String> = existing_entries.iter().map(|e| e.id.clone()).collect();
+    // Symmetric case deliberately NOT closed here: two DIFFERENT (non-colliding,
+    // even under `collect_group_ids`'s nested walk) groups — existing/existing,
+    // existing/inline or inline/inline — whose MEMBER trees collide with each
+    // other without either GROUP id colliding. A collision on a group's own id —
+    // top-level or nested inside a sub-group tree — is fully handled by the pass
+    // above (the whole duplicate group is dropped, like any other duplicate); a
+    // collision buried inside two otherwise-legitimate groups' members cannot be
+    // resolved by dropping either group whole without also discarding its other,
+    // non-colliding members and corrupting its own choose-N accounting (member
+    // count, default) — that needs per-member surgery this function does not
+    // attempt. No real 10e/11e catalogue exercises this narrower shape (verified
+    // over both editions against the same `main` baseline); if one ever does,
+    // this is the place to extend the check.
+    let mut seen_entries: HashSet<String> = existing_entries.iter().map(|e| e.id.clone()).collect();
     for g in existing_groups.iter().chain(inline_groups.iter()) {
-        collect_group_member_ids(g, &mut seen);
+        collect_group_member_ids(g, &mut seen_entries);
     }
     inline_entries.retain(|e| {
-        if seen.insert(e.id.clone()) {
+        if seen_entries.insert(e.id.clone()) {
             true
         } else {
             diags.push(Diagnostic {
@@ -412,20 +461,6 @@ fn drop_inline_duplicate_ids(
                 message: format!(
                     "entryLink to {} declares inline content with id {}, which this placement already has (dropped)",
                     target_id, e.id),
-            });
-            false
-        }
-    });
-    let mut seen: HashSet<String> = existing_groups.iter().map(|g| g.id.clone()).collect();
-    inline_groups.retain(|g| {
-        if seen.insert(g.id.clone()) {
-            true
-        } else {
-            diags.push(Diagnostic {
-                code: "entryLink.inline_duplicate_id".to_string(),
-                message: format!(
-                    "entryLink to {} declares inline content with id {}, which this placement already has (dropped)",
-                    target_id, g.id),
             });
             false
         }
@@ -441,6 +476,18 @@ fn collect_group_member_ids(g: &RawGroup, out: &mut HashSet<String>) {
     }
     for sub in &g.groups {
         collect_group_member_ids(sub, out);
+    }
+}
+
+/// Collect a group's own id AND, recursively, every nested sub-group's id —
+/// the same walk `collect_groups` (ir/map.rs) does when it emits an IrGroup for
+/// a group and every sub-group beneath it. Mirrors `collect_group_member_ids`
+/// above, one level up: that walk finds ids a group's MEMBERS occupy, this one
+/// finds ids a group's OWN (and its sub-groups') ids occupy.
+fn collect_group_ids(g: &RawGroup, out: &mut HashSet<String>) {
+    out.insert(g.id.clone());
+    for sub in &g.groups {
+        collect_group_ids(sub, out);
     }
 }
 
@@ -1264,6 +1311,81 @@ mod tests {
             "the direct inline entry was dropped, not kept as a top-level duplicate");
         assert_eq!(clone.groups[0].entries.iter().filter(|e| e.id == "dup").count(), 1,
             "\"dup\" still reaches the entry exactly once, via the inline group's member");
+    }
+
+    #[test]
+    fn group_dedup_seeds_from_nested_existing_subgroup_ids_too() {
+        // Finding 1 (review): the existing target's group "outer" nests a
+        // sub-group "X". An inline group ALSO declares id "X" — the old
+        // top-level-only seed (`existing_groups.iter().map(|g| g.id)`) would
+        // miss this and let "X" reach the IR twice: `collect_groups` (ir/map.rs)
+        // flattens every nested sub-group into the IR the same way
+        // `flatten_group_members` flattens members, so a nested sub-group id is
+        // exactly as "already on this placement" as a top-level one.
+        let mut target = entry("t", vec![]);
+        let inner_x = RawGroup { id: "X".into(), name: "Inner".into(), ..Default::default() };
+        let mut outer = RawGroup { id: "outer".into(), name: "Outer".into(), ..Default::default() };
+        outer.groups.push(inner_x);
+        target.groups.push(outer);
+
+        let mut rich = link("t");
+        rich.groups.push(RawGroup { id: "X".into(), name: "Inline dup".into(), ..Default::default() });
+        let owner = RawEntry {
+            id: "owner".into(), entry_type: "unit".into(),
+            entry_links: vec![rich], ..Default::default()
+        };
+        let cat = RawCatalogue {
+            id: "c".into(), entries: vec![owner], shared_entries: vec![target], ..Default::default()
+        };
+        let mut diags = Vec::new();
+        let resolved = resolve_with_diags(cat, &mut diags).unwrap();
+        let clone = &resolved.entries[0].entries[0];
+        assert_eq!(clone.groups.len(), 1, "the inline top-level duplicate of the nested id is dropped");
+        assert_eq!(clone.groups[0].id, "outer");
+        assert_eq!(clone.groups[0].groups.len(), 1);
+        assert_eq!(clone.groups[0].groups[0].id, "X", "the existing nested group is untouched");
+        assert!(diags.iter().any(|d| d.code == "entryLink.inline_duplicate_id"
+            && d.message.contains("X") && d.message.contains("dropped")));
+    }
+
+    #[test]
+    fn group_dropped_for_id_collision_does_not_take_an_unrelated_inline_entry_with_it() {
+        // Finding 2 (review, reviewer-reproduced shape): existing group "g0" has
+        // no members. The link declares an inline group ALSO id "g0" (so it will
+        // be dropped as a duplicate group id) whose own member happens to be
+        // "dup", AND separately declares a top-level inline entry "dup". Before
+        // the fix, the entries pass ran first and was seeded from `inline_groups`
+        // BEFORE the groups pass filtered it — so "dup" was reserved by the
+        // doomed group's member and the top-level "dup" entry was ALSO dropped,
+        // vanishing from the clone entirely even though no surviving node ever
+        // carries "dup". Running the groups pass first, and seeding entries only
+        // from the groups that SURVIVE it, must let "dup" through.
+        let mut target = entry("t", vec![]);
+        target.groups.push(RawGroup { id: "g0".into(), ..Default::default() });
+
+        let mut rich = link("t");
+        rich.entries.push(entry("dup", vec![]));
+        let mut inline_g0 = RawGroup { id: "g0".into(), ..Default::default() };
+        inline_g0.entries.push(entry("dup", vec![]));
+        rich.groups.push(inline_g0);
+
+        let owner = RawEntry {
+            id: "owner".into(), entry_type: "unit".into(),
+            entry_links: vec![rich], ..Default::default()
+        };
+        let cat = RawCatalogue {
+            id: "c".into(), entries: vec![owner], shared_entries: vec![target], ..Default::default()
+        };
+        let mut diags = Vec::new();
+        let resolved = resolve_with_diags(cat, &mut diags).unwrap();
+        let clone = &resolved.entries[0].entries[0];
+        assert_eq!(clone.entries.iter().filter(|e| e.id == "dup").count(), 1,
+            "the top-level inline entry survives — it was never actually a duplicate of anything real");
+        assert_eq!(clone.groups.len(), 1, "the duplicate-id inline group was dropped");
+        assert_eq!(clone.groups[0].id, "g0");
+        assert!(clone.groups[0].entries.is_empty(), "the surviving g0 is the existing (memberless) one");
+        assert!(diags.iter().any(|d| d.code == "entryLink.inline_duplicate_id"
+            && d.message.contains("g0") && d.message.contains("dropped")));
     }
 
     #[test]

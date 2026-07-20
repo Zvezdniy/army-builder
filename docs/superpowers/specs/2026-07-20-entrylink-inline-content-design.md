@@ -68,10 +68,13 @@ The merge rule is per collection, chosen from what the data actually contains:
   target's own content, from a sibling nested link's content, OR from any group's member
   tree (existing or itself just inlined; `flatten_group_members` hoists group members into
   the owning entry's IR children too) — is diagnosed (`entryLink.inline_duplicate_id`) and
-  DROPPED, keeping the first occurrence only. Real data: 56 observed cases across both
-  editions, overwhelmingly byte-identical duplicates of content already reachable another
-  way — one residual case only closes once the check also walks group member trees, not
-  just top-level ids.
+  DROPPED. The survivor is not simply "declaration order": the member-tree seed is built
+  before top-level entries are checked, so a group member always wins over a top-level
+  inline entry regardless of which was declared first; among top-level entries themselves
+  (no group on either side), the first one declared wins. Real data: 56 cases at first
+  measurement across both editions, overwhelmingly byte-identical duplicates of content
+  already reachable another way; later waves closed further cases the group-member-tree
+  walk (and the equivalent walk over nested group ids) uncovered.
 - **`constraints` — append.** Verified across all of 11e: 6 244 link constraints, **zero**
   share an id with a constraint on their target, so a link constraint is always an
   addition and never an override. Appending cannot double a limit.
