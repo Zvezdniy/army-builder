@@ -26,7 +26,8 @@ function needsSetup(catalogue: IrCatalogue, roster: ReturnType<typeof createRost
 }
 
 // The bundled fixture is always the first, always-available faction. Built once.
-const bundled = bundledDescriptor(mini40k);
+// mini40k is a 10e-shaped fixture.
+const bundled = bundledDescriptor(mini40k, { id: "10e", name: "10th Edition" });
 
 // A single fetch binding for registry/catalogue loading; undefined in environments
 // without a global fetch (both call sites handle that uniformly).

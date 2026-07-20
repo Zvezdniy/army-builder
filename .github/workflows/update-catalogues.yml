@@ -22,43 +22,69 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # Decide whether there is anything new to build. Resolve BSData's HEAD commit and
-  # probe a cache marker keyed by (upstream SHA + config hash). A hit means we have
-  # already published exactly this revision with exactly this faction set → skip.
+  # Decide whether there is anything new to build. Resolve BSData's HEAD commit for
+  # EVERY configured edition (10e, 11e, ...) and probe a cache marker keyed by
+  # (combined upstream fingerprint + config hash). A hit means we have already
+  # published exactly this revision set with exactly this faction set → skip.
   check:
     runs-on: ubuntu-latest
     outputs:
       changed: ${{ steps.marker.outputs.cache-hit != 'true' }}
-      sha: ${{ steps.upstream.outputs.sha }}
+      fingerprint: ${{ steps.upstream.outputs.fingerprint }}
     steps:
       - uses: actions/checkout@v4
 
       - id: upstream
-        name: Resolve latest BSData revision
+        name: Resolve latest BSData revision per edition
         env:
           # Authenticate the API call: unauthenticated requests share the runner's
           # egress IP under a 60/hour limit and can intermittently 403.
           GH_TOKEN: ${{ github.token }}
         run: |
-          REPO=$(jq -r .repo scripts/catalogues.config.json)
-          REF=$(jq -r .ref scripts/catalogues.config.json)
-          SHA=$(curl -sf -H "Authorization: Bearer $GH_TOKEN" "https://api.github.com/repos/$REPO/commits/$REF" | jq -r .sha)
-          if [ -z "$SHA" ] || [ "$SHA" = "null" ]; then
-            echo "Could not resolve upstream SHA for $REPO@$REF" >&2
+          # Resolve one upstream SHA per edition and combine them into a single
+          # fingerprint (e.g. "10e:<sha>_11e:<sha>"). Every edition's SHA MUST be
+          # part of the key: if we keyed on only one edition's SHA, an upstream
+          # commit that only touches another edition (e.g. an 11e-only BSData
+          # update) would never change the fingerprint, the cache marker would
+          # keep hitting, and that edition's data would silently freeze forever.
+          #
+          # Fed via process substitution (not a pipe) so `exit 1` inside the loop
+          # actually aborts this step instead of only exiting a subshell.
+          FINGERPRINT=""
+          EDITION_COUNT=0
+          while read -r ID REPO REF; do
+            EDITION_COUNT=$((EDITION_COUNT + 1))
+            SHA=$(curl -sf -H "Authorization: Bearer $GH_TOKEN" "https://api.github.com/repos/$REPO/commits/$REF" | jq -r .sha)
+            if [ -z "$SHA" ] || [ "$SHA" = "null" ]; then
+              echo "Could not resolve upstream SHA for edition $ID ($REPO@$REF)" >&2
+              exit 1
+            fi
+            echo "BSData $ID ($REPO@$REF) is at $SHA"
+            if [ -z "$FINGERPRINT" ]; then
+              FINGERPRINT="${ID}:${SHA}"
+            else
+              FINGERPRINT="${FINGERPRINT}_${ID}:${SHA}"
+            fi
+          done < <(jq -r '.editions[] | "\(.id) \(.repo) \(.ref)"' scripts/catalogues.config.json)
+
+          if [ "$EDITION_COUNT" -eq 0 ]; then
+            echo "scripts/catalogues.config.json has no editions — nothing to resolve" >&2
             exit 1
           fi
-          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
-          echo "BSData $REPO@$REF is at $SHA"
+
+          echo "fingerprint=$FINGERPRINT" >> "$GITHUB_OUTPUT"
+          echo "Combined fingerprint across $EDITION_COUNT edition(s): $FINGERPRINT"
 
       - id: marker
         name: Already published this revision + config + pipeline code?
         uses: actions/cache/restore@v4
         with:
-          # Rebuild when the upstream data (SHA) OR anything that shapes our output
-          # changes: the faction config + pipeline scripts + the Rust parser source.
-          # Keying on config alone let a parser/pipeline fix land without a rebuild.
+          # Rebuild when the upstream data (fingerprint — one SHA per edition) OR
+          # anything that shapes our output changes: the faction config + pipeline
+          # scripts + the Rust parser source. Keying on config alone let a
+          # parser/pipeline fix land without a rebuild.
           path: .bsdata-built
-          key: bsdata-${{ steps.upstream.outputs.sha }}-${{ hashFiles('scripts/**', 'packages/engine-parser/src/**/*.rs', 'packages/engine-parser/Cargo.toml') }}
+          key: bsdata-${{ steps.upstream.outputs.fingerprint }}-${{ hashFiles('scripts/**', 'packages/engine-parser/src/**/*.rs', 'packages/engine-parser/Cargo.toml') }}
           lookup-only: true
 
       - if: steps.marker.outputs.cache-hit == 'true'
@@ -129,9 +155,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: echo "${{ needs.check.outputs.sha }}" > .bsdata-built
+      - run: echo "${{ needs.check.outputs.fingerprint }}" > .bsdata-built
       - uses: actions/cache/save@v4
         with:
-          # Must match the check job's restore key exactly.
+          # Must match the check job's restore key exactly (byte-for-byte) or the
+          # marker written here is never found by the next run's lookup.
           path: .bsdata-built
-          key: bsdata-${{ needs.check.outputs.sha }}-${{ hashFiles('scripts/**', 'packages/engine-parser/src/**/*.rs', 'packages/engine-parser/Cargo.toml') }}
+          key: bsdata-${{ needs.check.outputs.fingerprint }}-${{ hashFiles('scripts/**', 'packages/engine-parser/src/**/*.rs', 'packages/engine-parser/Cargo.toml') }}
