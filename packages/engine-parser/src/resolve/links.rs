@@ -120,6 +120,8 @@ fn resolve_link(
         resolve_link_children(link, symbols, path, budget, diags, depth + 1,
             &mut inline_entries, &mut inline_groups)?;
         path.remove(&link.target_id);
+        diagnose_inline_duplicate_ids(&link.target_id, &resolved.entries, &inline_entries,
+            &resolved.groups, &inline_groups, diags);
         resolved.entries.extend(inline_entries);
         resolved.groups.extend(inline_groups);
         // Link constraints are additions, never overrides (verified across 11e:
@@ -127,13 +129,19 @@ fn resolve_link(
         resolved.constraints.extend(link.constraints.iter().cloned());
         // A RawGroup has no costs/categoryLinks, and its profiles/infoLinks are not
         // mapped to IR (see resolve_group). Diagnose rather than mis-file or drop silently.
-        if !link.costs.is_empty() || !link.category_links.is_empty()
-            || !link.profiles.is_empty() || !link.info_links.is_empty() {
+        // Name only what is actually present, so real-data triage of this code
+        // reads as a list of concrete gaps rather than the same four words every time.
+        let mut unsupported: Vec<&str> = Vec::new();
+        if !link.costs.is_empty() { unsupported.push("costs"); }
+        if !link.category_links.is_empty() { unsupported.push("categoryLinks"); }
+        if !link.profiles.is_empty() { unsupported.push("profiles"); }
+        if !link.info_links.is_empty() { unsupported.push("infoLinks"); }
+        if !unsupported.is_empty() {
             diags.push(Diagnostic {
                 code: "entryLink.group_content_unsupported".to_string(),
                 message: format!(
-                    "entryLink to group {} carries costs/categoryLinks/profiles/infoLinks; unsupported (dropped)",
-                    link.target_id),
+                    "entryLink to group {} carries {}; unsupported (dropped)",
+                    link.target_id, unsupported.join("/")),
             });
         }
         if link.hidden || link.modifiers.iter().any(|m| m.field == "hidden") {
@@ -179,7 +187,9 @@ fn resolve_link(
 /// The content merge is per collection:
 /// - `entries`/`groups`/`entry_links` — resolved through the same recursion and
 ///   appended after the target's own, sharing the cycle path-set, node budget and
-///   depth cap (`depth` here is the CLONE's depth).
+///   depth cap (`depth` here is the CLONE's depth). A nested `entry_link` back to
+///   something already on the path is dropped with a diagnostic, not a cycle error
+///   — see `resolve_link_children`.
 /// - `constraints` — appended; a link constraint is always an addition (across all
 ///   of 11e, no link constraint shares an id with one on its target).
 /// - `costs` — merged by cost-type id with the link's value WINNING, never
@@ -203,6 +213,8 @@ fn apply_link_content(
     let mut inline_groups: Vec<RawGroup> = Vec::new();
     resolve_link_children(link, symbols, path, budget, diags, depth,
         &mut inline_entries, &mut inline_groups)?;
+    diagnose_inline_duplicate_ids(&link.target_id, &resolved.entries, &inline_entries,
+        &resolved.groups, &inline_groups, diags);
     resolved.entries.extend(inline_entries);
     resolved.groups.extend(inline_groups);
 
@@ -232,7 +244,9 @@ fn apply_link_content(
 /// they attach to, so direct children resolve one deeper and nested links resolve
 /// at the clone's own depth — identical to how resolve_entry treats its own
 /// children. All other state (`symbols`, `path`, `budget`, `diags`) is the shared
-/// one, so no second budget and no separate cycle guard exist.
+/// one, so no second budget exists. The path-set is shared too; the ONE difference
+/// from ordinary resolution is that a nested entryLink already on the path is
+/// diagnosed and dropped rather than raised as a cycle (see the comment below).
 #[allow(clippy::too_many_arguments)]
 fn resolve_link_children(
     link: &RawEntryLink, symbols: &SymbolTable, path: &mut HashSet<String>,
@@ -246,9 +260,67 @@ fn resolve_link_children(
         groups.push(resolve_group(g, symbols, path, budget, diags, depth + 1)?);
     }
     for nested in &link.entry_links {
+        // A link's OWN nested entryLink pointing at something already on the
+        // resolution path is NOT a cycle: the inline content lives on the LINK,
+        // not on the target, so resolving that target a second time terminates.
+        // Real data has this shape — `Chaos - Chaos Knights Library` (both
+        // editions) has two entryLinks to the "Warlord" entry 3bee-8c85-68f7-e54b,
+        // each carrying a nested entryLink to that SAME entry. Treating it as a
+        // cycle aborts the whole catalogue file and the faction disappears.
+        //
+        // Resolving it is wrong too: it would inline a copy of Warlord as a child
+        // of Warlord, i.e. a node whose child repeats its own id, and duplicate
+        // ids have broken the downstream evaluator before. So: diagnose + drop.
+        //
+        // This relaxation is deliberately narrow — it covers ONLY the links a link
+        // declares inline. An ordinary link (one reached through a target's own
+        // subtree, via resolve_entry/resolve_group) keeps the strict guard in
+        // resolve_link and a genuine cycle there stays a typed ReferenceCycle.
+        if path.contains(&nested.target_id) {
+            diags.push(Diagnostic {
+                code: "entryLink.inline_self_reference".to_string(),
+                message: format!(
+                    "entryLink to {} declares a nested entryLink to {}, which is already being resolved on this path (dropped)",
+                    link.target_id, nested.target_id),
+            });
+            continue;
+        }
         resolve_link(nested, symbols, path, budget, diags, depth, children, groups)?;
     }
     Ok(())
+}
+
+/// Diagnose an inline entry/group whose id the placement already carries — either
+/// from the target's own children or from a sibling nested link. There is no merge
+/// rule here on purpose: the node is still appended, and the diagnostic exists so a
+/// real-data repack surfaces the shape if it ever occurs, instead of silently
+/// producing a clone with two children under one id.
+fn diagnose_inline_duplicate_ids(
+    target_id: &str,
+    existing_entries: &[RawEntry], inline_entries: &[RawEntry],
+    existing_groups: &[RawGroup], inline_groups: &[RawGroup],
+    diags: &mut Vec<Diagnostic>,
+) {
+    let mut push = |id: &str| {
+        diags.push(Diagnostic {
+            code: "entryLink.inline_duplicate_id".to_string(),
+            message: format!(
+                "entryLink to {} declares inline content with id {}, which this placement already has (kept)",
+                target_id, id),
+        });
+    };
+    let mut seen: HashSet<&str> = existing_entries.iter().map(|e| e.id.as_str()).collect();
+    for e in inline_entries {
+        if !seen.insert(e.id.as_str()) {
+            push(&e.id);
+        }
+    }
+    let mut seen: HashSet<&str> = existing_groups.iter().map(|g| g.id.as_str()).collect();
+    for g in inline_groups {
+        if !seen.insert(g.id.as_str()) {
+            push(&g.id);
+        }
+    }
 }
 
 /// Inline each `type="profile"` infoLink's target profile into `profiles`.
@@ -796,8 +868,12 @@ mod tests {
         };
         let mut diags = Vec::new();
         let resolved = resolve_with_diags(cat, &mut diags).unwrap();
-        assert!(diags.iter().any(|d| d.code == "entryLink.group_content_unsupported"
-            && d.message.contains("g0")));
+        let d = diags.iter().find(|d| d.code == "entryLink.group_content_unsupported")
+            .expect("group content diagnosed");
+        assert!(d.message.contains("g0"));
+        assert!(d.message.contains("costs/categoryLinks"), "names what is present: {}", d.message);
+        assert!(!d.message.contains("profiles") && !d.message.contains("infoLinks"),
+            "does not name absent collections: {}", d.message);
         let g = &resolved.entries[0].groups[0];
         assert!(g.entries.is_empty() && g.groups.is_empty(), "nothing silently mis-filed");
     }
@@ -816,6 +892,87 @@ mod tests {
             shared_entries: vec![entry("t", vec![])], ..Default::default()
         };
         assert!(matches!(resolve(cat), Err(ParseError::ReferenceCycle(_))));
+    }
+
+    #[test]
+    fn link_nested_link_to_its_own_target_is_dropped_not_fatal() {
+        // The real Chaos Knights shape: an entryLink to the "Warlord" entry that
+        // itself carries a nested entryLink to that SAME entry. Under a naive cycle
+        // guard the whole catalogue file aborts and the faction disappears.
+        // Required: resolve fine, drop the nested link with a diagnostic, and do
+        // NOT produce a Warlord whose child is another Warlord (duplicate ids).
+        let mut rich = link("warlord");
+        rich.entry_links.push(link("warlord"));
+        let owner = RawEntry {
+            id: "owner".into(), entry_type: "unit".into(),
+            entry_links: vec![rich], ..Default::default()
+        };
+        let cat = RawCatalogue {
+            id: "c".into(), entries: vec![owner],
+            shared_entries: vec![entry("warlord", vec![])], ..Default::default()
+        };
+        let mut diags = Vec::new();
+        let resolved = resolve_with_diags(cat, &mut diags)
+            .expect("a link's self-referential inline link must not abort the file");
+        let clone = &resolved.entries[0].entries[0];
+        assert_eq!(clone.id, "warlord");
+        assert!(clone.entries.iter().all(|e| e.id != "warlord"),
+            "the clone did not gain a child carrying its own id");
+        assert!(diags.iter().any(|d| d.code == "entryLink.inline_self_reference"
+            && d.message.contains("warlord")));
+    }
+
+    #[test]
+    fn link_nested_link_to_an_ancestor_is_dropped_not_fatal() {
+        // Same relaxation one level up: the nested link points at an ANCESTOR
+        // (the outer target `a`), still on the path. Dropped, same diagnostic.
+        let mut rich = link("b");
+        rich.entry_links.push(link("a"));
+        let a = entry("a", vec![rich]);
+        let owner = RawEntry {
+            id: "owner".into(), entry_type: "unit".into(),
+            entry_links: vec![link("a")], ..Default::default()
+        };
+        let cat = RawCatalogue {
+            id: "c".into(), entries: vec![owner],
+            shared_entries: vec![a, entry("b", vec![])], ..Default::default()
+        };
+        let mut diags = Vec::new();
+        let resolved = resolve_with_diags(cat, &mut diags).expect("not fatal");
+        let a_clone = &resolved.entries[0].entries[0];
+        let b_clone = &a_clone.entries[0];
+        assert_eq!(b_clone.id, "b");
+        assert!(b_clone.entries.is_empty(), "the ancestor was not re-inlined");
+        assert!(diags.iter().any(|d| d.code == "entryLink.inline_self_reference"));
+    }
+
+    #[test]
+    fn link_inline_duplicate_id_is_diagnosed() {
+        // The link declares an inline entry whose id the target already contributes.
+        let mut target = entry("t", vec![]);
+        target.entries.push(entry("dup", vec![]));
+        let mut rich = link("t");
+        rich.entries.push(entry("dup", vec![]));
+        rich.groups.push(RawGroup { id: "gdup".into(), ..Default::default() });
+        rich.groups.push(RawGroup { id: "gdup".into(), ..Default::default() });
+        let owner = RawEntry {
+            id: "owner".into(), entry_type: "unit".into(),
+            entry_links: vec![rich], ..Default::default()
+        };
+        let cat = RawCatalogue {
+            id: "c".into(), entries: vec![owner], shared_entries: vec![target], ..Default::default()
+        };
+        let mut diags = Vec::new();
+        let resolved = resolve_with_diags(cat, &mut diags).unwrap();
+        let hits: Vec<&Diagnostic> = diags.iter()
+            .filter(|d| d.code == "entryLink.inline_duplicate_id").collect();
+        assert_eq!(hits.len(), 2, "one for the duplicate entry id, one for the duplicate group id");
+        assert!(hits.iter().any(|d| d.message.contains("dup")));
+        assert!(hits.iter().any(|d| d.message.contains("gdup")));
+        // No merge rule: the nodes are still there, just flagged.
+        let clone = &resolved.entries[0].entries[0];
+        assert_eq!(clone.entries.len(), 2);
+        assert_eq!(clone.groups.len(), 2);
     }
 
     #[test]
