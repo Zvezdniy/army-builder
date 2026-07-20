@@ -1,3 +1,4 @@
+export * from "./characteristics";
 export * from "./conditions";
 export * from "./constraints";
 export * from "./cost";

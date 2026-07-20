@@ -262,6 +262,65 @@ fn empty_entrylink_has_hidden_attr_no_modifiers() {
 }
 
 #[test]
+fn reads_modifier_scope_and_affects() {
+    // B1: a characteristic-modifier's BattleScribe addressing (`scope`/`affects`)
+    // must survive the raw layer — both the Start (nested <conditions>) and Empty
+    // (self-closing) `<modifier>` forms.
+    let xml = br#"<?xml version="1.0"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <selectionEntries>
+    <selectionEntry id="e" name="E" type="upgrade">
+      <modifiers>
+        <modifier type="set" field="ct.sv" value="2+" scope="model"
+                  affects="self.entries.recursive.e.model.profiles.Unit"/>
+        <modifier type="increment" field="ct.a" value="1" scope="self" affects="self.entries.profiles.Melee Weapons">
+          <conditions>
+            <condition type="atLeast" field="selections" scope="roster" value="1" childId="cat.x"/>
+          </conditions>
+        </modifier>
+      </modifiers>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let raw = parse_raw(xml).unwrap();
+    let e = raw.entries.iter().find(|e| e.id == "e").unwrap();
+    assert_eq!(e.modifiers[0].scope, "model");
+    assert_eq!(e.modifiers[0].affects, "self.entries.recursive.e.model.profiles.Unit");
+    assert_eq!(e.modifiers[1].scope, "self");
+    assert_eq!(e.modifiers[1].affects, "self.entries.profiles.Melee Weapons");
+    assert_eq!(e.modifiers[1].conditions[0].child_id, "cat.x");
+}
+
+#[test]
+fn reads_profile_types_characteristic_types() {
+    // The characteristicType id->name decode a characteristic-modifier's
+    // `field` is looked up against — nested two levels under <profileTypes>.
+    let xml = br#"<?xml version="1.0"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <profileTypes>
+    <profileType id="pt.unit" name="Unit">
+      <characteristicTypes>
+        <characteristicType id="ct.m" name="M"/>
+        <characteristicType id="ct.t" name="T"/>
+      </characteristicTypes>
+    </profileType>
+    <profileType id="pt.mw" name="Melee Weapons">
+      <characteristicTypes>
+        <characteristicType id="ct.s" name="S"/>
+      </characteristicTypes>
+    </profileType>
+  </profileTypes>
+</catalogue>"#;
+    let raw = parse_raw(xml).unwrap();
+    assert_eq!(raw.characteristic_types.get("ct.m").map(String::as_str), Some("M"));
+    assert_eq!(raw.characteristic_types.get("ct.t").map(String::as_str), Some("T"));
+    assert_eq!(raw.characteristic_types.get("ct.s").map(String::as_str), Some("S"));
+    assert_eq!(raw.characteristic_types.len(), 3);
+}
+
+#[test]
 fn reads_catalogue_level_catalogue_links() {
     // Catalogue-level <catalogueLinks> feed root import: we keep targetId and the
     // importRootEntries flag (absent => false, per BattleScribe).

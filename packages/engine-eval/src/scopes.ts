@@ -19,7 +19,13 @@ export interface AggregateSpec {
 
 const ANCHOR_TYPE_SCOPES = new Set(["unit", "upgrade", "model", "model-or-unit"]);
 
-function subtree(node: EvalNode, includeChildren: boolean): EvalNode[] {
+// The subset of AggregateSpec that scope resolution actually reads. Exported
+// (alongside scopeNodes below) so other consumers of the scope vocabulary —
+// e.g. engine-eval's characteristic-modifier target resolution — can reuse the
+// exact same anchor-walk instead of re-deriving it.
+export type ScopeSpec = Pick<AggregateSpec, "scope" | "includeChildSelections">;
+
+export function subtree(node: EvalNode, includeChildren: boolean): EvalNode[] {
   if (!includeChildren) return [node];
   const acc: EvalNode[] = [];
   const walk = (n: EvalNode): void => {
@@ -62,9 +68,9 @@ function nearestByEntryId(node: EvalNode, id: string): EvalNode | null {
   return null;
 }
 
-function scopeNodes(
+export function scopeNodes(
   node: EvalNode | null,
-  spec: AggregateSpec,
+  spec: ScopeSpec,
   state: EvalState,
 ): EvalNode[] {
   switch (spec.scope) {

@@ -2,6 +2,11 @@
 <catalogue id="c" name="Twin" revision="1" gameSystemId="gs"
            xmlns="http://www.battlescribe.net/schema/catalogueSchema">
   <categoryEntries><categoryEntry id="cat.hq" name="HQ"/></categoryEntries>
+  <profileTypes>
+    <profileType id="pt.unit" name="Unit">
+      <characteristicTypes><characteristicType id="t" name="T"/></characteristicTypes>
+    </profileType>
+  </profileTypes>
   <sharedProfiles>
     <profile id="p.inv" name="Invulnerable Save" typeName="Abilities" typeId="pt2">
       <characteristics><characteristic name="Description" typeId="d">4+</characteristic></characteristics>
@@ -21,7 +26,12 @@
         <selectionEntryGroup id="g" name="Wargear">
           <constraints><constraint id="g.max" type="max" value="1" field="selections" scope="parent"/></constraints>
           <selectionEntries>
-            <selectionEntry id="e.a" name="A" type="upgrade"><costs><cost name="pts" typeId="pts" value="5"/></costs></selectionEntry>
+            <selectionEntry id="e.a" name="A" type="upgrade">
+              <costs><cost name="pts" typeId="pts" value="5"/></costs>
+              <modifiers>
+                <modifier type="set" field="t" value="6" scope="model" affects="self.entries.recursive.e.u.profiles.Unit"/>
+              </modifiers>
+            </selectionEntry>
             <selectionEntry id="e.b" name="B" type="upgrade"><costs><cost name="pts" typeId="pts" value="10"/></costs></selectionEntry>
           </selectionEntries>
         </selectionEntryGroup>

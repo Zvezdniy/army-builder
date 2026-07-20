@@ -34,14 +34,14 @@ export function UnitDetail({
           {keywords.map((k) => <span key={k} className="kw">{k}</span>)}
         </div>
       )}
-      <UnitStatline catalogue={catalogue} selection={sel} />
+      <UnitStatline catalogue={catalogue} roster={roster} selection={sel} />
       <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
         <SelectionNode roster={roster} selection={sel} catalogue={catalogue} depth={0}
           onAddOption={onAddOption} onToggleGroupMember={onToggleGroupMember}
           onSetGroupMemberCount={onSetGroupMemberCount}
           onRemove={onRemove} onSetCount={onSetCount} />
       </ul>
-      <Datasheet catalogue={catalogue} selection={sel} />
+      <Datasheet catalogue={catalogue} roster={roster} selection={sel} />
     </section>
   );
 }

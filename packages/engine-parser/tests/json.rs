@@ -196,6 +196,23 @@ fn modifier_group_conditions_and_condition_groups_both_anded_onto_each_modifier(
 }
 
 #[test]
+fn reads_modifier_scope_affects_and_profile_types() {
+    // B1: JSON front-end parity for scope/affects capture and the
+    // profileTypes->characteristicTypes id->name decode map.
+    let json = br#"{"catalogue":{"id":"c","name":"C","revision":1,
+      "profileTypes":[{"id":"pt.unit","name":"Unit","characteristicTypes":[{"id":"ct.sv","name":"Sv"}]}],
+      "selectionEntries":[{"id":"e.u","name":"U","type":"unit",
+        "modifiers":[{"type":"set","field":"ct.sv","value":"2+","scope":"model",
+          "affects":"self.entries.recursive.e.model.profiles.Unit"}]}]}}"#;
+    let raw = parse_raw_json(json, &mut Vec::new()).unwrap();
+    assert_eq!(raw.characteristic_types.get("ct.sv").map(String::as_str), Some("Sv"));
+    let u = raw.entries.iter().find(|e| e.id == "e.u").unwrap();
+    assert_eq!(u.modifiers[0].scope, "model");
+    assert_eq!(u.modifiers[0].affects, "self.entries.recursive.e.model.profiles.Unit");
+    assert_eq!(u.modifiers[0].value_raw, "2+");
+}
+
+#[test]
 fn xml_and_json_produce_identical_ir() {
     let (xml_ir, _) = engine_parser::parse_file(Path::new("tests/fixtures/parity/twin.cat"), None).unwrap();
     let (json_ir, _) = engine_parser::parse_file(Path::new("tests/fixtures/parity/twin.json"), None).unwrap();

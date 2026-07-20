@@ -1,5 +1,6 @@
 export * from "./conditions";
 export * from "./category-modifiers";
+export * from "./characteristic-modifiers";
 export * from "./ir";
 export * from "./modifiers";
 export * from "./packed";

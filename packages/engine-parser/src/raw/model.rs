@@ -8,6 +8,11 @@ pub struct RawCatalogue {
     pub game_system_id: Option<String>,
     pub cost_types: HashMap<String, String>,   // id -> name
     pub categories: HashMap<String, String>,   // id -> name
+    // characteristicType id -> name, flattened across every <profileType>'s
+    // <characteristicTypes> (a modifier's `field` names a characteristicType
+    // id directly, regardless of which profileType defines it — ids are
+    // globally unique GUIDs, so a flat map is safe).
+    pub characteristic_types: HashMap<String, String>,
     pub rules: BTreeMap<String, String>,       // rule name / alias -> description text
     pub shared_entries: Vec<RawEntry>,         // filled in Task 6
     pub shared_groups: Vec<RawGroup>,          // filled in Task 6
@@ -70,6 +75,8 @@ pub struct RawModifier {
     pub kind: String,                     // set|increment|decrement
     pub field: String, pub value: f64,
     pub value_raw: String,                // raw unparsed `value` attribute, needed for field="hidden" ("true"/"false")
+    pub scope: String,                    // BattleScribe addressing: self|parent|model|upgrade|... (characteristic-modifier targeting)
+    pub affects: String,                  // BattleScribe addressing path, e.g. "self.entries.recursive.<id>.profiles.<TypeName>"
     pub conditions: Vec<RawCondition>,
     pub condition_groups: Vec<RawConditionGroup>,
     pub has_repeats: bool,                // if true, emit diagnostic in mapping

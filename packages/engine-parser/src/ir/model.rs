@@ -52,6 +52,8 @@ pub struct IrEntry {
     pub validation_rules: Vec<IrValidationRule>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub category_modifiers: Vec<IrCategoryModifier>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub characteristic_modifiers: Vec<IrCharacteristicModifier>,
 }
 
 #[derive(Debug, Serialize)]
@@ -190,4 +192,34 @@ pub struct IrProfile {
 pub struct IrCharacteristic {
     pub name: String,
     pub value: String,
+}
+
+/// A numeric characteristic (statline/weapon-profile stat) modifier, captured
+/// faithfully on the OWNING entry with an unresolved target spec — the parser
+/// does not walk the tree to find the profile(s) this changes; engine-eval
+/// resolves `target_scope`/`target_id`/`recursive`/`profile_type` lazily
+/// against the live roster. Only `set`/`increment`/`decrement` are represented
+/// (see map.rs's routing branch); `append`/`replace`/`floor`/`ceil` on
+/// characteristics are not captured here and stay dropped, unchanged.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IrCharacteristicModifier {
+    pub characteristic: String,
+    pub profile_type: String,
+    pub kind: String,
+    pub value: String,
+    pub target_scope: String,
+    // An id the target node must match: a CATEGORY id (what real 11e
+    // BattleScribe data overwhelmingly uses on this path, e.g. "Character",
+    // "Psychic Weapon", "Extra Attacks Weapon") OR an entry id (also
+    // observed, rarer). The `affects` path doesn't distinguish which kind of
+    // id it is at parse time — this is a faithful capture of the raw id, not
+    // a resolved reference; engine-eval matches against both.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target_id: Option<String>,
+    pub recursive: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub conditions: Option<Vec<IrCondition>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub condition_groups: Option<Vec<IrConditionGroup>>,
 }

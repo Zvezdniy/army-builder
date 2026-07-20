@@ -1,5 +1,6 @@
 {"catalogue":{"type":"catalogue","id":"c","name":"Twin","revision":1,"gameSystemId":"gs",
   "categoryEntries":[{"id":"cat.hq","name":"HQ"}],
+  "profileTypes":[{"id":"pt.unit","name":"Unit","characteristicTypes":[{"id":"t","name":"T"}]}],
   "sharedProfiles":[{"id":"p.inv","name":"Invulnerable Save","typeName":"Abilities","typeId":"pt2","characteristics":[{"name":"Description","typeId":"d","$text":"4+"}]}],
   "selectionEntries":[{"id":"e.u","name":"U","type":"model",
     "costs":[{"typeId":"pts","value":90}],
@@ -10,5 +11,6 @@
     "selectionEntryGroups":[{"id":"g","name":"Wargear",
       "constraints":[{"id":"g.max","type":"max","value":1,"field":"selections","scope":"parent"}],
       "selectionEntries":[
-        {"id":"e.a","name":"A","type":"upgrade","costs":[{"typeId":"pts","value":5}]},
+        {"id":"e.a","name":"A","type":"upgrade","costs":[{"typeId":"pts","value":5}],
+          "modifiers":[{"type":"set","field":"t","value":"6","scope":"model","affects":"self.entries.recursive.e.u.profiles.Unit"}]},
         {"id":"e.b","name":"B","type":"upgrade","costs":[{"typeId":"pts","value":10}]}]}]}]}}
