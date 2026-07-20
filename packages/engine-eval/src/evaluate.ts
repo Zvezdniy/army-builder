@@ -5,7 +5,7 @@ import { totalCost } from "./cost";
 import { resolveCosts } from "./resolve";
 import { checkConstraint, describeConstraint } from "./constraints";
 import { checkGroupConstraint } from "./groups";
-import { targetNamer } from "./names";
+import { constraintTargetLabel, targetNamer } from "./names";
 import { nodeHiddenByState } from "./visibility";
 import { validationIssues } from "./validation";
 
@@ -43,7 +43,7 @@ export function evaluate(roster: Roster, catalogue: IrCatalogue): ValidationResu
   for (const constraint of catalogue.forceConstraints) {
     const described = describeConstraint(constraint, null, state, costOf);
     if (!described) continue;
-    const target = `${constraint.targetType} "${nameOf(constraint.targetType, constraint.targetId)}"`;
+    const target = constraintTargetLabel(constraint, nameOf);
     const label =
       constraint.type === "min"
         ? `At least ${described.limit} ${target}`

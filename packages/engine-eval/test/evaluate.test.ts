@@ -59,6 +59,32 @@ describe("evaluate legality checks", () => {
     expect(force.find((c) => c.id === "fc.heavy.max")?.label).toMatch(/At most 3 category/);
   });
 
+  // Real 11e catalogues carry several force-TARGET constraints that all share one
+  // targetId — the forceEntry's GUID — so labelling them by target produced two
+  // identical `force "bb9d-299a-ed60-2d8a"` rows for the Detachment Points and
+  // Enhancements caps. The subject being counted is `field`.
+  it("labels a force-target check by the cost type it counts, not the force GUID", () => {
+    const forceTargeted: IrCatalogue = {
+      ...mini40kCatalogue,
+      forceConstraints: [
+        { id: "fc.dp", type: "max", value: 3, field: "Detachment Points", scope: "force",
+          targetType: "force", targetId: "bb9d-299a-ed60-2d8a", includeChildSelections: true, modifiers: [] },
+        { id: "fc.enh", type: "max", value: 2, field: "Enhancements", scope: "force",
+          targetType: "force", targetId: "bb9d-299a-ed60-2d8a", includeChildSelections: true, modifiers: [] },
+        { id: "fc.sel", type: "max", value: 9, field: "selections", scope: "force",
+          targetType: "force", targetId: "bb9d-299a-ed60-2d8a", includeChildSelections: true, modifiers: [] },
+      ],
+    };
+    const labels = evaluate(legalRoster, forceTargeted).checks
+      .filter((c) => c.kind === "force").map((c) => c.label);
+    expect(labels).toEqual([
+      "At most 3 Detachment Points",
+      "At most 2 Enhancements",
+      "At most 9 army selections",
+    ]);
+    expect(labels.some((l) => l.includes("bb9d-299a-ed60-2d8a"))).toBe(false);
+  });
+
   it("marks a violated force check unsatisfied and pairs it with an issue", () => {
     const result = evaluate(rosterWith([sel("e.troops")]), mini40kCatalogue); // no HQ
     const hq = result.checks.find((c) => c.id === "fc.hq.min");
