@@ -68,8 +68,10 @@ pub(crate) fn resolve_with_caps(mut cat: RawCatalogue, max_nodes: u64, max_depth
         // sequentially with an empty path each iteration, so no pre-check here.
         path.insert(link.target_id.clone());
         let mut root = resolve_entry(target, &symbols, &mut path, &mut budget, diags, 1)?;
+        // Applied while the target is still on the path, so inline content that
+        // links back to it is caught as a cycle like any other descendant.
+        apply_link_content(link, &mut root, &symbols, &mut path, &mut budget, diags, 1)?;
         path.remove(&link.target_id);
-        apply_link_modifiers(link, &mut root);
         cat.entries.push(root);
     }
     Ok(cat)
@@ -109,7 +111,31 @@ fn resolve_link(
         }
         path.insert(link.target_id.clone());
         let mut resolved = resolve_group(target, symbols, path, budget, diags, depth + 1)?;
+        // The link's own content applies to THIS placement only; `resolved` is a
+        // fresh clone, so nothing written here reaches the shared target. Resolved
+        // while the target is still on the path and with the same budget/depth
+        // state, so cycles and the caps cover inline content unchanged.
+        let mut inline_entries: Vec<RawEntry> = Vec::new();
+        let mut inline_groups: Vec<RawGroup> = Vec::new();
+        resolve_link_children(link, symbols, path, budget, diags, depth + 1,
+            &mut inline_entries, &mut inline_groups)?;
         path.remove(&link.target_id);
+        resolved.entries.extend(inline_entries);
+        resolved.groups.extend(inline_groups);
+        // Link constraints are additions, never overrides (verified across 11e:
+        // zero link constraints share an id with one on their target).
+        resolved.constraints.extend(link.constraints.iter().cloned());
+        // A RawGroup has no costs/categoryLinks, and its profiles/infoLinks are not
+        // mapped to IR (see resolve_group). Diagnose rather than mis-file or drop silently.
+        if !link.costs.is_empty() || !link.category_links.is_empty()
+            || !link.profiles.is_empty() || !link.info_links.is_empty() {
+            diags.push(Diagnostic {
+                code: "entryLink.group_content_unsupported".to_string(),
+                message: format!(
+                    "entryLink to group {} carries costs/categoryLinks/profiles/infoLinks; unsupported (dropped)",
+                    link.target_id),
+            });
+        }
         if link.hidden || link.modifiers.iter().any(|m| m.field == "hidden") {
             diags.push(Diagnostic {
                 code: "entryLink.group_hidden_unsupported".to_string(),
@@ -134,27 +160,95 @@ fn resolve_link(
         }
         path.insert(link.target_id.clone());
         let mut resolved = resolve_entry(target, symbols, path, budget, diags, depth + 1)?;
+        apply_link_content(link, &mut resolved, symbols, path, budget, diags, depth + 1)?;
         path.remove(&link.target_id);
-        apply_link_modifiers(link, &mut resolved);
         children.push(resolved);
     }
     Ok(())
 }
 
-/// Apply an entryLink's own static `hidden` and its `<modifiers>` onto the
-/// freshly-cloned inlined instance. `resolved` is unique per placement, so
-/// appended modifiers never leak to the shared target. Every modifier is routed
-/// downstream by map_entry exactly like one of the target's own modifiers
-/// (hidden→visibility, cost-type→cost, error→validation, category→category,
-/// constraint-id→constraint, else→modifier.target_unmapped) — no field is
-/// special-cased or dropped here.
-fn apply_link_modifiers(link: &RawEntryLink, resolved: &mut RawEntry) {
+/// Apply everything an entryLink declares — its static `hidden`, its
+/// `<modifiers>` and the whole content it carries — onto the freshly-cloned
+/// inlined instance. An entryLink is a PLACEMENT, not a bare pointer: the
+/// children it declares belong to this placement only. `resolved` is unique per
+/// placement, so nothing written here leaks to the shared target.
+///
+/// Modifiers are appended and routed downstream by map_entry exactly like one of
+/// the target's own (hidden→visibility, cost-type→cost, error→validation,
+/// category→category, constraint-id→constraint, else→modifier.target_unmapped).
+/// The content merge is per collection:
+/// - `entries`/`groups`/`entry_links` — resolved through the same recursion and
+///   appended after the target's own, sharing the cycle path-set, node budget and
+///   depth cap (`depth` here is the CLONE's depth).
+/// - `constraints` — appended; a link constraint is always an addition (across all
+///   of 11e, no link constraint shares an id with one on its target).
+/// - `costs` — merged by cost-type id with the link's value WINNING, never
+///   appended: a link that repeats its target's `pts 45` must not charge 90.
+/// - `category_links` — appended, skipping a category the clone already has, since
+///   a repeat is meaningless and would inflate category-scoped counts.
+/// - `profiles`/`info_links` — appended through the same path an entry uses.
+#[allow(clippy::too_many_arguments)]
+fn apply_link_content(
+    link: &RawEntryLink, resolved: &mut RawEntry, symbols: &SymbolTable,
+    path: &mut HashSet<String>, budget: &mut Budget, diags: &mut Vec<Diagnostic>, depth: usize,
+) -> Result<(), ParseError> {
     if link.hidden {
         resolved.hidden = true;
     }
     for m in &link.modifiers {
         resolved.modifiers.push(m.clone());
     }
+
+    let mut inline_entries: Vec<RawEntry> = Vec::new();
+    let mut inline_groups: Vec<RawGroup> = Vec::new();
+    resolve_link_children(link, symbols, path, budget, diags, depth,
+        &mut inline_entries, &mut inline_groups)?;
+    resolved.entries.extend(inline_entries);
+    resolved.groups.extend(inline_groups);
+
+    resolved.constraints.extend(link.constraints.iter().cloned());
+
+    for c in &link.costs {
+        match resolved.costs.iter_mut().find(|t| t.type_id == c.type_id) {
+            Some(existing) => existing.value = c.value,
+            None => resolved.costs.push(c.clone()),
+        }
+    }
+
+    for cl in &link.category_links {
+        if resolved.category_links.iter().any(|e| e.target_id == cl.target_id) {
+            continue;
+        }
+        resolved.category_links.push(cl.clone());
+    }
+
+    resolved.profiles.extend(link.profiles.iter().cloned());
+    resolve_info_links(&link.info_links, symbols, diags, &mut resolved.profiles);
+    Ok(())
+}
+
+/// Resolve the `selectionEntries` / `selectionEntryGroups` / `entryLinks` an
+/// entryLink declares, into the caller's sinks. `depth` is the depth of the clone
+/// they attach to, so direct children resolve one deeper and nested links resolve
+/// at the clone's own depth — identical to how resolve_entry treats its own
+/// children. All other state (`symbols`, `path`, `budget`, `diags`) is the shared
+/// one, so no second budget and no separate cycle guard exist.
+#[allow(clippy::too_many_arguments)]
+fn resolve_link_children(
+    link: &RawEntryLink, symbols: &SymbolTable, path: &mut HashSet<String>,
+    budget: &mut Budget, diags: &mut Vec<Diagnostic>, depth: usize,
+    children: &mut Vec<RawEntry>, groups: &mut Vec<RawGroup>,
+) -> Result<(), ParseError> {
+    for child in &link.entries {
+        children.push(resolve_entry(child, symbols, path, budget, diags, depth + 1)?);
+    }
+    for g in &link.groups {
+        groups.push(resolve_group(g, symbols, path, budget, diags, depth + 1)?);
+    }
+    for nested in &link.entry_links {
+        resolve_link(nested, symbols, path, budget, diags, depth, children, groups)?;
+    }
+    Ok(())
 }
 
 /// Inline each `type="profile"` infoLink's target profile into `profiles`.
@@ -247,6 +341,7 @@ fn resolve_group(group: &RawGroup, symbols: &SymbolTable, path: &mut HashSet<Str
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::raw::{RawCategoryLink, RawConstraint, RawCost};
 
     fn link(target: &str) -> RawEntryLink {
         RawEntryLink { target_id: target.to_string(), link_type: String::new(), ..Default::default() }
@@ -450,6 +545,299 @@ mod tests {
         let resolved = resolve(cat).unwrap();
         let g = &resolved.entries.iter().find(|e| e.id == "owner").unwrap().groups[0];
         assert_eq!(g.default_selection_entry_id, "m0", "direct member default is a no-op");
+    }
+
+    // --- an entryLink's own content applies to its placement (Task E2) ---
+
+    fn constraint(id: &str, value: f64) -> RawConstraint {
+        RawConstraint { id: id.into(), kind: "max".into(), value, field: "selections".into(),
+            scope: "parent".into(), ..Default::default() }
+    }
+    fn cost(type_id: &str, value: f64) -> RawCost {
+        RawCost { type_id: type_id.into(), value }
+    }
+    fn cat_link(target: &str) -> RawCategoryLink {
+        RawCategoryLink { target_id: target.into(), ..Default::default() }
+    }
+
+    #[test]
+    fn link_inline_entry_and_group_land_on_the_clone() {
+        // Shared target `t` has one child of its own; the link adds an inline entry
+        // and an inline group. A SECOND link to the same target adds nothing — its
+        // clone must show only the target's own child (the leak guard).
+        let mut target = entry("t", vec![]);
+        target.entries.push(entry("t.own", vec![]));
+        let mut rich = link("t");
+        rich.entries.push(entry("inline.e", vec![]));
+        rich.groups.push(RawGroup { id: "inline.g".into(), ..Default::default() });
+        let owner = RawEntry {
+            id: "owner".into(), entry_type: "unit".into(),
+            entry_links: vec![rich], ..Default::default()
+        };
+        let plain = RawEntry {
+            id: "plain".into(), entry_type: "unit".into(),
+            entry_links: vec![link("t")], ..Default::default()
+        };
+        let cat = RawCatalogue {
+            id: "c".into(), entries: vec![owner, plain],
+            shared_entries: vec![target], ..Default::default()
+        };
+        let resolved = resolve(cat).unwrap();
+        let clone = &resolved.entries.iter().find(|e| e.id == "owner").unwrap().entries[0];
+        let ids: Vec<&str> = clone.entries.iter().map(|e| e.id.as_str()).collect();
+        assert_eq!(ids, vec!["t.own", "inline.e"], "inline entry appended after the target's own");
+        assert_eq!(clone.groups.len(), 1);
+        assert_eq!(clone.groups[0].id, "inline.g");
+
+        let plain_clone = &resolved.entries.iter().find(|e| e.id == "plain").unwrap().entries[0];
+        let ids: Vec<&str> = plain_clone.entries.iter().map(|e| e.id.as_str()).collect();
+        assert_eq!(ids, vec!["t.own"], "link content did not leak onto the shared target");
+        assert!(plain_clone.groups.is_empty(), "inline group did not leak either");
+    }
+
+    #[test]
+    fn link_nested_entrylink_resolves() {
+        // The link carries an entryLinks child pointing at another shared entry.
+        let mut rich = link("t");
+        rich.entry_links.push(link("other"));
+        let owner = RawEntry {
+            id: "owner".into(), entry_type: "unit".into(),
+            entry_links: vec![rich], ..Default::default()
+        };
+        let cat = RawCatalogue {
+            id: "c".into(), entries: vec![owner],
+            shared_entries: vec![entry("t", vec![]), entry("other", vec![])],
+            ..Default::default()
+        };
+        let resolved = resolve(cat).unwrap();
+        let clone = &resolved.entries[0].entries[0];
+        assert!(clone.entries.iter().any(|e| e.id == "other"),
+            "the link's nested entryLink resolved onto the clone");
+    }
+
+    #[test]
+    fn link_constraints_are_added() {
+        let mut target = entry("t", vec![]);
+        target.constraints.push(constraint("t.max", 2.0));
+        let mut rich = link("t");
+        rich.constraints.push(constraint("lnk.max", 1.0));
+        let owner = RawEntry {
+            id: "owner".into(), entry_type: "unit".into(),
+            entry_links: vec![rich], ..Default::default()
+        };
+        let cat = RawCatalogue {
+            id: "c".into(), entries: vec![owner], shared_entries: vec![target], ..Default::default()
+        };
+        let resolved = resolve(cat).unwrap();
+        let clone = &resolved.entries[0].entries[0];
+        let ids: Vec<&str> = clone.constraints.iter().map(|c| c.id.as_str()).collect();
+        assert_eq!(ids, vec!["t.max", "lnk.max"], "the link's constraint is added to the target's");
+    }
+
+    #[test]
+    fn link_cost_replaces_a_cost_of_the_same_type() {
+        // The Aeldari Warlock shape: the link repeats its target's `pts 45`.
+        // Appending would charge 90.
+        let mut target = entry("t", vec![]);
+        target.costs.push(cost("pts", 45.0));
+        let mut rich = link("t");
+        rich.costs.push(cost("pts", 45.0));
+        rich.costs.push(cost("cp", 1.0));
+        let owner = RawEntry {
+            id: "owner".into(), entry_type: "unit".into(),
+            entry_links: vec![rich], ..Default::default()
+        };
+        let cat = RawCatalogue {
+            id: "c".into(), entries: vec![owner], shared_entries: vec![target], ..Default::default()
+        };
+        let resolved = resolve(cat).unwrap();
+        let clone = &resolved.entries[0].entries[0];
+        let pts: Vec<f64> = clone.costs.iter().filter(|c| c.type_id == "pts").map(|c| c.value).collect();
+        assert_eq!(pts, vec![45.0], "exactly ONE pts cost, still 45 — not doubled");
+        let cp: Vec<f64> = clone.costs.iter().filter(|c| c.type_id == "cp").map(|c| c.value).collect();
+        assert_eq!(cp, vec![1.0], "a cost type the target lacks is added");
+    }
+
+    #[test]
+    fn link_cost_of_the_same_type_overrides_the_targets_value() {
+        let mut target = entry("t", vec![]);
+        target.costs.push(cost("pts", 45.0));
+        let mut rich = link("t");
+        rich.costs.push(cost("pts", 60.0));
+        let owner = RawEntry {
+            id: "owner".into(), entry_type: "unit".into(),
+            entry_links: vec![rich], ..Default::default()
+        };
+        let cat = RawCatalogue {
+            id: "c".into(), entries: vec![owner], shared_entries: vec![target], ..Default::default()
+        };
+        let resolved = resolve(cat).unwrap();
+        let clone = &resolved.entries[0].entries[0];
+        assert_eq!(clone.costs.len(), 1);
+        assert_eq!(clone.costs[0].value, 60.0, "the link's value wins for a type both price");
+    }
+
+    #[test]
+    fn link_category_is_not_duplicated() {
+        let mut target = entry("t", vec![]);
+        target.category_links.push(cat_link("c1"));
+        let mut rich = link("t");
+        rich.category_links.push(cat_link("c1"));
+        rich.category_links.push(cat_link("c2"));
+        let owner = RawEntry {
+            id: "owner".into(), entry_type: "unit".into(),
+            entry_links: vec![rich], ..Default::default()
+        };
+        let cat = RawCatalogue {
+            id: "c".into(), entries: vec![owner], shared_entries: vec![target], ..Default::default()
+        };
+        let resolved = resolve(cat).unwrap();
+        let clone = &resolved.entries[0].entries[0];
+        let ids: Vec<&str> = clone.category_links.iter().map(|c| c.target_id.as_str()).collect();
+        assert_eq!(ids, vec!["c1", "c2"], "c1 once (not repeated), c2 added");
+    }
+
+    #[test]
+    fn link_profile_and_infolink_reach_the_clone() {
+        let target = entry("t", vec![]);
+        let mut rich = link("t");
+        rich.profiles.push(RawProfile { id: "inline.p".into(), ..Default::default() });
+        rich.info_links.push(RawInfoLink {
+            target_id: "shared.p".into(), link_type: "profile".into(), hidden: false });
+        let owner = RawEntry {
+            id: "owner".into(), entry_type: "unit".into(),
+            entry_links: vec![rich], ..Default::default()
+        };
+        let cat = RawCatalogue {
+            id: "c".into(), entries: vec![owner], shared_entries: vec![target],
+            shared_profiles: vec![RawProfile { id: "shared.p".into(), ..Default::default() }],
+            ..Default::default()
+        };
+        let resolved = resolve(cat).unwrap();
+        let clone = &resolved.entries[0].entries[0];
+        let ids: Vec<&str> = clone.profiles.iter().map(|p| p.id.as_str()).collect();
+        assert_eq!(ids, vec!["inline.p", "shared.p"], "inline profile and infoLink target both land");
+    }
+
+    #[test]
+    fn group_link_inline_entry_becomes_a_member() {
+        // The owner's real shape: Wolf Guard Terminators link the shared group
+        // "Legends of Saga and Song Enhancements" (Thirst for Glory) and declare
+        // "Fierce Example" on the link itself.
+        let mut g0 = RawGroup { id: "g0".into(), name: "Enhancements".into(), ..Default::default() };
+        g0.entries.push(entry("thirst", vec![]));
+        let mut gl = group_link("g0");
+        gl.entries.push(entry("fierce", vec![]));
+        let owner = RawEntry {
+            id: "owner".into(), entry_type: "unit".into(),
+            entry_links: vec![gl], ..Default::default()
+        };
+        let cat = RawCatalogue {
+            id: "c".into(), entries: vec![owner], shared_groups: vec![g0], ..Default::default()
+        };
+        let resolved = resolve(cat).unwrap();
+        let g = &resolved.entries[0].groups[0];
+        let ids: Vec<&str> = g.entries.iter().map(|e| e.id.as_str()).collect();
+        assert_eq!(ids, vec!["thirst", "fierce"], "the link's inline entry is a member of the placement");
+    }
+
+    #[test]
+    fn group_link_constraint_is_added() {
+        let mut g0 = RawGroup { id: "g0".into(), ..Default::default() };
+        g0.constraints.push(constraint("g.max", 2.0));
+        let mut gl = group_link("g0");
+        gl.constraints.push(constraint("lnk.max", 1.0));
+        let owner = RawEntry {
+            id: "owner".into(), entry_type: "unit".into(),
+            entry_links: vec![gl], ..Default::default()
+        };
+        let cat = RawCatalogue {
+            id: "c".into(), entries: vec![owner], shared_groups: vec![g0], ..Default::default()
+        };
+        let resolved = resolve(cat).unwrap();
+        let ids: Vec<&str> = resolved.entries[0].groups[0]
+            .constraints.iter().map(|c| c.id.as_str()).collect();
+        assert_eq!(ids, vec!["g.max", "lnk.max"]);
+    }
+
+    #[test]
+    fn group_link_nested_link_and_group_resolve() {
+        let g0 = RawGroup { id: "g0".into(), ..Default::default() };
+        let mut gl = group_link("g0");
+        gl.entry_links.push(link("member"));
+        gl.groups.push(RawGroup { id: "sub".into(), ..Default::default() });
+        let owner = RawEntry {
+            id: "owner".into(), entry_type: "unit".into(),
+            entry_links: vec![gl], ..Default::default()
+        };
+        let cat = RawCatalogue {
+            id: "c".into(), entries: vec![owner], shared_groups: vec![g0],
+            shared_entries: vec![entry("member", vec![])], ..Default::default()
+        };
+        let resolved = resolve(cat).unwrap();
+        let g = &resolved.entries[0].groups[0];
+        assert!(g.entries.iter().any(|e| e.id == "member"), "nested link resolved into the group");
+        assert!(g.groups.iter().any(|s| s.id == "sub"), "inline subgroup landed on the group");
+    }
+
+    #[test]
+    fn group_link_cost_or_category_is_diagnosed() {
+        // A RawGroup has no costs/categoryLinks — diagnose, never mis-file.
+        let g0 = RawGroup { id: "g0".into(), ..Default::default() };
+        let mut gl = group_link("g0");
+        gl.costs.push(cost("pts", 5.0));
+        gl.category_links.push(cat_link("c1"));
+        let owner = RawEntry {
+            id: "owner".into(), entry_type: "unit".into(),
+            entry_links: vec![gl], ..Default::default()
+        };
+        let cat = RawCatalogue {
+            id: "c".into(), entries: vec![owner], shared_groups: vec![g0], ..Default::default()
+        };
+        let mut diags = Vec::new();
+        let resolved = resolve_with_diags(cat, &mut diags).unwrap();
+        assert!(diags.iter().any(|d| d.code == "entryLink.group_content_unsupported"
+            && d.message.contains("g0")));
+        let g = &resolved.entries[0].groups[0];
+        assert!(g.entries.is_empty() && g.groups.is_empty(), "nothing silently mis-filed");
+    }
+
+    #[test]
+    fn link_inline_content_shares_the_cycle_guard() {
+        // The link's inline entry links back to the link's own target → cycle.
+        let mut rich = link("t");
+        rich.entries.push(entry("inline", vec![link("t")]));
+        let owner = RawEntry {
+            id: "owner".into(), entry_type: "unit".into(),
+            entry_links: vec![rich], ..Default::default()
+        };
+        let cat = RawCatalogue {
+            id: "c".into(), entries: vec![owner],
+            shared_entries: vec![entry("t", vec![])], ..Default::default()
+        };
+        assert!(matches!(resolve(cat), Err(ParseError::ReferenceCycle(_))));
+    }
+
+    #[test]
+    fn link_inline_content_shares_the_node_budget() {
+        // Inline content resolves through the SAME budget: a link whose inline
+        // entries fan out past a small cap is a typed error, not a second budget.
+        let mut rich = link("t");
+        for i in 0..50 {
+            rich.entries.push(entry(&format!("i{i}"), vec![]));
+        }
+        let owner = RawEntry {
+            id: "owner".into(), entry_type: "unit".into(),
+            entry_links: vec![rich], ..Default::default()
+        };
+        let cat = RawCatalogue {
+            id: "c".into(), entries: vec![owner],
+            shared_entries: vec![entry("t", vec![])], ..Default::default()
+        };
+        assert!(matches!(
+            resolve_with_caps(cat, 5, 10_000, &mut Vec::new()),
+            Err(ParseError::ResolvedTooLarge(_))
+        ));
     }
 
     #[test]
