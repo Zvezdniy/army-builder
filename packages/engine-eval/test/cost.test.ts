@@ -4,7 +4,7 @@ import { buildState, totalCost, pointsCost, nodePoints, costOfType } from "@must
 import type { CostFn } from "@muster/engine-eval";
 
 const cat: IrCatalogue = {
-  id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [],
+  id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [], categoryNames: {},
   entries: [
     { id: "e.squad", name: "Squad", costs: [{ name: "points", value: 100 }], categories: [], constraints: [],
       children: [{ id: "e.gun", name: "Gun", costs: [{ name: "points", value: 5 }], categories: [], constraints: [], children: [] }] },

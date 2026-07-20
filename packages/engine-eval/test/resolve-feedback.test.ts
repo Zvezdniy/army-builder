@@ -9,7 +9,7 @@ import { buildState, resolveCosts, totalCost, evaluate, MAX_ITERATIONS } from "@
 // resolver to iterate: pass 1 sees raw total 40 (A undiscounted), pass 2 sees 30 (A
 // discounted), pass 3 stabilises. A single-pass / raw-only resolver would report 30, not 20.
 const catConverge: IrCatalogue = {
-  id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [],
+  id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [], categoryNames: {},
   entries: [
     {
       id: "e.a", name: "A", categories: ["cat.a", "cat.all"], constraints: [], children: [],
@@ -39,7 +39,7 @@ const rosterConverge: Roster = {
 // O costs 10 with a -6 discount gated on roster points >= 10. Discounting to 4 removes
 // the condition (4 < 10), which restores 10, which re-triggers it: 4 <-> 10 forever.
 const catOscillate: IrCatalogue = {
-  id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [],
+  id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [], categoryNames: {},
   entries: [{
     id: "e.o", name: "O", categories: ["cat.all"], constraints: [], children: [],
     costs: [{

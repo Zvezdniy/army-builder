@@ -6,14 +6,14 @@ import { hiddenEntryIds, hiddenSelectionIds } from "@muster/engine-eval";
 // detachment selection of that category (set hidden=true when 0 instances → notInstanceOf).
 function cat(): IrCatalogue {
   return {
-    id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [],
+    id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [], categoryNames: {},
     entries: [
       { id: "e.det", name: "Detachment", costs: [], categories: ["cat.det"], constraints: [], children: [] },
       {
         id: "e.enh", name: "Enhancement", costs: [], categories: [], constraints: [], children: [],
         visibilityModifiers: [{
           set: true,
-          conditions: [{ id: "c1", comparator: "lessThan", value: 1, field: "selections", scope: "roster", targetType: "category", targetId: "cat.det" }],
+          conditions: [{ id: "c1", comparator: "lessThan", value: 1, field: "selections", scope: "roster", targetType: "category", targetId: "cat.det", includeChildSelections: false }],
         }],
       },
       { id: "e.plain", name: "Plain", costs: [], categories: [], constraints: [], children: [] },
@@ -47,7 +47,7 @@ describe("hiddenEntryIds", () => {
 // it unless its parent (the owner) is instanceOf cat.other.
 function ctxCat(): IrCatalogue {
   return {
-    id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [],
+    id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [], categoryNames: {},
     entries: [
       {
         id: "e.owner", name: "Owner", costs: [], categories: ["cat.owner"], constraints: [],
@@ -58,7 +58,7 @@ function ctxCat(): IrCatalogue {
             visibilityModifiers: [{
               set: true,
               conditions: [
-                { id: "c1", comparator: "lessThan", value: 1, field: "selections", scope: "parent", targetType: "category", targetId: "cat.other" },
+                { id: "c1", comparator: "lessThan", value: 1, field: "selections", scope: "parent", targetType: "category", targetId: "cat.other", includeChildSelections: false },
               ],
             }],
           },
@@ -90,7 +90,7 @@ describe("hiddenEntryIds context scopes", () => {
 
   it("skips a conditionGroup gate that uses a context scope when no owner is given", () => {
     const catWithGroup: IrCatalogue = {
-      id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [],
+      id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [], categoryNames: {},
       entries: [
         {
           id: "e.owner2", name: "Owner2", costs: [], categories: ["cat.owner2"], constraints: [],
@@ -102,7 +102,7 @@ describe("hiddenEntryIds context scopes", () => {
                 conditionGroups: [{
                   type: "and",
                   conditions: [
-                    { id: "g1", comparator: "lessThan", value: 1, field: "selections", scope: "parent", targetType: "category", targetId: "cat.other" },
+                    { id: "g1", comparator: "lessThan", value: 1, field: "selections", scope: "parent", targetType: "category", targetId: "cat.other", includeChildSelections: false },
                   ],
                 }],
               }],
@@ -128,7 +128,7 @@ describe("hiddenEntryIds context scopes", () => {
     // `groupUsesContext` must recurse into `conditionGroups` to find the parent-scoped
     // condition nested one level deeper.
     const catWithNestedGroup: IrCatalogue = {
-      id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [],
+      id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [], categoryNames: {},
       entries: [
         {
           id: "e.owner3", name: "Owner3", costs: [], categories: ["cat.owner3"], constraints: [],
@@ -140,12 +140,12 @@ describe("hiddenEntryIds context scopes", () => {
                 conditionGroups: [{
                   type: "and",
                   conditions: [
-                    { id: "g1", comparator: "lessThan", value: 100, field: "selections", scope: "roster", targetType: "category", targetId: "cat.nowhere" },
+                    { id: "g1", comparator: "lessThan", value: 100, field: "selections", scope: "roster", targetType: "category", targetId: "cat.nowhere", includeChildSelections: false },
                   ],
                   conditionGroups: [{
                     type: "and",
                     conditions: [
-                      { id: "g2", comparator: "lessThan", value: 1, field: "selections", scope: "parent", targetType: "category", targetId: "cat.other" },
+                      { id: "g2", comparator: "lessThan", value: 1, field: "selections", scope: "parent", targetType: "category", targetId: "cat.other", includeChildSelections: false },
                     ],
                   }],
                 }],
@@ -171,7 +171,7 @@ describe("hiddenEntryIds context scopes", () => {
     // false for it, so the gate is evaluated normally even with no owner (an empty "and"
     // group is vacuously true, so the modifier applies unconditionally).
     const catEmptyGroup: IrCatalogue = {
-      id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [],
+      id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [], categoryNames: {},
       entries: [
         {
           id: "e.opt4", name: "Opt4", costs: [], categories: [], constraints: [], children: [],
@@ -239,7 +239,7 @@ describe("hiddenEntryIds context scopes", () => {
 // relative like parent/ancestor, so the ownerless path must skip it too (never over-hide).
 describe("hiddenEntryIds with a foreign-id scoped gate", () => {
   const fcat: IrCatalogue = {
-    id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [],
+    id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [], categoryNames: {},
     entries: [{
       id: "e.owner", name: "Owner", costs: [], categories: [], constraints: [],
       children: [{
@@ -291,7 +291,7 @@ describe("hiddenSelectionIds", () => {
 // reduces to "hidden unless the detachment is in the roster".
 function forcesGateCat(): IrCatalogue {
   return {
-    id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [],
+    id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [], categoryNames: {},
     entries: [
       { id: "e.det", name: "Detachment", costs: [], categories: [], constraints: [], children: [] },
       {
@@ -301,8 +301,8 @@ function forcesGateCat(): IrCatalogue {
           conditionGroups: [{
             type: "and",
             conditions: [
-              { id: "f", comparator: "lessThan", value: 1, field: "forces", scope: "roster", targetType: "entry", targetId: "force.crusade" },
-              { id: "d", comparator: "lessThan", value: 1, field: "selections", scope: "roster", targetType: "entry", targetId: "e.det" },
+              { id: "f", comparator: "lessThan", value: 1, field: "forces", scope: "roster", targetType: "entry", targetId: "force.crusade", includeChildSelections: false },
+              { id: "d", comparator: "lessThan", value: 1, field: "selections", scope: "roster", targetType: "entry", targetId: "e.det", includeChildSelections: false },
             ],
           }],
         }],
@@ -326,7 +326,7 @@ describe("visibility with conditional categories", () => {
   // This tests that resolveCategories is called before gate evaluation.
   function catWithConditionalCategory(): IrCatalogue {
     return {
-      id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [],
+      id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [], categoryNames: {},
       entries: [
         { id: "e.det", name: "Detachment", costs: [], categories: ["cat.det"], constraints: [], children: [] },
         {
@@ -339,7 +339,7 @@ describe("visibility with conditional categories", () => {
                 set: true,
                 conditions: [{
                   id: "c2", comparator: "lessThan", value: 1, field: "selections", scope: "parent",
-                  targetType: "category", targetId: "cat.conditional",
+                  targetType: "category", targetId: "cat.conditional", includeChildSelections: false,
                 }],
               }],
             },
@@ -350,7 +350,7 @@ describe("visibility with conditional categories", () => {
             categoryId: "cat.conditional",
             conditions: [{
               id: "c1", comparator: "atLeast", value: 1, field: "selections", scope: "roster",
-              targetType: "category", targetId: "cat.det",
+              targetType: "category", targetId: "cat.det", includeChildSelections: false,
             }],
           }],
         },

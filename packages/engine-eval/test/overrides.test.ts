@@ -4,7 +4,7 @@ import { evaluate } from "@muster/engine-eval";
 
 // A unit requires min 5 models (a "min" constraint on its own children count).
 const cat: IrCatalogue = {
-  id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [],
+  id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [], categoryNames: {},
   entries: [
     {
       id: "e.squad", name: "Squad", costs: [{ name: "points", value: 100 }], categories: ["cat.troops"], children: [],

@@ -5,7 +5,7 @@ import { evaluate, buildState, resolveCosts, MAX_ITERATIONS } from "@muster/engi
 
 // Catalogue whose troop cost steps down by 2 at >=3 and by another 2 at >=6 troops.
 const cat: IrCatalogue = {
-  id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [],
+  id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [], categoryNames: {},
   entries: [{
     id: "e.troop", name: "Troop", categories: ["cat.troops"], constraints: [], children: [],
     costs: [{ name: "points", value: 10, modifiers: [

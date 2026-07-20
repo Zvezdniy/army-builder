@@ -5,7 +5,7 @@ import type { EvalNode, EvalState } from "@muster/engine-eval";
 
 // Catalogue: two HQ, three Heavy units; a squad with 2 special-weapon options.
 const cat: IrCatalogue = {
-  id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [],
+  id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [], categoryNames: {},
   entries: [
     { id: "e.hq", name: "HQ", costs: [{ name: "points", value: 80 }], categories: ["cat.hq"], constraints: [], children: [] },
     { id: "e.heavy", name: "Heavy", costs: [{ name: "points", value: 150 }], categories: ["cat.heavy"], constraints: [], children: [] },
@@ -45,7 +45,7 @@ describe("aggregate", () => {
   it("foreign-id scope resolves to the ancestor-or-self entry's subtree", () => {
     const { state, byId } = setup();
     // scope = the squad's own entry id → count e.special within the squad (self-ref).
-    const c: IrCondition = { ...base, includeChildSelections: true, type: "atLeast", field: "selections", scope: "e.squad", targetType: "entry", targetId: "e.special" };
+    const c: IrCondition = { ...base, includeChildSelections: true, comparator: "atLeast", field: "selections", scope: "e.squad", targetType: "entry", targetId: "e.special" };
     expect(aggregate(byId("s.squad"), c, state)).toBe(2); // squad holds 2 specials
     // evaluated at the special node, the squad is an ancestor → same subtree resolves
     expect(aggregate(byId("s.sp"), c, state)).toBe(2);
@@ -53,7 +53,7 @@ describe("aggregate", () => {
 
   it("an unresolvable foreign-id scope aggregates to 0 (never inflates)", () => {
     const { state, byId } = setup();
-    const c: IrCondition = { ...base, type: "atLeast", field: "selections", scope: "no-such-id", targetType: "entry", targetId: "e.special" };
+    const c: IrCondition = { ...base, comparator: "atLeast", field: "selections", scope: "no-such-id", targetType: "entry", targetId: "e.special" };
     expect(aggregate(byId("s.squad"), c, state)).toBe(0);
     expect(aggregate(null, c, state)).toBe(0);
   });
@@ -149,7 +149,7 @@ describe("aggregate", () => {
     const { state, byId } = setup();
     const special = byId("s.sp");
     // scope = the squad's entry id (an ancestor) → a container, same as parent.
-    const c: IrConstraint = { ...base, type: "max", field: "selections", scope: "e.squad", targetType: "category", targetId: "cat.special" };
+    const c: IrCondition = { ...base, comparator: "atLeast", field: "selections", scope: "e.squad", targetType: "category", targetId: "cat.special" };
     expect(aggregate(special, c, state)).toBe(2);
   });
 

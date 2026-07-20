@@ -8,6 +8,7 @@ const cat: IrCatalogue = {
   gameSystemId: "gs.40k",
   revision: 1,
   forceConstraints: [],
+  categoryNames: {},
   entries: [
     {
       id: "e.unit",

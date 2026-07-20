@@ -6,6 +6,7 @@ export const mini40kCatalogue: IrCatalogue = {
   name: "Mini 40k",
   gameSystemId: "gs.40k",
   revision: 1,
+  categoryNames: {},
   forceConstraints: [
     { id: "fc.hq.min", type: "min", value: 1, field: "selections", scope: "force", targetType: "category", targetId: "cat.hq", includeChildSelections: false },
     { id: "fc.hq.max", type: "max", value: 2, field: "selections", scope: "force", targetType: "category", targetId: "cat.hq", includeChildSelections: false },

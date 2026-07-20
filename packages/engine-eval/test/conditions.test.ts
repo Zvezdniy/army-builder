@@ -3,7 +3,7 @@ import type { IrCatalogue, IrCondition } from "@muster/domain";
 import { buildState, evaluateCondition } from "@muster/engine-eval";
 
 const cat: IrCatalogue = {
-  id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [],
+  id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [], categoryNames: {},
   entries: [{ id: "e.troop", name: "Troop", costs: [{ name: "points", value: 10 }], categories: ["cat.troops"], constraints: [], children: [] }],
 };
 const roster = {
