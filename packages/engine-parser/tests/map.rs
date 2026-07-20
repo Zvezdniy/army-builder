@@ -2086,6 +2086,50 @@ fn maps_direct_children_characteristic_modifier() {
     assert!(!cm.recursive, "self.entries.profiles.X (no `recursive` keyword) means direct children only");
 }
 
+/// Fix 1: an empty/absent `scope` attribute on the PRIMARY `self.entries...`
+/// affects shape must fall back to `target_scope = "self"`, exactly like the
+/// two bare-affects arms already do — not carry through as an empty string.
+/// Real 11e BSData (Space Marines) has 56 of 762 numeric characteristic
+/// modifiers on this exact shape with `scope` omitted (e.g. Infernus Squad
+/// `+1 Unit`, Helbrute `+2 Melee S`); before this fallback, `target_scope`
+/// captured as `""` routes engine-eval's `scopeNodes` to the foreign-id
+/// `default:` branch, resolving to nothing — the modifier silently never
+/// applies, with no diagnostic.
+#[test]
+fn maps_recursive_own_entry_characteristic_modifier_empty_scope_falls_back_to_self() {
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <profileTypes>
+    <profileType id="pt.unit" name="Unit">
+      <characteristicTypes>
+        <characteristicType id="ct.m" name="M"/>
+      </characteristicTypes>
+    </profileType>
+  </profileTypes>
+  <selectionEntries>
+    <selectionEntry id="e.enh" name="Enh" type="upgrade">
+      <modifiers>
+        <modifier type="increment" field="ct.m" value="1"
+                  affects="self.entries.recursive.e.model.profiles.Unit"/>
+      </modifiers>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let raw = resolve(parse_raw(xml).unwrap()).unwrap();
+    let (ir, diags) = to_ir(&raw);
+    let enh = ir.entries.iter().find(|e| e.id == "e.enh").unwrap();
+    assert_eq!(enh.characteristic_modifiers.len(), 1);
+    let cm = &enh.characteristic_modifiers[0];
+    assert_eq!(cm.target_scope, "self", "empty/absent scope on self.entries... must fall back to self, not carry through empty");
+    assert_eq!(cm.target_id.as_deref(), Some("e.model"));
+    assert!(cm.recursive);
+    assert!(
+        !diags.iter().any(|d| d.code == "modifier.target_unmapped" && d.message.contains("e.enh")),
+        "empty-scope self.entries... should now be captured, not target_unmapped: {:?}", diags
+    );
+}
+
 /// A conditional characteristic modifier keeps its gating condition (reusing
 /// the existing non-strict condition-mapping helpers).
 #[test]

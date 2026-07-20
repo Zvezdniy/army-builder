@@ -816,8 +816,16 @@ fn map_category_modifier(m: &RawModifier, cat: &RawCatalogue) -> Option<IrCatego
 ///
 /// - `self.entries[.recursive][.<entryId>].profiles.<TypeName>` (the majority
 ///   shape, ~1435 raw occurrences sampled) — `target_scope` comes from the
-///   modifier's own `scope` attribute (`map_condition_scope`), unchanged from
-///   before this function grew the two shapes below.
+///   modifier's own `scope` attribute (`map_condition_scope`), falling back to
+///   `"self"` when `scope` is empty/absent (`resolve_target_scope`, shared with
+///   the two bare-affects arms below). BattleScribe routinely omits `scope`
+///   here: real 11e BSData (Space Marines) has 56 of 762 numeric
+///   characteristic modifiers on this exact shape with an empty `scope`
+///   (e.g. Infernus Squad `+1 Unit`, Helbrute `+2 Melee S`). Before this
+///   fallback existed, an empty `scope` fed `map_condition_scope("")` verbatim
+///   → `target_scope: ""` → engine-eval's `scopeNodes` fell through to the
+///   foreign-id `default:` branch → `nearestByEntryId(node, "")` → no anchor
+///   → the modifier silently never applied, with no diagnostic.
 /// - bare `profiles.<TypeName>` (no prefix at all — just says "the
 ///   `<TypeName>` profile of whatever the modifier's `scope` attribute
 ///   anchors to"; ~305 raw occurrences, e.g. `scope: upgrade, affects:
@@ -845,6 +853,22 @@ fn map_category_modifier(m: &RawModifier, cat: &RawCatalogue) -> Option<IrCatego
 /// left uncaptured (the caller drops it as `target_unmapped`, the same
 /// diagnostic every characteristic modifier got before this channel existed)
 /// rather than guessed.
+///
+/// A modifier's `scope` attribute is routinely omitted in real BattleScribe
+/// data, and an empty `target_scope` is never a valid anchor (engine-eval's
+/// `scopeNodes` has no "empty string" case, so it falls through to the
+/// foreign-id `default:` arm and resolves to nothing). ALL THREE arms above
+/// must therefore apply the same `scope.is_empty() -> "self"` fallback — this
+/// single helper is the only place that decision is made, so a future arm
+/// can't add itself without it.
+fn resolve_target_scope(scope: &str) -> String {
+    if scope.is_empty() {
+        "self".to_string()
+    } else {
+        map_condition_scope(scope)
+    }
+}
+
 fn parse_affects(affects: &str, scope: &str) -> Option<(bool, Option<String>, String, String)> {
     if let Some(rest) = affects.strip_prefix("self.entries") {
         let rest = rest.strip_prefix('.')?;
@@ -864,15 +888,14 @@ fn parse_affects(affects: &str, scope: &str) -> Option<(bool, Option<String>, St
         if profile_type.is_empty() {
             return None;
         }
-        return Some((recursive, target_id, profile_type.to_string(), map_condition_scope(scope)));
+        return Some((recursive, target_id, profile_type.to_string(), resolve_target_scope(scope)));
     }
 
     if let Some(type_name) = affects.strip_prefix("profiles.") {
         if type_name.is_empty() {
             return None;
         }
-        let target_scope = if scope.is_empty() { "self".to_string() } else { map_condition_scope(scope) };
-        return Some((false, None, type_name.to_string(), target_scope));
+        return Some((false, None, type_name.to_string(), resolve_target_scope(scope)));
     }
 
     // `<entryId>.profiles.<TypeName>` — the leading token up to the first
@@ -889,8 +912,7 @@ fn parse_affects(affects: &str, scope: &str) -> Option<(bool, Option<String>, St
     if type_name.is_empty() {
         return None;
     }
-    let target_scope = if scope.is_empty() { "self".to_string() } else { map_condition_scope(scope) };
-    Some((false, Some(id.to_string()), type_name.to_string(), target_scope))
+    Some((false, Some(id.to_string()), type_name.to_string(), resolve_target_scope(scope)))
 }
 
 /// Build a captured (UNRESOLVED — no tree-walking here) characteristic
@@ -908,6 +930,26 @@ fn parse_affects(affects: &str, scope: &str) -> Option<(bool, Option<String>, St
 /// are reused as-is rather than re-derived from `m.conditions`/
 /// `m.condition_groups` here, so each condition is mapped (and each unmappable
 /// condition diagnosed) exactly once per modifier, not twice.
+///
+/// DELIBERATE CHOICE, documented rather than silently inherited: because
+/// `ir_mod` comes from `map_modifier` (the LENIENT condition mapper -- drops
+/// only the individual unmappable condition/condition-group, keeps the
+/// modifier itself unconditionally applying otherwise), a characteristic
+/// modifier with one mappable and one unmappable condition in the same
+/// `<and>` group would end up applying whenever just the mappable one
+/// passes -- the unmappable half of the gate silently drops out rather than
+/// blocking the modifier. This mirrors cost/value modifiers generally, but
+/// is UNLIKE constraint LIMIT modifiers (`map_modifier_strict`), which drop
+/// the WHOLE modifier if any condition is unmappable, specifically because a
+/// partially-represented gate there could over/under-enforce a legality
+/// rule. A characteristic modifier's worst case is a wrong DISPLAY value
+/// (already bounded -- `applyModifier` never corrupts a value, only leaves
+/// it unchanged when unparseable), not a legality miscount, so the lenient
+/// choice was made deliberately rather than paying the strict path's cost
+/// here. RISK: zero real occurrences today -- all 119 real characteristic-
+/// modifier conditions in the SM11e sample are simple `field=selections`
+/// comparisons, fully mappable -- so this is a latent gap, not an observed
+/// bug; revisit if a future catalogue exercises it.
 fn map_characteristic_modifier(
     m: &RawModifier,
     characteristic: &str,

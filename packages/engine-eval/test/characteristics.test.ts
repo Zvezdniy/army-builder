@@ -397,4 +397,78 @@ describe("effectiveDatasheet", () => {
     const r = roster([sel("e.hero")]);
     expect(() => effectiveDatasheet(cat, r, "not-a-real-id")).toThrow(/Unknown selectionId/);
   });
+
+  // Fix 2 (final review): effectiveDatasheet must resolveCategories(state) —
+  // targetId is overwhelmingly a CATEGORY id in real data, so a conditionally
+  // ADDED category must be visible to the target filter (and the modifier's
+  // own condition gates must see the same resolved membership evaluate() does
+  // for the same roster). Mirrors the pattern in
+  // packages/engine-eval/test/categories.test.ts.
+  it("targetId as a category applies only once resolveCategories resolves a conditionally-added category", () => {
+    const cat = catalogue([
+      entry({
+        id: "e.squad", name: "Squad", type: "unit",
+        characteristicModifiers: [charMod({
+          characteristic: "Sv", profileType: "Unit", kind: "set", value: "2+",
+          targetScope: "self", recursive: true, targetId: "cat.elite",
+        })],
+        children: [
+          entry({
+            id: "e.trooper", name: "Trooper", type: "model", categories: [],
+            categoryModifiers: [{
+              type: "add", categoryId: "cat.elite",
+              conditions: [{
+                id: "cond.leader", comparator: "atLeast", value: 1, field: "selections",
+                scope: "roster", targetType: "entry", targetId: "e.leader", includeChildSelections: true,
+              }],
+            }],
+            profiles: [{ name: "Trooper", typeName: "Unit", characteristics: [{ name: "Sv", value: "3+" }] }],
+          }),
+          entry({ id: "e.leader", name: "Leader", type: "model" }),
+        ],
+      }),
+    ]);
+    const withLeader = roster([sel("e.squad", [sel("e.trooper"), sel("e.leader")])]);
+    const withoutLeader = roster([sel("e.squad", [sel("e.trooper")])]);
+
+    const applied = effectiveDatasheet(cat, withLeader, withLeader.selections[0]!.id);
+    const notApplied = effectiveDatasheet(cat, withoutLeader, withoutLeader.selections[0]!.id);
+
+    expect(applied.find((s) => s.typeName === "Unit")?.profiles[0]?.characteristics).toEqual([{ name: "Sv", value: "2+" }]);
+    expect(notApplied.find((s) => s.typeName === "Unit")?.profiles[0]?.characteristics).toEqual([{ name: "Sv", value: "3+" }]);
+  });
+
+  // Fix 3 (final review): targetScope "self" + recursive:false must reach the
+  // owner's DIRECT CHILDREN, not just the owner itself — real 11e BSData proof
+  // (Necrons "Catacomb Command Barge"/"Overlord with Translocation Shroud"):
+  // an increment on the Ranged/Melee Weapons S characteristic, scope omitted
+  // (-> self via Fix 1's fallback), affects="self.entries.profiles.Ranged
+  // Weapons" (non-recursive). The owning model has NO Ranged Weapons profile
+  // of its own — only its direct-child weapon entries do.
+  it("self scope non-recursive reaches direct children when the owner itself has no matching profile", () => {
+    const cat = catalogue([
+      entry({
+        id: "e.model", name: "Barge", type: "model",
+        profiles: [{ name: "Barge", typeName: "Unit", characteristics: [{ name: "T", value: "8" }] }],
+        characteristicModifiers: [charMod({
+          characteristic: "S", profileType: "Ranged Weapons", kind: "increment", value: "2",
+          targetScope: "self", recursive: false,
+        })],
+        children: [
+          entry({
+            id: "e.gun", name: "Gauss Cannon", type: "upgrade",
+            profiles: [{ name: "Gauss Cannon", typeName: "Ranged Weapons", characteristics: [{ name: "S", value: "5" }] }],
+          }),
+        ],
+      }),
+    ]);
+    const r = roster([sel("e.model", [sel("e.gun")])]);
+
+    const out = effectiveDatasheet(cat, r, r.selections[0]!.id);
+
+    const weapons = out.find((s) => s.typeName === "Ranged Weapons");
+    expect(weapons?.profiles[0]?.characteristics).toEqual([{ name: "S", value: "7" }]);
+    // the owner's own Unit profile (which has no Ranged Weapons profile) stays untouched.
+    expect(out.find((s) => s.typeName === "Unit")?.profiles[0]?.characteristics).toEqual([{ name: "T", value: "8" }]);
+  });
 });

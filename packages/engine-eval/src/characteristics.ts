@@ -3,6 +3,7 @@ import type { EvalNode } from "./state";
 import { buildState } from "./state";
 import { scopeNodes, subtree } from "./scopes";
 import { passesGate } from "./conditions";
+import { resolveCategories } from "./categories";
 
 // Mirrors @muster/roster's `DatasheetSection` (packages/roster/src/builder.ts) shape
 // exactly, byte-for-byte, so apps/web can switch from `datasheet()` to
@@ -100,6 +101,41 @@ function buildSections(nodes: EvalNode[], working: Map<EvalNode, IrProfile[]>): 
 }
 
 /**
+ * `targetScope:"self"` on a characteristic modifier is ALWAYS produced by the
+ * BattleScribe `self.entries...` `affects` grammar (see `parse_affects`'s doc
+ * comment in `engine-parser`'s `map.rs`) — and `.entries` means "descend into
+ * this anchor's child entries", the same CONTAINER semantics `scopes.ts`
+ * already gives every other scope keyword (`parent`/`root-entry`/`model`/...)
+ * via `containerScope`: non-recursive still reaches the anchor's DIRECT
+ * CHILDREN, not just the anchor itself. `scopes.ts`'s own `"self"` case is the
+ * one exception — it uses bare `subtree()`, which for `includeChildSelections:
+ * false` returns ONLY the owner node — because that case is shared with
+ * conditions/constraints, where `scope:"self"` legitimately means "the
+ * selection itself" with no such grammar behind it. Changing `scopes.ts`
+ * would regress every other consumer, so this container behavior is
+ * reproduced HERE, characteristics-only, instead.
+ *
+ * Real 11e BSData proof (Necrons "Catacomb Command Barge" / "Overlord with
+ * Translocation Shroud"): an `increment` on the Ranged/Melee Weapons `S`
+ * characteristic, `scope` omitted (-> `self` per Fix 1's fallback),
+ * `affects="self.entries.profiles.Ranged Weapons"` (non-recursive). The OWNER
+ * (the model entry) carries no Ranged/Melee Weapons profile at all — only its
+ * direct-child weapon-option entries do. Resolving "self" as owner-only
+ * (`scopes.ts`'s behavior) finds zero matching profiles and the modifier
+ * silently never applies; resolving it as owner+direct-children (this
+ * function) reaches the weapon entries as BattleScribe intends.
+ *
+ * Returns `null` for every other scope (or `recursive: true`, where
+ * `subtree(node, true)` — owner + full descendant subtree — already matches
+ * `containerScope`'s recursive branch exactly, so no divergence exists) so
+ * the caller falls through to the shared `scopeNodes` resolution unchanged.
+ */
+function selfScopeContainerNodes(owner: EvalNode, modifier: IrCharacteristicModifier): EvalNode[] | null {
+  if (modifier.targetScope !== "self" || modifier.recursive) return null;
+  return [owner, ...owner.children];
+}
+
+/**
  * The live, EFFECTIVE datasheet for a unit selection: the same
  * `DatasheetSection[]` shape as `@muster/roster`'s `datasheet()`, but with
  * numeric characteristic modifiers (B1's `IrEntry.characteristicModifiers`:
@@ -148,6 +184,17 @@ function buildSections(nodes: EvalNode[], working: Map<EvalNode, IrProfile[]>): 
  */
 export function effectiveDatasheet(catalogue: IrCatalogue, roster: Roster, selectionId: string): DatasheetSection[] {
   const state = buildState(roster, catalogue);
+  // Every other EvalState consumer (evaluate.ts, visibility.ts) resolves
+  // conditional category membership right after buildState — required here
+  // too: `targetId` is overwhelmingly a CATEGORY id (see the module doc
+  // comment above), and the target filter below reads `node.categories`.
+  // Without this, a conditionally-ADDED category never matches (the modifier
+  // is silently skipped) and a conditionally-REMOVED one still matches (the
+  // modifier wrongly applies) — and the modifiers' own condition gates
+  // (`passesGate`, which can itself read `node.categories` via a
+  // category-scoped condition) would evaluate against stale membership,
+  // diverging from what the same roster produces in `evaluate()`.
+  resolveCategories(state);
   const root = state.all.find((n) => n.selectionId === selectionId);
   if (!root) throw new Error(`Unknown selectionId in roster: ${selectionId}`);
 
@@ -176,7 +223,7 @@ export function effectiveDatasheet(catalogue: IrCatalogue, roster: Roster, selec
   for (const { owner, modifier } of modifiers) {
     if (!passesGate(modifier.conditions, modifier.conditionGroups, owner, state)) continue;
 
-    const anchorNodes = scopeNodes(
+    const anchorNodes = selfScopeContainerNodes(owner, modifier) ?? scopeNodes(
       owner,
       { scope: modifier.targetScope, includeChildSelections: modifier.recursive },
       state,
