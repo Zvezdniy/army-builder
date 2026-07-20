@@ -101,9 +101,11 @@ function buildSections(nodes: EvalNode[], working: Map<EvalNode, IrProfile[]>): 
 }
 
 /**
- * `targetScope:"self"` on a characteristic modifier is ALWAYS produced by the
- * BattleScribe `self.entries...` `affects` grammar (see `parse_affects`'s doc
- * comment in `engine-parser`'s `map.rs`) — and `.entries` means "descend into
+ * `targetScope:"self"` on a characteristic modifier comes from the BattleScribe
+ * `self.entries...` `affects` grammar, OR from `parse_affects`'s shared
+ * empty-scope fallback (a modifier that omits `scope` entirely, on any of the
+ * three `affects` arms — see `resolve_target_scope` in `engine-parser`'s
+ * `map.rs`). In the `self.entries...` case `.entries` means "descend into
  * this anchor's child entries", the same CONTAINER semantics `scopes.ts`
  * already gives every other scope keyword (`parent`/`root-entry`/`model`/...)
  * via `containerScope`: non-recursive still reaches the anchor's DIRECT
