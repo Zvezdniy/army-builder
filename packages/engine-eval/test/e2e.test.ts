@@ -9,7 +9,7 @@ import { evaluate } from "@muster/engine-eval";
 // A realistic strike-force catalogue combining nesting, per-model costs, a
 // conditional bulk discount, a per-squad minimum-models rule, and force limits.
 const strikeforce: IrCatalogue = {
-  id: "cat.sf", name: "Strike Force", gameSystemId: "gs.40k", revision: 1,
+  id: "cat.sf", name: "Strike Force", gameSystemId: "gs.40k", revision: 1, categoryNames: {},
   forceConstraints: [
     { id: "fc.hq.min", type: "min", value: 1, field: "selections", scope: "roster", targetType: "category", targetId: "cat.hq", includeChildSelections: false },
     { id: "fc.hq.max", type: "max", value: 2, field: "selections", scope: "roster", targetType: "category", targetId: "cat.hq", includeChildSelections: false },
@@ -136,7 +136,7 @@ describe("E2E: over-cap force limit dismissed by a user house rule", () => {
 describe("E2E: nested condition groups gate a modifier (AND/OR)", () => {
   // hero base 100, -30 when (>=2 cat.a) OR (>=5 cat.b). Fillers are free (0 pts).
   const cat: IrCatalogue = {
-    id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [],
+    id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [], categoryNames: {},
     entries: [
       { id: "e.hero", name: "Hero", categories: ["cat.hero"], constraints: [], children: [],
         costs: [{ name: "points", value: 100, modifiers: [

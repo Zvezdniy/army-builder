@@ -18,7 +18,7 @@ const sel = (entryId: string, children: RosterSelection[] = []): RosterSelection
 });
 
 function catalogue(entries: IrEntry[]): IrCatalogue {
-  return { id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [], entries } as IrCatalogue;
+  return { id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [], categoryNames: {}, entries };
 }
 
 function roster(selections: RosterSelection[]): Roster {

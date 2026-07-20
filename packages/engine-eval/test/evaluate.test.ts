@@ -122,7 +122,7 @@ describe("evaluate legality checks", () => {
     // A force constraint carrying a node-relative scope has no army-level anchor;
     // describeConstraint returns null and it is omitted from checks (still just the points check).
     const cat: IrCatalogue = {
-      id: "c", name: "C", gameSystemId: "gs", revision: 1,
+      id: "c", name: "C", gameSystemId: "gs", revision: 1, categoryNames: {},
       entries: [{ id: "e.x", name: "X", costs: [], categories: ["cat.x"], constraints: [], children: [] }],
       forceConstraints: [
         { id: "fc.unit", type: "max", value: 1, field: "selections", scope: "unit", targetType: "category", targetId: "cat.x", includeChildSelections: false },
@@ -141,7 +141,7 @@ describe("evaluate legality checks", () => {
 describe("evaluate with cost modifiers", () => {
   // Each troop 10 pts, -3 when >=3 troops. 3 troops => 21, under a 25 cap = legal.
   const cat: IrCatalogue = {
-    id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [],
+    id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [], categoryNames: {},
     entries: [{
       id: "e.troop", name: "Troop", categories: ["cat.troops"], constraints: [], children: [],
       costs: [{ name: "points", value: 10, modifiers: [{ id: "bulk", type: "decrement", value: 3, conditions: [
@@ -174,7 +174,7 @@ describe("evaluate tolerates inlined duplicate entry ids", () => {
     id: "e.shared.wargear", name: "Shared Wargear", costs: [], categories: [], constraints: [], children: [],
   };
   const cat: IrCatalogue = {
-    id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [],
+    id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [], categoryNames: {},
     entries: [
       { id: "e.u1", name: "U1", costs: [], categories: [], constraints: [], children: [structuredClone(shared)] },
       { id: "e.u2", name: "U2", costs: [], categories: [], constraints: [], children: [structuredClone(shared)] },

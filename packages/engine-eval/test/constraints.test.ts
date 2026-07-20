@@ -3,7 +3,7 @@ import type { IrCatalogue, IrConstraint, Roster } from "@muster/domain";
 import { buildState, checkConstraint, describeConstraint, effectiveConstraintValue, targetNamer } from "@muster/engine-eval";
 
 const cat: IrCatalogue = {
-  id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [],
+  id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [], categoryNames: {},
   entries: [{ id: "e.heavy", name: "Heavy", costs: [], categories: ["cat.heavy"], constraints: [], children: [] }],
 };
 const roster: Roster = {
@@ -122,7 +122,7 @@ describe("describeConstraint", () => {
 describe("checkConstraint with a modified bound", () => {
   // Heavy max is 1, but +1 when there are at least 2 heavies present (unlocks a second slot).
   const catMod: IrCatalogue = {
-    id: "c", name: "C", gameSystemId: "gs", revision: 1,
+    id: "c", name: "C", gameSystemId: "gs", revision: 1, categoryNames: {},
     entries: [{ id: "e.heavy", name: "Heavy", costs: [], categories: ["cat.heavy"], constraints: [], children: [] }],
     forceConstraints: [{
       id: "fc.heavy", type: "max", value: 1, field: "selections", scope: "force", targetType: "category", targetId: "cat.heavy",
@@ -160,7 +160,7 @@ describe("checkConstraint with a modified bound", () => {
 
 describe("force-global cost-type constraint (A1: max 2 Enhancements)", () => {
   const enhCat: IrCatalogue = {
-    id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [],
+    id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [], categoryNames: {},
     entries: [{
       id: "e.enh", name: "Enhancement",
       costs: [{ name: "Enhancements", value: 1 }, { name: "pts", value: 10 }],

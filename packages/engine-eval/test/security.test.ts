@@ -18,7 +18,7 @@ import {
 // rejected loudly rather than producing silent nonsense.
 
 const soloCatalogue: IrCatalogue = {
-  id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [],
+  id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [], categoryNames: {},
   entries: [{ id: "e", name: "E", costs: [{ name: "points", value: 1 }], categories: ["cat"], constraints: [], children: [] }],
 };
 
@@ -39,7 +39,7 @@ function deepCatalogue(depth: number): IrCatalogue {
   for (let i = depth - 1; i >= 1; i--) {
     entry = { id: `e${i}`, name: "E", costs: [], categories: [], constraints: [], children: [entry] };
   }
-  return { id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [], entries: [entry] };
+  return { id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [], categoryNames: {}, entries: [entry] };
 }
 
 // A condition group nested `depth` groups deep (innermost is an empty AND => true).
@@ -104,7 +104,7 @@ describe("malformed structures fail loudly, not silently", () => {
 describe("never-block: evaluate returns a result, it does not throw", () => {
   it("returns issues (not an exception) for mutually impossible constraints", () => {
     const cat: IrCatalogue = {
-      id: "c", name: "C", gameSystemId: "gs", revision: 1,
+      id: "c", name: "C", gameSystemId: "gs", revision: 1, categoryNames: {},
       forceConstraints: [
         { id: "min3", type: "min", value: 3, field: "selections", scope: "roster", targetType: "category", targetId: "cat", includeChildSelections: false },
         { id: "max1", type: "max", value: 1, field: "selections", scope: "roster", targetType: "category", targetId: "cat", includeChildSelections: false },

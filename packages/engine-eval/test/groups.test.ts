@@ -1,11 +1,11 @@
 import { describe, it, expect } from "vitest";
-import type { IrCatalogue, Roster } from "@muster/domain";
+import type { IrCatalogue, IrGroupConstraint, Roster } from "@muster/domain";
 import { evaluate } from "@muster/engine-eval";
 
 // Captain with a Wargear group: choose at most 1 of {sword, axe}.
 function cat(gcType: "max" | "min", value: number): IrCatalogue {
   return {
-    id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [],
+    id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [], categoryNames: {},
     entries: [
       {
         id: "e.captain", name: "Captain", costs: [{ name: "points", value: 90 }],
@@ -100,7 +100,7 @@ describe("nested group emitted as a flat IrGroup enforces independently", () => 
   // direct members) plus a nested inner group (choose ≤1 of its own members) —
   // both flat in entry.groups, members all flattened into the entry's children.
   const cat: IrCatalogue = {
-    id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [],
+    id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [], categoryNames: {},
     entries: [
       {
         id: "e.u", name: "Unit", costs: [{ name: "points", value: 10 }],
@@ -280,9 +280,9 @@ describe("group limits count nested sub-group members (descendantEntryIds)", () 
   // = roster); the actual options live in per-detachment sub-groups and are
   // flattened into the character's children. descendantEntryIds spans them, so
   // both limits count nested selections rather than the (empty) direct members.
-  const enhCat = (constraints: IrCatalogue["entries"][number]["groups"][number]["constraints"]): IrCatalogue =>
+  const enhCat = (constraints: IrGroupConstraint[]): IrCatalogue =>
     ({
-      id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [],
+      id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [], categoryNames: {},
       entries: [{
         id: "e.char", name: "Character", costs: [], categories: [], constraints: [],
         children: [

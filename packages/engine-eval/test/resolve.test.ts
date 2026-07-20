@@ -4,7 +4,7 @@ import { buildState, resolveCosts, totalCost, effectiveCostOfType } from "@muste
 
 // A troop costs 10, but gets a -3 discount when the army fields at least 3 troops.
 const cat: IrCatalogue = {
-  id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [],
+  id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [], categoryNames: {},
   entries: [{
     id: "e.troop", name: "Troop", categories: ["cat.troops"], constraints: [], children: [],
     costs: [{
@@ -43,7 +43,7 @@ describe("resolveCosts", () => {
     // Squad "u" costs 80 pts, set to 160 when it holds >= 6 "m" models. The cost
     // modifier's condition scopes by the squad's OWN entry id ("u") — a foreign-id scope.
     const squad: IrCatalogue = {
-      id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [],
+      id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [], categoryNames: {},
       entries: [{
         id: "u", name: "Squad", categories: [], constraints: [],
         children: [{ id: "m", name: "Model", categories: [], constraints: [], children: [], costs: [] }],

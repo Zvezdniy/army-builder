@@ -3,7 +3,7 @@ import type { IrCatalogue } from "@muster/domain";
 import { evaluate } from "@muster/engine-eval";
 
 const cat: IrCatalogue = {
-  id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [],
+  id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [], categoryNames: {},
   entries: [{
     id: "e.troop", name: "Troop", categories: ["cat.troops"], constraints: [], children: [],
     costs: [{ name: "points", value: 10, modifiers: [
