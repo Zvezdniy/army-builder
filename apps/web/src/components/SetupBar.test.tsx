@@ -13,6 +13,20 @@ const detCat: IrCatalogue = {
     },
   ],
 };
+// 11e-shaped: no `max` on the root's "Detachment" group, so several accumulate.
+const multiDetCat: IrCatalogue = {
+  id: "c11", name: "Space Marines", gameSystemId: "gs", revision: 1, forceConstraints: [], categoryNames: {},
+  entries: [
+    {
+      id: "e.det", name: "Detachment", type: "upgrade", costs: [], categories: [], constraints: [],
+      groups: [{ id: "g.det", name: "Detachment", memberEntryIds: ["e.gladius", "e.anvil"], constraints: [{ id: "c.min1", type: "min", value: 1, scope: "self" }] }],
+      children: [
+        { id: "e.gladius", name: "Gladius Task Force", type: "upgrade", costs: [], categories: [], constraints: [], children: [] },
+        { id: "e.anvil", name: "Anvil Siege Force", type: "upgrade", costs: [], categories: [], constraints: [], children: [] },
+      ],
+    },
+  ],
+};
 const noDetCat: IrCatalogue = {
   id: "c", name: "Mini", gameSystemId: "gs", revision: 1, forceConstraints: [], categoryNames: {},
   entries: [{ id: "e.u", name: "Unit", type: "unit", costs: [], categories: [], constraints: [], children: [] }],
@@ -33,6 +47,14 @@ describe("SetupBar", () => {
   it("shows a 'Choose…' detachment chip before one is picked", () => {
     render(<SetupBar catalogue={detCat} roster={createRoster(detCat, 2000)} onEdit={() => {}} />);
     expect(screen.getByText("Choose…")).toBeTruthy();
+  });
+
+  it("joins several chosen detachments in the chip instead of showing only the first", () => {
+    let roster = createRoster(multiDetCat, 2000);
+    roster = toggleDetachment(roster, "e.gladius", multiDetCat);
+    roster = toggleDetachment(roster, "e.anvil", multiDetCat);
+    render(<SetupBar catalogue={multiDetCat} roster={roster} onEdit={() => {}} />);
+    expect(screen.getByText("Gladius Task Force, Anvil Siege Force")).toBeTruthy();
   });
 
   it("omits the detachment chip when the catalogue models no detachment", () => {

@@ -1,10 +1,19 @@
 import { useState } from "react";
 import type { IrCatalogue, IrEntry, IrGroup, Roster } from "@muster/domain";
-import { availableDetachments, selectedDetachment, catalogueEntry } from "@muster/roster";
-import { pointsCost } from "@muster/engine-eval";
+import { availableDetachments, selectedDetachments, catalogueEntry } from "@muster/roster";
+import { pointsCost, correctedConstraintValue } from "@muster/engine-eval";
 import type { CatalogueDescriptor } from "../registry/catalogueRegistry";
 
 const POINTS_PRESETS = [1000, 1500, 2000];
+
+// The 11e cost type a detachment is priced in; verbatim BSData name (see the design
+// doc's Findings table). A catalogue that never prices detachments in it (10e) simply
+// never triggers the meter below — no edition check needed.
+const DETACHMENT_POINTS = "Detachment Points";
+
+function detachmentPointsCost(entry: IrEntry): number {
+  return entry.costs.find((c) => c.name === DETACHMENT_POINTS)?.value ?? 0;
+}
 
 /** The enhancements a detachment unlocks: the members of its "<name> Enhancements"
  *  group (best-effort by group name — informational preview only). */
@@ -46,7 +55,7 @@ export function SetupWizard({
   const hasDetachmentStep = detachments.length > 0;
   const lastStep = hasDetachmentStep ? 2 : 1;
   const [step, setStep] = useState(Math.min(initialStep, lastStep));
-  const chosen = selectedDetachment(roster, catalogue);
+  const chosenIds = selectedDetachments(roster, catalogue);
   const [customPts, setCustomPts] = useState("");
 
   // Edition list derived from the registry, first-appearance order preserved.
@@ -64,12 +73,32 @@ export function SetupWizard({
   const [edition, setEdition] = useState<string | undefined>(undefined);
   const displayedEdition = edition ?? activeEdition;
 
-  const canFinish = !hasDetachmentStep || chosen !== undefined;
+  const canFinish = !hasDetachmentStep || chosenIds.length > 0;
   const next = () => (step < lastStep ? setStep(step + 1) : onClose());
-  const preview = (() => {
-    const d = detachments.find((x) => x.id === chosen);
-    return d ? enhancementsFor(catalogue, d.name) : [];
-  })();
+  // One preview section per chosen detachment (§ enhancements preview follows the
+  // selected set, not just the first).
+  const previews = chosenIds
+    .map((id) => detachments.find((d) => d.id === id))
+    .filter((d): d is IrEntry => d !== undefined)
+    .map((d) => ({ detachment: d, enhancements: enhancementsFor(catalogue, d.name) }));
+
+  // The DP budget meter renders only when the catalogue actually PRICES detachments
+  // (a "Detachment Points" cost on at least one detachment entry) — never on an
+  // edition check. A 10e catalogue prices none, so this is always false there and the
+  // meter simply doesn't render.
+  const pricesDetachments = detachments.some((d) => d.costs.some((c) => c.name === DETACHMENT_POINTS));
+  const dpUsed = chosenIds.reduce((sum, id) => {
+    const d = detachments.find((x) => x.id === id);
+    return sum + (d ? detachmentPointsCost(d) : 0);
+  }, 0);
+  // Cap comes straight from the catalogue's own force constraint on Detachment
+  // Points, through engine-eval's correction (the upstream-data floor of 3) — never
+  // hardcoded here, so the meter and the engine's own legality check always agree.
+  const dpConstraint = catalogue.forceConstraints.find(
+    (c) => c.targetType === "force" && c.type === "max" && c.field === DETACHMENT_POINTS,
+  );
+  const dpCap = dpConstraint ? correctedConstraintValue(dpConstraint) : undefined;
+  const dpOverBudget = dpCap !== undefined && dpUsed > dpCap;
 
   return (
     <div className="picker-overlay" role="dialog" aria-label="army setup"
@@ -149,34 +178,59 @@ export function SetupWizard({
           )}
 
           {step === 2 && hasDetachmentStep && (
-            <div className="det-layout" data-testid="step-detachment">
-              <div className="det-list">
-                {detachments.map((d) => (
-                  <button key={d.id} className={`det-card${chosen === d.id ? " chosen" : ""}`}
-                    aria-pressed={chosen === d.id} onClick={() => onSetDetachment(d.id)}>
-                    <span className="det-check">{chosen === d.id ? "✓" : ""}</span>
-                    <span className="det-name">{d.name}</span>
-                  </button>
-                ))}
-              </div>
-              <aside className="det-preview">
-                <div className="ds-section-head">
-                  {detachments.find((d) => d.id === chosen)?.name ?? "Enhancements"}
+            <div data-testid="step-detachment">
+              {pricesDetachments && (
+                <div className={`dp-meter${dpOverBudget ? " over" : ""}`} data-testid="dp-meter">
+                  <span className="dp-meter-label">Detachment Points</span>
+                  <span className="dp-meter-value">
+                    {dpUsed}{dpCap !== undefined ? ` / ${dpCap}` : ""}
+                  </span>
+                  {/* Over budget is shown, never blocked — legality stays the engine's job. */}
+                  {dpOverBudget && <span className="dp-meter-warn">Over budget</span>}
                 </div>
-                <div className="preview-body">
-                  {preview.length === 0 && (
-                    <div className="preview-empty">
-                      {chosen ? "No enhancement preview." : "Select a detachment to preview its enhancements."}
-                    </div>
+              )}
+              <div className="det-layout">
+                <div className="det-list">
+                  {detachments.map((d) => {
+                    const isChosen = chosenIds.includes(d.id);
+                    const dp = detachmentPointsCost(d);
+                    return (
+                      <button key={d.id} className={`det-card${isChosen ? " chosen" : ""}`}
+                        aria-pressed={isChosen} onClick={() => onSetDetachment(d.id)}>
+                        <span className="det-check">{isChosen ? "✓" : ""}</span>
+                        <span className="det-name">{d.name}</span>
+                        {pricesDetachments && <span className="det-dp">{dp} DP</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+                <aside className="det-preview">
+                  {previews.length === 0 && (
+                    <>
+                      <div className="ds-section-head">Enhancements</div>
+                      <div className="preview-body">
+                        <div className="preview-empty">Select a detachment to preview its enhancements.</div>
+                      </div>
+                    </>
                   )}
-                  {preview.map((e) => (
-                    <div key={e.id} className="enh-line">
-                      <span className="enh-name">{e.name}</span>
-                      <span className="enh-pts">{pointsCost(e)?.value ?? 0}</span>
+                  {previews.map(({ detachment, enhancements }) => (
+                    <div key={detachment.id} className="det-preview-section">
+                      <div className="ds-section-head">{detachment.name}</div>
+                      <div className="preview-body">
+                        {enhancements.length === 0 && (
+                          <div className="preview-empty">No enhancement preview.</div>
+                        )}
+                        {enhancements.map((e) => (
+                          <div key={e.id} className="enh-line">
+                            <span className="enh-name">{e.name}</span>
+                            <span className="enh-pts">{pointsCost(e)?.value ?? 0}</span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   ))}
-                </div>
-              </aside>
+                </aside>
+              </div>
             </div>
           )}
         </div>
