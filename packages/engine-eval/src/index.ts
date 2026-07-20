@@ -2,6 +2,7 @@ export * from "./characteristics";
 export * from "./conditions";
 export * from "./constraints";
 export * from "./cost";
+export * from "./data-corrections";
 export * from "./evaluate";
 export * from "./limits";
 export * from "./modifiers";

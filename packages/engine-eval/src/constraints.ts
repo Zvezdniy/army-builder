@@ -4,14 +4,21 @@ import { aggregate, scopeUnanchored } from "./scopes";
 import { applyModifiers } from "./modifiers";
 import { nodePoints, type CostFn } from "./cost";
 import type { TargetNamer } from "./names";
+import { correctedConstraintValue } from "./data-corrections";
 
+// The single point where a force constraint's base value is read, before any
+// per-selection modifier adjustments (unlocks, increments, …). Both
+// checkConstraint and describeConstraint go through here, so
+// correctedConstraintValue's upstream-data floor (see data-corrections.ts)
+// applies everywhere a constraint's bound is computed, without a second call
+// site to keep in sync.
 export function effectiveConstraintValue(
   constraint: IrConstraint,
   node: EvalNode | null,
   state: EvalState,
   costOf: CostFn = nodePoints,
 ): number {
-  return applyModifiers(constraint.value, constraint.modifiers, node, state, costOf);
+  return applyModifiers(correctedConstraintValue(constraint), constraint.modifiers, node, state, costOf);
 }
 
 // Like checkConstraint, but reports a constraint's state whether or not it is
