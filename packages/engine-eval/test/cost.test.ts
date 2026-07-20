@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { IrCatalogue, Roster } from "@muster/domain";
-import { buildState, totalCost, pointsCost, nodePoints } from "@muster/engine-eval";
+import { buildState, totalCost, pointsCost, nodePoints, costOfType } from "@muster/engine-eval";
 import type { CostFn } from "@muster/engine-eval";
 
 const cat: IrCatalogue = {
@@ -57,6 +57,38 @@ describe("totalCost", () => {
       id: "r", name: "R", gameSystemId: "gs", catalogueId: "c", catalogueRevision: 1, pointsLimit: 2000, selections: [],
     };
     expect(totalCost(buildState(roster, cat))).toBe(0);
+  });
+});
+
+describe("costOfType", () => {
+  // The raw, modifier-blind lookup: callers that intentionally want the static
+  // declared value (e.g. an unpicked option's preview badge) use this instead of
+  // resolve.ts's effectiveCostOfType, which applies cost modifiers.
+  it("sums a named cost type scaled by effectiveCount", () => {
+    const node = {
+      entry: { id: "e", name: "E", costs: [{ name: "Enhancements", value: 15 }], categories: [], constraints: [], children: [] },
+      effectiveCount: 2,
+    } as never;
+    expect(costOfType(node, "Enhancements")).toBe(30);
+  });
+
+  it("is 0 when the entry carries no cost of that name", () => {
+    const node = {
+      entry: { id: "e", name: "E", costs: [], categories: [], constraints: [], children: [] },
+      effectiveCount: 1,
+    } as never;
+    expect(costOfType(node, "Detachment Points")).toBe(0);
+  });
+
+  it("does NOT apply cost modifiers — reads the raw declared value only", () => {
+    const node = {
+      entry: {
+        id: "e", name: "E", categories: [], constraints: [], children: [],
+        costs: [{ name: "Detachment Points", value: 2, modifiers: [{ id: "m", type: "set", value: 3, conditions: [] }] }],
+      },
+      effectiveCount: 1,
+    } as never;
+    expect(costOfType(node, "Detachment Points")).toBe(2);
   });
 });
 

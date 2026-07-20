@@ -158,7 +158,7 @@ export function App() {
           registry={registry} activeDescriptorId={activeDescriptorId}
           onSelectFaction={onSelectFaction} factionError={factionError}
           onSetPoints={(n) => setRoster((r) => setPointsLimit(r, n))}
-          onSetDetachment={(id) => setRoster((r) => toggleDetachment(r, id, catalogue))}
+          onToggleDetachment={(id) => setRoster((r) => toggleDetachment(r, id, catalogue))}
           onClose={() => setWizardOpen(false)} />
       )}
     </main>

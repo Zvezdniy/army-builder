@@ -1,16 +1,16 @@
 import { useState } from "react";
 import type { IrCatalogue, IrEntry, IrGroup, Roster } from "@muster/domain";
 import { availableDetachments, selectedDetachments, catalogueEntry } from "@muster/roster";
-import { pointsCost, correctedConstraintValue } from "@muster/engine-eval";
+import {
+  pointsCost, correctedConstraintValue, DETACHMENT_POINTS,
+  buildState, resolveCosts, effectiveCostOfType,
+} from "@muster/engine-eval";
 import type { CatalogueDescriptor } from "../registry/catalogueRegistry";
 
 const POINTS_PRESETS = [1000, 1500, 2000];
 
-// The 11e cost type a detachment is priced in; verbatim BSData name (see the design
-// doc's Findings table). A catalogue that never prices detachments in it (10e) simply
-// never triggers the meter below — no edition check needed.
-const DETACHMENT_POINTS = "Detachment Points";
-
+// A catalogue that never prices detachments in DETACHMENT_POINTS (10e) simply never
+// triggers the meter below — no edition check needed.
 function detachmentPointsCost(entry: IrEntry): number {
   return entry.costs.find((c) => c.name === DETACHMENT_POINTS)?.value ?? 0;
 }
@@ -37,14 +37,14 @@ const STEPS = ["Points", "Faction", "Detachment"] as const;
 /** First-run army setup: points → faction (placeholder) → detachment. Controlled —
  *  reads live roster/catalogue, applies each choice immediately via callbacks. */
 export function SetupWizard({
-  catalogue, roster, initialStep = 0, onSetPoints, onSetDetachment, onClose,
+  catalogue, roster, initialStep = 0, onSetPoints, onToggleDetachment, onClose,
   registry, activeDescriptorId, onSelectFaction, factionError,
 }: {
   catalogue: IrCatalogue;
   roster: Roster;
   initialStep?: number;
   onSetPoints: (n: number) => void;
-  onSetDetachment: (entryId: string) => void;
+  onToggleDetachment: (entryId: string) => void;
   onClose: () => void;
   registry?: CatalogueDescriptor[];
   activeDescriptorId?: string;
@@ -87,10 +87,21 @@ export function SetupWizard({
   // edition check. A 10e catalogue prices none, so this is always false there and the
   // meter simply doesn't render.
   const pricesDetachments = detachments.some((d) => d.costs.some((c) => c.name === DETACHMENT_POINTS));
-  const dpUsed = chosenIds.reduce((sum, id) => {
-    const d = detachments.find((x) => x.id === id);
-    return sum + (d ? detachmentPointsCost(d) : 0);
-  }, 0);
+  // "Used" is summed through the SAME effective-cost path the engine's own legality
+  // check uses (buildState → resolveCosts → effectiveCostOfType), so a conditional
+  // cost modifier on a detachment (e.g. Bastion Task Force's base-2-but-`set`-3) is
+  // never silently under-counted here while the engine correctly counts it — the
+  // meter must never disagree with the engine. Each chosen detachment's entryId is
+  // unique catalogue-wide, so matching state.all by entry id finds its own roster node.
+  const dpUsed = (() => {
+    if (!pricesDetachments || chosenIds.length === 0) return 0;
+    const state = buildState(roster, catalogue);
+    const { costOf } = resolveCosts(state);
+    return chosenIds.reduce((sum, id) => {
+      const node = state.all.find((n) => n.entry.id === id);
+      return sum + (node ? effectiveCostOfType(node, DETACHMENT_POINTS, state, costOf) : 0);
+    }, 0);
+  })();
   // Cap comes straight from the catalogue's own force constraint on Detachment
   // Points, through engine-eval's correction (the upstream-data floor of 3) — never
   // hardcoded here, so the meter and the engine's own legality check always agree.
@@ -196,7 +207,7 @@ export function SetupWizard({
                     const dp = detachmentPointsCost(d);
                     return (
                       <button key={d.id} className={`det-card${isChosen ? " chosen" : ""}`}
-                        aria-pressed={isChosen} onClick={() => onSetDetachment(d.id)}>
+                        aria-pressed={isChosen} onClick={() => onToggleDetachment(d.id)}>
                         <span className="det-check">{isChosen ? "✓" : ""}</span>
                         <span className="det-name">{d.name}</span>
                         {pricesDetachments && <span className="det-dp">{dp} DP</span>}

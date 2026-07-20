@@ -9,6 +9,15 @@ const detCat: IrCatalogue = {
   entries: [
     {
       id: "e.det", name: "Detachment", type: "upgrade", costs: [], categories: [], constraints: [],
+      // Real 10e group shape (min 1, max 1) — exercises the actual data-driven path
+      // instead of detachmentGroup's defensive fallback (see builder.ts).
+      groups: [{
+        id: "g.det", name: "Detachment", memberEntryIds: ["e.gladius"],
+        constraints: [
+          { id: "c.max1", type: "max", value: 1, scope: "self" },
+          { id: "c.min1", type: "min", value: 1, scope: "self" },
+        ],
+      }],
       children: [{ id: "e.gladius", name: "Gladius Task Force", type: "upgrade", costs: [], categories: [], constraints: [], children: [] }],
     },
   ],

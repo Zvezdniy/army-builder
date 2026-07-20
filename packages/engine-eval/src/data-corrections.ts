@@ -1,5 +1,11 @@
 import type { IrConstraint } from "@muster/domain";
 
+// The 11e cost type a detachment (and an enhancement) is priced in; the verbatim
+// BSData name. Exported so every consumer (this correction, the web meter, …)
+// names it once instead of each carrying its own copy of the literal that could
+// silently drift out of sync.
+export const DETACHMENT_POINTS = "Detachment Points";
+
 // Upstream-data correction, isolated (sub-project D, task D2).
 //
 // BSData's 11th-edition game system (revision 4) publishes a force-wide
@@ -19,7 +25,7 @@ import type { IrConstraint } from "@muster/domain";
 // publishes a Detachment Points cap of 3 or higher.
 export function correctedConstraintValue(constraint: IrConstraint): number {
   if (
-    constraint.field !== "Detachment Points" ||
+    constraint.field !== DETACHMENT_POINTS ||
     constraint.targetType !== "force" ||
     constraint.type !== "max"
   ) {

@@ -1,5 +1,6 @@
 import type { EvalNode, EvalState } from "./state";
-import { nodePoints, costOfType, type CostFn } from "./cost";
+import { nodePoints, type CostFn } from "./cost";
+import { effectiveCostOfType } from "./resolve";
 
 // The shared shape aggregate() reads. Both IrConstraint and IrCondition satisfy it.
 export interface AggregateSpec {
@@ -167,7 +168,9 @@ export function aggregate(
   if (spec.field === "points") {
     return matched.reduce((sum, n) => sum + costOf(n), 0);
   }
-  // Any other field is a cost-type name (e.g. "Enhancements") — sum that named
-  // cost across the matched nodes. An entry without that cost type contributes 0.
-  return matched.reduce((sum, n) => sum + costOfType(n, spec.field), 0);
+  // Any other field is a cost-type name (e.g. "Enhancements", "Detachment
+  // Points") — sum that named cost across the matched nodes, with the same
+  // modifier machinery the points cost gets (see resolve.ts's effectiveCostOfType):
+  // a `set`/`increment`/… on a non-points cost is no longer silently ignored here.
+  return matched.reduce((sum, n) => sum + effectiveCostOfType(n, spec.field, state, costOf), 0);
 }
