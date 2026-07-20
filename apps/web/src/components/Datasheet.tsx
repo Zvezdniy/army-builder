@@ -1,5 +1,5 @@
 import { Fragment, useMemo, useState } from "react";
-import type { IrCatalogue, Roster, RosterSelection } from "@muster/domain";
+import type { IrCatalogue, IrCharacteristic, Roster, RosterSelection } from "@muster/domain";
 import { unitLoadout, invulnSave } from "@muster/roster";
 import { effectiveDatasheet, type DatasheetSection } from "@muster/engine-eval";
 
@@ -10,12 +10,10 @@ const canHover =
 const WEAPON_TYPES = new Set(["Ranged Weapons", "Melee Weapons"]);
 
 /** The Unit statline as a prominent, evenly-divided stat bar. */
-function Statline({ section }: { section: DatasheetSection }) {
-  const profile = section.profiles[0];
-  if (!profile) return null;
+function Statline({ characteristics }: { characteristics: IrCharacteristic[] }) {
   return (
     <div className="ds-statline">
-      {profile.characteristics.map((c) => (
+      {characteristics.map((c) => (
         <div key={c.name} className="ds-chip">
           <span className="ds-chip-label">{c.name}</span>
           <span className="ds-chip-value">{c.value}</span>
@@ -23,6 +21,21 @@ function Statline({ section }: { section: DatasheetSection }) {
       ))}
     </div>
   );
+}
+
+/** 11e carries the invulnerable save as a native `InSv` characteristic on the Unit
+ *  profile; 10e has no such characteristic and buries it in an Abilities profile
+ *  (which `invulnSave` digs out). Rendering `InSv` as just another statline column
+ *  would both split the two editions' presentation and waste a column on the ~92%
+ *  of units whose value is blank — so it is pulled OUT of the columns here and fed
+ *  to the same chip 10e uses. Blank/whitespace means "no invulnerable save"; the
+ *  value is trimmed (real data has a trailing newline on one) and any trailing "*"
+ *  is kept, since it flags a qualified save explained in the unit's rules. */
+const INVULN_CHARACTERISTIC = "InSv";
+
+function nativeInvuln(characteristics: IrCharacteristic[]): string | undefined {
+  const value = characteristics.find((c) => c.name === INVULN_CHARACTERISTIC)?.value.trim();
+  return value ? value : undefined;
 }
 
 /** The unit's statline bar with the invulnerable-save chip hanging under the
@@ -39,17 +52,21 @@ export function UnitStatline({
     [catalogue, roster, selection.id],
   );
   const unit = sections.find((s) => s.typeName === "Unit");
-  const invuln = invulnSave(catalogue, selection);
   if (!unit) return null;
-  const chars = unit.profiles[0]?.characteristics ?? [];
+  const all = unit.profiles[0]?.characteristics ?? [];
+  // Prefer 11e's native characteristic — it comes from `effectiveDatasheet`, so a
+  // wargear/enhancement modifier that changes the save is already applied. 10e has
+  // no such characteristic and falls back to the Abilities-derived lookup.
+  const invulnValue = nativeInvuln(all) ?? invulnSave(catalogue, selection)?.value;
+  const chars = all.filter((c) => c.name !== INVULN_CHARACTERISTIC);
   const tIndex = chars.findIndex((c) => c.name === "T");
   return (
     <div className="ds-statwrap">
-      <Statline section={unit} />
-      {invuln && chars.length > 0 && (
+      <Statline characteristics={chars} />
+      {invulnValue && chars.length > 0 && (
         <div className="ds-invuln-row" style={{ gridTemplateColumns: `repeat(${chars.length}, 1fr)` }}>
           <div className="ds-invuln" style={{ gridColumn: (tIndex >= 0 ? tIndex : 1) + 1 }}>
-            <span className="ds-invuln-value">{invuln.value}</span>
+            <span className="ds-invuln-value">{invulnValue}</span>
             <span className="ds-invuln-label">Invulnerable Save</span>
           </div>
         </div>

@@ -161,3 +161,46 @@ describe("Datasheet invulnerable save from real (Abilities-encoded) data", () =>
     expect(screen.getByText(/cannot be targeted/)).toBeInTheDocument(); // line preserved
   });
 });
+
+// 11e carries the invulnerable save as a native `InSv` characteristic on the Unit
+// profile instead of an Abilities profile. It must render as the same chip under
+// Toughness, NOT as an extra statline column — ~92% of real 11e units leave it blank.
+const nativeInvulnCat = (insv: string): IrCatalogue => ({
+  id: "c", name: "C", gameSystemId: "gs", revision: 1,
+  entries: [
+    { id: "e.hero", name: "Hero", costs: [], categories: [], constraints: [], children: [], groups: [],
+      profiles: [{ name: "Hero", typeName: "Unit", characteristics: [
+        { name: "M", value: '6"' }, { name: "T", value: "4" }, { name: "Sv", value: "3+" },
+        { name: "InSv", value: insv },
+      ] }] },
+  ],
+} as unknown as IrCatalogue);
+
+describe("Datasheet invulnerable save from a native 11e InSv characteristic", () => {
+  it("shows it as the chip and drops it from the statline columns", () => {
+    const hero = sel("e.hero");
+    const { container } = render(
+      <UnitStatline catalogue={nativeInvulnCat("4+")} roster={rosterOf(hero)} selection={hero} />,
+    );
+    expect(screen.getByText("Invulnerable Save")).toBeInTheDocument();
+    expect(screen.getByText("4+")).toBeInTheDocument();
+    const labels = [...container.querySelectorAll(".ds-chip-label")].map((e) => e.textContent);
+    expect(labels).toEqual(["M", "T", "Sv"]); // no InSv column
+  });
+
+  it("trims a trailing newline and keeps a qualifying asterisk", () => {
+    const hero = sel("e.hero");
+    render(<UnitStatline catalogue={nativeInvulnCat("4+*\n")} roster={rosterOf(hero)} selection={hero} />);
+    expect(screen.getByText("4+*")).toBeInTheDocument();
+  });
+
+  it("shows no chip and no column when the characteristic is blank", () => {
+    const hero = sel("e.hero");
+    const { container } = render(
+      <UnitStatline catalogue={nativeInvulnCat("")} roster={rosterOf(hero)} selection={hero} />,
+    );
+    expect(screen.queryByText("Invulnerable Save")).not.toBeInTheDocument();
+    const labels = [...container.querySelectorAll(".ds-chip-label")].map((e) => e.textContent);
+    expect(labels).toEqual(["M", "T", "Sv"]);
+  });
+});
