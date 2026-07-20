@@ -119,6 +119,11 @@ struct JsonInfoLink { target_id: String, #[serde(rename = "type")] link_type: St
 struct JsonEntryLink {
     id: String, target_id: String, #[serde(rename = "type")] link_type: String,
     hidden: bool, modifiers: Vec<JsonModifier>, modifier_groups: Vec<JsonModifierGroup>,
+    // Content declared ON the link: it applies to THIS placement only (Task E1).
+    selection_entries: Vec<JsonEntry>, selection_entry_groups: Vec<JsonGroup>,
+    entry_links: Vec<JsonEntryLink>, constraints: Vec<JsonConstraint>,
+    category_links: Vec<JsonCategoryLink>, costs: Vec<JsonCost>,
+    profiles: Vec<JsonProfile>, info_links: Vec<JsonInfoLink>,
 }
 
 #[derive(Deserialize, Default)]
@@ -287,6 +292,14 @@ fn map_entry_link(l: &JsonEntryLink, diags: &mut Vec<Diagnostic>) -> RawEntryLin
     RawEntryLink {
         id: l.id.clone(), target_id: l.target_id.clone(), link_type: l.link_type.clone(),
         hidden: l.hidden, modifiers: map_modifiers(&l.modifiers, &l.modifier_groups, diags),
+        entries: l.selection_entries.iter().map(|e| map_entry(e, diags)).collect(),
+        groups: l.selection_entry_groups.iter().map(|g| map_group(g, diags)).collect(),
+        entry_links: l.entry_links.iter().map(|c| map_entry_link(c, diags)).collect(),
+        constraints: map_constraints(&l.constraints),
+        category_links: map_category_links(&l.category_links),
+        costs: map_costs(&l.costs),
+        profiles: map_profiles(&l.profiles),
+        info_links: map_info_links(&l.info_links),
     }
 }
 

@@ -52,7 +52,24 @@ pub struct RawEntry {
 }
 #[derive(Debug, Default, Clone)] pub struct RawCost { pub type_id: String, pub value: f64 }
 #[derive(Debug, Default, Clone)] pub struct RawCategoryLink { pub target_id: String, pub primary: bool, pub constraints: Vec<RawConstraint> }
-#[derive(Debug, Default, Clone)] pub struct RawEntryLink { pub id: String, pub target_id: String, pub link_type: String, pub hidden: bool, pub modifiers: Vec<RawModifier> }
+#[derive(Debug, Default, Clone)]
+pub struct RawEntryLink {
+    pub id: String,
+    pub target_id: String,
+    pub link_type: String,
+    pub hidden: bool,
+    pub modifiers: Vec<RawModifier>,
+    // Content declared ON the link: it applies to THIS placement only, never to the
+    // shared target. resolve_link merges it onto the per-placement clone.
+    pub entries: Vec<RawEntry>,
+    pub groups: Vec<RawGroup>,
+    pub entry_links: Vec<RawEntryLink>,
+    pub constraints: Vec<RawConstraint>,
+    pub category_links: Vec<RawCategoryLink>,
+    pub costs: Vec<RawCost>,
+    pub profiles: Vec<RawProfile>,
+    pub info_links: Vec<RawInfoLink>,
+}
 #[derive(Debug, Default, Clone)] pub struct RawForce { pub id: String, pub name: String, pub constraints: Vec<RawConstraint>, pub category_links: Vec<RawCategoryLink> }
 #[derive(Debug, Default, Clone)] pub struct RawCatalogueLink { pub target_id: String, pub import_root_entries: bool }
 

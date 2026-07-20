@@ -213,6 +213,46 @@ fn reads_modifier_scope_affects_and_profile_types() {
 }
 
 #[test]
+fn entrylink_reads_its_own_inline_content() {
+    // Mirrors tests/raw_parse.rs::entrylink_reads_its_own_inline_content: an
+    // entryLink is a placement, not a bare pointer, and may declare children that
+    // apply only to that placement (Task E1). All eight collections must survive
+    // the JSON front-end too.
+    let json = br#"{"catalogue":{"id":"c","name":"C","revision":1,
+      "selectionEntries":[{"id":"host","name":"Host","type":"unit",
+        "entryLinks":[{"id":"lk","targetId":"shared","type":"selectionEntryGroup",
+          "selectionEntries":[{"id":"inline.entry","name":"Inline Entry","type":"upgrade"}],
+          "selectionEntryGroups":[{"id":"inline.group","name":"Inline Group"}],
+          "entryLinks":[{"id":"inline.link","targetId":"other","type":"selectionEntry"}],
+          "constraints":[{"id":"inline.constraint","type":"max","value":1,"field":"selections","scope":"parent"}],
+          "categoryLinks":[{"targetId":"inline.category","primary":true}],
+          "costs":[{"typeId":"pts","value":10}],
+          "profiles":[{"id":"inline.profile","name":"Inline Profile","typeName":"Abilities"}],
+          "infoLinks":[{"targetId":"inline.rule","type":"rule"}]
+        }]}]}}"#;
+    let raw = parse_raw_json(json, &mut Vec::new()).unwrap();
+    let host = raw.entries.iter().find(|e| e.id == "host").unwrap();
+    let lk = &host.entry_links[0];
+    assert_eq!(lk.entries.len(), 1);
+    assert_eq!(lk.entries[0].id, "inline.entry");
+    assert_eq!(lk.groups.len(), 1);
+    assert_eq!(lk.groups[0].id, "inline.group");
+    assert_eq!(lk.entry_links.len(), 1);
+    assert_eq!(lk.entry_links[0].id, "inline.link");
+    assert_eq!(lk.constraints.len(), 1);
+    assert_eq!(lk.constraints[0].id, "inline.constraint");
+    assert_eq!(lk.category_links.len(), 1);
+    assert_eq!(lk.category_links[0].target_id, "inline.category");
+    assert_eq!(lk.costs.len(), 1);
+    assert_eq!(lk.costs[0].type_id, "pts");
+    assert_eq!(lk.costs[0].value, 10.0);
+    assert_eq!(lk.profiles.len(), 1);
+    assert_eq!(lk.profiles[0].id, "inline.profile");
+    assert_eq!(lk.info_links.len(), 1);
+    assert_eq!(lk.info_links[0].target_id, "inline.rule");
+}
+
+#[test]
 fn xml_and_json_produce_identical_ir() {
     let (xml_ir, _) = engine_parser::parse_file(Path::new("tests/fixtures/parity/twin.cat"), None).unwrap();
     let (json_ir, _) = engine_parser::parse_file(Path::new("tests/fixtures/parity/twin.json"), None).unwrap();
@@ -221,6 +261,28 @@ fn xml_and_json_produce_identical_ir() {
         serde_json::to_value(&json_ir).unwrap(),
         "JSON front-end must produce IR identical to the XML front-end",
     );
+
+    // Finding 4: the equality check above is vacuous against a change that drops
+    // the SAME link-carried collections from both front-ends at once. Assert the
+    // fixture's link content (`twin.cat`/`twin.json`'s entryLink `lnk.s` ->
+    // `e.shared`, nested under `e.u`) actually reached the IR, in each front-end
+    // independently: the nested-link entry `e.nested`, the link's own inline
+    // profile `p.linkprofile`, and the link's infoLink-resolved profile `p.inv`.
+    for (front_end, ir) in [("xml", &xml_ir), ("json", &json_ir)] {
+        let u = ir.entries.iter().find(|e| e.id == "e.u").expect("e.u root");
+        let clone = u.children.iter().find(|e| e.id == "e.shared").unwrap_or_else(|| {
+            panic!("{front_end}: e.shared clone missing from e.u's children")
+        });
+        assert!(clone.children.iter().any(|c| c.id == "e.nested"),
+            "{front_end}: the link's nested entryLink target e.nested did not reach the IR");
+        // IrProfile drops the source id (name/typeName/characteristics only), so
+        // match on name — "Link Profile" (p.linkprofile) and "Invulnerable Save"
+        // (p.inv, via the link's infoLink) are each unique in this fixture.
+        assert!(clone.profiles.iter().any(|p| p.name == "Link Profile"),
+            "{front_end}: the link's own inline profile p.linkprofile did not reach the IR");
+        assert!(clone.profiles.iter().any(|p| p.name == "Invulnerable Save"),
+            "{front_end}: the link's infoLink-resolved profile p.inv did not reach the IR");
+    }
 }
 
 #[test]
