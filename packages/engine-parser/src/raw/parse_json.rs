@@ -271,7 +271,24 @@ fn map_entry(e: &JsonEntry, diags: &mut Vec<Diagnostic>) -> RawEntry {
         entry_links: e.entry_links.iter().map(|l| map_entry_link(l, diags)).collect(),
         profiles: map_profiles(&e.profiles),
         info_links: map_info_links(&e.info_links),
+        rule_names: rule_names(&e.rules),
     }
+}
+
+/// Names of the rules THIS entry declares (its own `rules` array), in
+/// declaration order, deduped — mirrors the XML front-end's
+/// `read_entry_rule_names_into`. Rule TEXT is collected separately (and
+/// already was, before this field existed) by `collect_rules_entry` into
+/// `RawCatalogue.rules`, regardless of nesting; this is purely the
+/// entry->rule association, not a second source of text.
+fn rule_names(rules: &[JsonRule]) -> Vec<String> {
+    let mut out = Vec::new();
+    for r in rules {
+        if !r.name.is_empty() && !out.contains(&r.name) {
+            out.push(r.name.clone());
+        }
+    }
+    out
 }
 
 fn map_group(g: &JsonGroup, diags: &mut Vec<Diagnostic>) -> RawGroup {

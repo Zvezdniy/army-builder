@@ -251,6 +251,7 @@ fn map_entry(e: &RawEntry, cat: &RawCatalogue, diags: &mut Vec<Diagnostic>) -> I
         validation_rules,
         category_modifiers,
         characteristic_modifiers,
+        rule_names: e.rule_names.clone(),
     }
 }
 

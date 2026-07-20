@@ -74,6 +74,25 @@ fn maps_full_entry_tree_with_links_groups_and_associations_drop() {
 }
 
 #[test]
+fn entry_rules_declare_rule_names_and_text_lands_once_in_rule_texts() {
+    // Mirrors tests/raw_parse.rs's XML twin: JsonEntry.rules already
+    // deserializes for collect_rules (TEXT); this asserts the names also land
+    // on the mapped RawEntry (the ASSOCIATION), deduped in declaration order.
+    let json = br#"{"catalogue":{"id":"c","name":"C","revision":1,
+      "selectionEntries":[{"id":"u","name":"Unit","type":"unit",
+        "rules":[
+          {"id":"r1","name":"R1","description":"R1 text."},
+          {"id":"r2","name":"R2","description":"t2"},
+          {"id":"r3","name":"R1","description":"R1 text again."},
+          {"id":"r4","name":""}
+        ]}]}}"#;
+    let raw = parse_raw_json(json, &mut Vec::new()).unwrap();
+    let u = raw.entries.iter().find(|e| e.id == "u").unwrap();
+    assert_eq!(u.rule_names, vec!["R1".to_string(), "R2".to_string()]);
+    assert_eq!(raw.rules.get("R1").map(String::as_str), Some("R1 text again."));
+}
+
+#[test]
 fn rule_alias_as_array_is_indexed_by_each_alias() {
     // Real wh40k-11e BSData encodes a rule's `alias` as an array of strings
     // (e.g. `"alias": ["PISTOL"]`), not a plain string like the mini
@@ -270,6 +289,15 @@ fn xml_and_json_produce_identical_ir() {
     // profile `p.linkprofile`, and the link's infoLink-resolved profile `p.inv`.
     for (front_end, ir) in [("xml", &xml_ir), ("json", &json_ir)] {
         let u = ir.entries.iter().find(|e| e.id == "e.u").expect("e.u root");
+        // Task 2: both syntaxes declare the same rule ("Leader") on e.u — the
+        // ASSOCIATION lands on ruleNames, and its TEXT lands once in ruleTexts,
+        // not duplicated onto the entry.
+        assert_eq!(u.rule_names, vec!["Leader".to_string()], "{front_end}: e.u.ruleNames");
+        assert_eq!(
+            ir.rule_texts.get("Leader").map(String::as_str),
+            Some("May be attached to a Troops unit."),
+            "{front_end}: rule text in ruleTexts"
+        );
         let clone = u.children.iter().find(|e| e.id == "e.shared").unwrap_or_else(|| {
             panic!("{front_end}: e.shared clone missing from e.u's children")
         });

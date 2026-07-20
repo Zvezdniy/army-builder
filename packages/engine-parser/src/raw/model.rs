@@ -38,6 +38,13 @@ pub struct RawEntry {
     pub entry_links: Vec<RawEntryLink>,
     pub profiles: Vec<RawProfile>,
     pub info_links: Vec<RawInfoLink>,
+    // Names of the rules THIS entry declares in its own `<rules>` (XML) /
+    // `rules` (JSON) — the ASSOCIATION between entry and rule, in declaration
+    // order, deduped. The rule's TEXT is not carried here: it lives in
+    // RawCatalogue.rules (-> IrCatalogue.ruleTexts), keyed by name, populated by
+    // a separate flat pass (XML: read_all_rules; JSON: collect_rules) that
+    // walks every <rule>/rule regardless of nesting.
+    pub rule_names: Vec<String>,
 }
 
 #[derive(Debug, Default, Clone)] pub struct RawGroup {

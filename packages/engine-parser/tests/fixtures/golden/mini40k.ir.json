@@ -167,6 +167,9 @@
             }
           ]
         }
+      ],
+      "ruleNames": [
+        "Leader"
       ]
     },
     {
@@ -316,5 +319,8 @@
     "cat.hq": "HQ",
     "cat.model": "Model",
     "cat.troops": "Troops"
+  },
+  "ruleTexts": {
+    "Leader": "This model can be attached to a Troops unit."
   }
 }

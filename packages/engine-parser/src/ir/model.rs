@@ -54,6 +54,11 @@ pub struct IrEntry {
     pub category_modifiers: Vec<IrCategoryModifier>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub characteristic_modifiers: Vec<IrCharacteristicModifier>,
+    // Names of the rules THIS entry declares (the entry->rule association).
+    // The rule's TEXT lives in IrCatalogue.rule_texts, keyed by name — never
+    // duplicated here.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub rule_names: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]

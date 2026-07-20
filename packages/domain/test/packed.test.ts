@@ -179,6 +179,21 @@ describe("rehydrateCatalogue", () => {
     expect(back).toEqual(c);
   });
 
+  it("round-trips an entry's ruleNames through a packed-v1 JSON payload", () => {
+    // Regression guard for the exact silent-drop failure mode: PackedEntry is a
+    // `z.object`, which STRIPS unknown keys on `.parse()`. If ruleNames were added
+    // to IrEntry but not to PackedEntry, packCatalogue would still emit it (plain
+    // object build, no validation) and an in-memory rehydrateCatalogue call would
+    // still see it — so this must go through an actual JSON round trip and
+    // PackedCatalogue.parse (as loadCatalogue does for a real packed-v1 payload)
+    // for the drop to be observable.
+    const withRules = entry({ id: "a", name: "A", ruleNames: ["Leader"] });
+    const c = cat([withRules]);
+    const packed = packCatalogue(c);
+    const rehydrated = loadCatalogue(JSON.parse(JSON.stringify(packed)));
+    expect(rehydrated.entries[0]!.ruleNames).toEqual(["Leader"]);
+  });
+
   it("throws on a child index that points outside the pool", () => {
     const packed = PackedCatalogue.parse({
       format: "packed-v1",

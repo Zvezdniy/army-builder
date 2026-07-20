@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { IrCatalogue, IrEntry, IrGroup, Roster } from "@muster/domain";
+import type { IrCatalogue, IrEntry, Roster } from "@muster/domain";
 import { availableDetachments, selectedDetachments, catalogueEntry } from "@muster/roster";
 import {
   pointsCost, correctedConstraintValue, DETACHMENT_POINTS,
@@ -15,19 +15,32 @@ function detachmentPointsCost(entry: IrEntry): number {
   return entry.costs.find((c) => c.name === DETACHMENT_POINTS)?.value ?? 0;
 }
 
-/** The enhancements a detachment unlocks: the members of its "<name> Enhancements"
- *  group (best-effort by group name — informational preview only). */
+/** The enhancements a detachment unlocks: the union of every group named
+ *  "<name> Enhancements" found anywhere in the catalogue tree (best-effort by group
+ *  name — informational preview only). An `entryLink` is a PLACEMENT, not a pointer —
+ *  it may declare its own children that apply only to that placement — so the same
+ *  named group can legitimately recur at many placements with different members.
+ *  Taking only the first match would silently hide members that only appear at a
+ *  later placement, so this walks the WHOLE tree and unions every match, deduping
+ *  by entry id in first-encounter order. */
 function enhancementsFor(catalogue: IrCatalogue, detachmentName: string): IrEntry[] {
   const wanted = `${detachmentName} Enhancements`;
   const stack: IrEntry[] = [...catalogue.entries];
-  let group: IrGroup | undefined;
-  while (stack.length > 0 && !group) {
+  const seen = new Set<string>();
+  const ids: string[] = [];
+  while (stack.length > 0) {
     const e = stack.pop() as IrEntry;
-    group = (e.groups ?? []).find((g) => g.name === wanted);
+    for (const group of e.groups ?? []) {
+      if (group.name !== wanted) continue;
+      for (const id of group.memberEntryIds) {
+        if (seen.has(id)) continue;
+        seen.add(id);
+        ids.push(id);
+      }
+    }
     stack.push(...e.children);
   }
-  if (!group) return [];
-  return group.memberEntryIds
+  return ids
     .map((id) => catalogueEntry(catalogue, id))
     .filter((e): e is IrEntry => e !== undefined);
 }
@@ -224,22 +237,38 @@ export function SetupWizard({
                       </div>
                     </>
                   )}
-                  {previews.map(({ detachment, enhancements }) => (
-                    <div key={detachment.id} className="det-preview-section">
-                      <div className="ds-section-head">{detachment.name}</div>
-                      <div className="preview-body">
-                        {enhancements.length === 0 && (
-                          <div className="preview-empty">No enhancement preview.</div>
-                        )}
-                        {enhancements.map((e) => (
-                          <div key={e.id} className="enh-line">
-                            <span className="enh-name">{e.name}</span>
-                            <span className="enh-pts">{pointsCost(e)?.value ?? 0}</span>
-                          </div>
-                        ))}
+                  {previews.map(({ detachment, enhancements }) => {
+                    const rules = (detachment.ruleNames ?? []).map((name) => ({
+                      name, text: catalogue.ruleTexts?.[name],
+                    }));
+                    return (
+                      <div key={detachment.id} className="det-preview-section">
+                        <div className="ds-section-head">{detachment.name}</div>
+                        <div className="preview-body">
+                          {rules.length > 0 && (
+                            <div className="det-rules">
+                              {rules.map((r) => (
+                                <div key={r.name} className="det-rule">
+                                  <div className="det-rule-name">{r.name}</div>
+                                  {r.text && <p className="det-rule-text">{r.text}</p>}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          <div className="preview-subhead">Enhancements</div>
+                          {enhancements.length === 0 && (
+                            <div className="preview-empty">No enhancement preview.</div>
+                          )}
+                          {enhancements.map((e) => (
+                            <div key={e.id} className="enh-line">
+                              <span className="enh-name">{e.name}</span>
+                              <span className="enh-pts">{pointsCost(e)?.value ?? 0}</span>
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </aside>
               </div>
             </div>

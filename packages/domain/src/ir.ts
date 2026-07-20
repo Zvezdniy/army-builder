@@ -92,6 +92,9 @@ export interface IrEntry {
   validationRules?: IrValidationRule[];
   categoryModifiers?: IrCategoryModifier[];
   characteristicModifiers?: IrCharacteristicModifier[];
+  // Names of the rules THIS entry declares (the entry->rule association); the
+  // rule's TEXT lives in IrCatalogue.ruleTexts, keyed by name.
+  ruleNames?: string[];
 }
 // Use `unknown` for the input generic because `.default([])` makes those fields optional in input,
 // not matching the strict required-field interface. Output type stays `IrEntry`.
@@ -111,6 +114,7 @@ export const IrEntry: z.ZodType<IrEntry, z.ZodTypeDef, unknown> = z.lazy(() =>
     validationRules: z.array(IrValidationRule).default([]),
     categoryModifiers: z.array(IrCategoryModifier).default([]),
     characteristicModifiers: z.array(IrCharacteristicModifier).default([]),
+    ruleNames: z.array(z.string()).default([]),
   }),
 );
 

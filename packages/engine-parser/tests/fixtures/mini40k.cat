@@ -71,6 +71,11 @@
           </characteristics>
         </profile>
       </profiles>
+      <rules>
+        <rule id="r.leader" name="Leader">
+          <description>This model can be attached to a Troops unit.</description>
+        </rule>
+      </rules>
       <selectionEntryGroups>
         <selectionEntryGroup id="g.wargear" name="Wargear">
           <constraints>

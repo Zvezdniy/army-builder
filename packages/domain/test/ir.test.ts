@@ -79,6 +79,17 @@ describe("IrEntry.type", () => {
   });
 });
 
+describe("IrEntry.ruleNames", () => {
+  it("parses the names of rules an entry declares", () => {
+    const e = IrEntry.parse({ id: "e", name: "E", ruleNames: ["Leader"] });
+    expect(e.ruleNames).toEqual(["Leader"]);
+  });
+  it("defaults to an empty array when absent", () => {
+    const e = IrEntry.parse({ id: "e", name: "E" });
+    expect(e.ruleNames).toEqual([]);
+  });
+});
+
 describe("IrProfile / IrCharacteristic", () => {
   it("parses an entry carrying profiles", () => {
     const entry = IrEntry.parse({
