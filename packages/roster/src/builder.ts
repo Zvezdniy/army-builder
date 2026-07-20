@@ -134,7 +134,14 @@ function detachmentGroup(root: IrEntry): IrGroup {
       id: `${root.id}.detachment`,
       name: "Detachment",
       memberEntryIds: root.children.map((c) => c.id),
-      constraints: [{ id: `${root.id}.detachment.max1`, type: "max", value: 1, scope: "self" }],
+      // `min 1` alongside the max makes this a REQUIRED radio in toggleGroupMember,
+      // which is what the old hardcoded behaviour was: you swap the chosen
+      // detachment, you never empty it. Omitting the min would silently make the
+      // fallback more permissive than the thing it stands in for.
+      constraints: [
+        { id: `${root.id}.detachment.max1`, type: "max", value: 1, scope: "self" },
+        { id: `${root.id}.detachment.min1`, type: "min", value: 1, scope: "self" },
+      ],
     }
   );
 }

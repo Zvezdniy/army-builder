@@ -766,6 +766,15 @@ describe("detachment + points-limit API", () => {
     expect(selectedDetachments(r, detCat)).toEqual(["e.anvil"]);
   });
 
+  // Restored after D3's review: this coverage was dropped on the belief that the
+  // group-driven path filters unknown ids, but toggleGroupMember only uses
+  // memberEntryIds to COUNT existing members — an id absent from the catalogue is
+  // still recorded, which is what an imported roster or a stale catalogue needs.
+  it("toggleDetachment on an option id absent from the catalogue still records the choice", () => {
+    const r = toggleDetachment(createRoster(detCat, 2000), "e.unknown", detCat);
+    expect(selectedDetachments(r, detCat)).toEqual(["e.unknown"]);
+  });
+
   it("toggleDetachment on a max-1 (10e) required group keeps its sole pick (no empty radio)", () => {
     const r = toggleDetachment(createRoster(detCat, 2000), "e.gladius", detCat);
     const r2 = toggleDetachment(r, "e.gladius", detCat); // toggling the sole pick again
