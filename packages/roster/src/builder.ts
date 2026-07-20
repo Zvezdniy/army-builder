@@ -16,7 +16,7 @@ export function createRoster(catalogue: IrCatalogue, pointsLimit: number, name =
 
 /** Units addable at the roster root (the catalogue's top-level entries). The
  *  detachment root is excluded — it is an army-level choice made in the setup
- *  wizard (via setDetachment), not a unit to add through the picker. */
+ *  wizard (via toggleDetachment), not a unit to add through the picker. */
 export function availableUnits(catalogue: IrCatalogue): IrEntry[] {
   const detId = detachmentRoot(catalogue)?.id;
   return catalogue.entries.filter((e) => e.id !== detId);
@@ -80,11 +80,22 @@ export function availableDetachments(catalogue: IrCatalogue): IrEntry[] {
   return detachmentRoot(catalogue)?.children ?? [];
 }
 
-/** The chosen detachment option's entryId, or undefined if none is selected. */
-export function selectedDetachment(roster: Roster, catalogue: IrCatalogue): string | undefined {
+/** The chosen detachments' entryIds, in selection order — several in 11e (a DP
+ *  budget, no group max), at most one in 10e (matched play, `max 1`). Empty if
+ *  the catalogue models no detachment or none is chosen yet. */
+export function selectedDetachments(roster: Roster, catalogue: IrCatalogue): string[] {
   const root = detachmentRoot(catalogue);
-  if (!root) return undefined;
-  return roster.selections.find((s) => s.entryId === root.id)?.selections[0]?.entryId;
+  if (!root) return [];
+  const rootSel = roster.selections.find((s) => s.entryId === root.id);
+  return rootSel ? rootSel.selections.map((s) => s.entryId) : [];
+}
+
+/** The first chosen detachment's entryId, or undefined if none is selected. A
+ *  thin "first of" wrapper over `selectedDetachments` for callers that only
+ *  care about a single detachment (10e is always exactly this; 11e callers
+ *  that need the full set use `selectedDetachments` directly). */
+export function selectedDetachment(roster: Roster, catalogue: IrCatalogue): string | undefined {
+  return selectedDetachments(roster, catalogue)[0];
 }
 
 /** Selection ids of the detachment root subtree — the army-level detachment choice
@@ -107,19 +118,44 @@ export function detachmentSelectionIds(roster: Roster, catalogue: IrCatalogue): 
 }
 
 /**
- * Set (or replace) the army's detachment: ensure exactly one "Detachment" root selection
- * holding the single chosen option. Idempotent per option; changing detachment swaps the
- * option without leaving a duplicate. The option is stored as a real roster selection so
- * roster-scoped enhancement gates count it. No-op if the catalogue models no detachment.
+ * The root Detachment entry's own choose-group (also named "Detachment"), whose
+ * constraints ARE the edition rule: 10e catalogues declare `min 1, max 1` on it, so
+ * `toggleGroupMember` swaps; 11e catalogues declare only `min 1` (the `max` is gone,
+ * replaced by a Detachment Points budget), so it accumulates. No edition check —
+ * the difference is read straight from the data.
+ *
+ * Falls back to an implicit `max 1` group (matching the old hardcoded single-choice
+ * behaviour) when the root carries no such group at all — defensive only; every real
+ * BSData Detachment root models this group (see the design doc's Findings table).
  */
-export function setDetachment(roster: Roster, detachmentEntryId: string, catalogue: IrCatalogue): Roster {
+function detachmentGroup(root: IrEntry): IrGroup {
+  return (
+    root.groups?.find((g) => g.name === "Detachment") ?? {
+      id: `${root.id}.detachment`,
+      name: "Detachment",
+      memberEntryIds: root.children.map((c) => c.id),
+      constraints: [{ id: `${root.id}.detachment.max1`, type: "max", value: 1, scope: "self" }],
+    }
+  );
+}
+
+/**
+ * Toggle a detachment option: select it, or deselect it, or (on a `max 1` group,
+ * i.e. 10e) swap it for whatever was selected before — exactly `toggleGroupMember`'s
+ * existing behaviour against the root Detachment entry's "Detachment" group. Creates
+ * the root "Detachment" selection the first time a detachment is picked, and reuses
+ * it afterwards (never duplicated). The option is stored as a bare selection (no
+ * initialChildren seeding) so roster-scoped enhancement gates still count it as a real
+ * selection without nesting unrelated sub-parts under it. No-op if the catalogue
+ * models no detachment.
+ */
+export function toggleDetachment(roster: Roster, detachmentEntryId: string, catalogue: IrCatalogue): Roster {
   const root = detachmentRoot(catalogue);
   if (!root) return roster;
-  // The detachment option is a leaf army-level choice: store it as a bare selection
-  // (no initialChildren seeding, which would nest counted selections under it).
-  const rootSel: RosterSelection = { ...freshSelection(root.id), selections: [freshSelection(detachmentEntryId)] };
-  const withoutOld = roster.selections.filter((s) => s.entryId !== root.id);
-  return { ...roster, selections: [...withoutOld, rootSel] };
+  const existing = roster.selections.find((s) => s.entryId === root.id);
+  const rootSel = existing ?? freshSelection(root.id);
+  const withRoot = existing ? roster : { ...roster, selections: [...roster.selections, rootSel] };
+  return toggleGroupMember(withRoot, rootSel.id, detachmentGroup(root), detachmentEntryId);
 }
 
 /** Change the army's points limit. */

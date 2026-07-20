@@ -3,7 +3,7 @@ import type { IrCatalogue, IrGroup } from "@muster/domain";
 import {
   createRoster, availableUnits, addUnit, addOption, setCount, remove, optionsFor,
   selectedGroupMembers, toggleGroupMember, groupControl, optionControl, catalogueEntry,
-  unitLoadout, availableDetachments, selectedDetachment, setDetachment, setPointsLimit,
+  unitLoadout, availableDetachments, selectedDetachment, selectedDetachments, toggleDetachment, setPointsLimit,
   unitsByRole, detachmentSelectionIds, groupMemberCounts, groupTotal, setGroupMemberCount,
   invulnSave,
 } from "./index";
@@ -705,6 +705,8 @@ describe("counted group members", () => {
   });
 });
 
+// 10e shape: the root Detachment's own "Detachment" group is capped at max 1
+// (matched play: exactly one detachment) — toggleDetachment must swap.
 const detCat: IrCatalogue = {
   id: "cat", name: "Cat", gameSystemId: "gs", revision: 1, forceConstraints: [], categoryNames: {},
   entries: [
@@ -715,8 +717,28 @@ const detCat: IrCatalogue = {
         { id: "e.gladius", name: "Gladius Task Force", type: "upgrade", costs: [], categories: [], constraints: [], children: [] },
         { id: "e.anvil", name: "Anvil Siege Force", type: "upgrade", costs: [], categories: [], constraints: [], children: [] },
       ],
+      groups: [{
+        id: "g.det", name: "Detachment", memberEntryIds: ["e.gladius", "e.anvil"],
+        constraints: [{ id: "gc.min", type: "min", value: 1, scope: "self" }, { id: "gc.max", type: "max", value: 1, scope: "self" }],
+      }],
     },
   ],
+};
+
+// 11e shape: same names/options, but the Detachment group carries only `min 1`
+// — the `max` is gone, replaced by a Detachment Points budget elsewhere — so
+// toggleDetachment must accumulate instead of swap.
+const detCat11e: IrCatalogue = {
+  ...detCat,
+  entries: detCat.entries.map((e) =>
+    e.id !== "e.det" ? e : {
+      ...e,
+      groups: [{
+        id: "g.det", name: "Detachment", memberEntryIds: ["e.gladius", "e.anvil"],
+        constraints: [{ id: "gc.min", type: "min", value: 1, scope: "self" }],
+      }],
+    },
+  ),
 };
 
 describe("detachment + points-limit API", () => {
@@ -728,28 +750,52 @@ describe("detachment + points-limit API", () => {
     expect(availableDetachments(catalogue)).toEqual([]);
   });
 
-  it("setDetachment adds one Detachment selection holding the chosen option", () => {
-    const r = setDetachment(createRoster(detCat, 2000), "e.gladius", detCat);
+  it("toggleDetachment adds one Detachment selection holding the chosen option", () => {
+    const r = toggleDetachment(createRoster(detCat, 2000), "e.gladius", detCat);
     const roots = r.selections.filter((s) => s.entryId === "e.det");
     expect(roots).toHaveLength(1);
     expect(roots[0]!.selections.map((s) => s.entryId)).toEqual(["e.gladius"]);
+    expect(selectedDetachments(r, detCat)).toEqual(["e.gladius"]);
     expect(selectedDetachment(r, detCat)).toBe("e.gladius");
   });
 
-  it("setDetachment swaps the option without leaving a duplicate", () => {
-    let r = setDetachment(createRoster(detCat, 2000), "e.gladius", detCat);
-    r = setDetachment(r, "e.anvil", detCat);
+  it("toggleDetachment on a max-1 (10e) group swaps the option without leaving a duplicate", () => {
+    let r = toggleDetachment(createRoster(detCat, 2000), "e.gladius", detCat);
+    r = toggleDetachment(r, "e.anvil", detCat);
     expect(r.selections.filter((s) => s.entryId === "e.det")).toHaveLength(1);
-    expect(selectedDetachment(r, detCat)).toBe("e.anvil");
+    expect(selectedDetachments(r, detCat)).toEqual(["e.anvil"]);
   });
 
-  it("setDetachment on an option id absent from the catalogue still records the choice", () => {
-    const r = setDetachment(createRoster(detCat, 2000), "e.unknown", detCat);
-    expect(selectedDetachment(r, detCat)).toBe("e.unknown");
+  it("toggleDetachment on a max-1 (10e) required group keeps its sole pick (no empty radio)", () => {
+    const r = toggleDetachment(createRoster(detCat, 2000), "e.gladius", detCat);
+    const r2 = toggleDetachment(r, "e.gladius", detCat); // toggling the sole pick again
+    expect(selectedDetachments(r2, detCat)).toEqual(["e.gladius"]);
+  });
+
+  it("toggleDetachment on a no-max (11e) group accumulates in selection order", () => {
+    let r = toggleDetachment(createRoster(detCat11e, 2000), "e.gladius", detCat11e);
+    r = toggleDetachment(r, "e.anvil", detCat11e);
+    expect(r.selections.filter((s) => s.entryId === "e.det")).toHaveLength(1); // root created once
+    expect(selectedDetachments(r, detCat11e)).toEqual(["e.gladius", "e.anvil"]);
+    expect(selectedDetachment(r, detCat11e)).toBe("e.gladius"); // first-of wrapper
+  });
+
+  it("toggleDetachment on a no-max (11e) group removes an already-selected detachment", () => {
+    let r = toggleDetachment(createRoster(detCat11e, 2000), "e.gladius", detCat11e);
+    r = toggleDetachment(r, "e.anvil", detCat11e);
+    r = toggleDetachment(r, "e.gladius", detCat11e); // deselect the first
+    expect(selectedDetachments(r, detCat11e)).toEqual(["e.anvil"]);
+  });
+
+  it("the root Detachment selection is created once and reused, never duplicated", () => {
+    let r = toggleDetachment(createRoster(detCat11e, 2000), "e.gladius", detCat11e);
+    r = toggleDetachment(r, "e.gladius", detCat11e); // remove
+    r = toggleDetachment(r, "e.anvil", detCat11e); // add again
+    expect(r.selections.filter((s) => s.entryId === "e.det")).toHaveLength(1);
   });
 
   it("detachmentSelectionIds returns the detachment root subtree, empty otherwise", () => {
-    const chosen = setDetachment(createRoster(detCat, 2000), "e.gladius", detCat);
+    const chosen = toggleDetachment(createRoster(detCat, 2000), "e.gladius", detCat);
     const ids = detachmentSelectionIds(chosen, detCat);
     const rootSel = chosen.selections.find((s) => s.entryId === "e.det")!;
     expect(ids.has(rootSel.id)).toBe(true); // the Detachment root
@@ -760,13 +806,37 @@ describe("detachment + points-limit API", () => {
     expect(detachmentSelectionIds(createRoster(catalogue, 2000), catalogue).size).toBe(0);
   });
 
-  it("setDetachment is a no-op when the catalogue models no detachment", () => {
+  it("detachmentSelectionIds covers several selected detachments (11e)", () => {
+    let r = toggleDetachment(createRoster(detCat11e, 2000), "e.gladius", detCat11e);
+    r = toggleDetachment(r, "e.anvil", detCat11e);
+    const ids = detachmentSelectionIds(r, detCat11e);
+    const rootSel = r.selections.find((s) => s.entryId === "e.det")!;
+    expect(ids.has(rootSel.id)).toBe(true);
+    for (const child of rootSel.selections) expect(ids.has(child.id)).toBe(true);
+    expect(ids.size).toBe(3); // root + 2 chosen detachments
+  });
+
+  it("toggleDetachment falls back to an implicit max-1 group when the root models no explicit Detachment group", () => {
+    const catNoGroup: IrCatalogue = {
+      ...detCat,
+      entries: detCat.entries.map((e) => (e.id !== "e.det" ? e : { ...e, groups: undefined })),
+    };
+    let r = toggleDetachment(createRoster(catNoGroup, 2000), "e.gladius", catNoGroup);
+    r = toggleDetachment(r, "e.anvil", catNoGroup);
+    expect(selectedDetachments(r, catNoGroup)).toEqual(["e.anvil"]); // swapped, not accumulated
+  });
+
+  it("toggleDetachment is a no-op when the catalogue models no detachment", () => {
     const r = createRoster(catalogue, 2000);
-    expect(setDetachment(r, "whatever", catalogue)).toBe(r);
+    expect(toggleDetachment(r, "whatever", catalogue)).toBe(r);
   });
 
   it("selectedDetachment is undefined before any choice", () => {
     expect(selectedDetachment(createRoster(detCat, 2000), detCat)).toBeUndefined();
+  });
+
+  it("selectedDetachments is empty before any choice", () => {
+    expect(selectedDetachments(createRoster(detCat, 2000), detCat)).toEqual([]);
   });
 
   it("selectedDetachment is undefined when the catalogue models no detachment", () => {
@@ -779,8 +849,8 @@ describe("detachment + points-limit API", () => {
     expect(selectedDetachment(r, detCat)).toBeUndefined();
   });
 
-  it("setDetachment stores the option as a bare selection (no seeded children)", () => {
-    const r = setDetachment(createRoster(detCat, 2000), "e.gladius", detCat);
+  it("toggleDetachment stores the option as a bare selection (no seeded children)", () => {
+    const r = toggleDetachment(createRoster(detCat, 2000), "e.gladius", detCat);
     const root = r.selections.find((s) => s.entryId === "e.det")!;
     expect(root.selections).toHaveLength(1);
     expect(root.selections[0]!.selections).toEqual([]);
@@ -795,7 +865,7 @@ describe("detachment + points-limit API", () => {
 
   it("unitsByRole excludes the detachment root (it is army-level, not a unit)", () => {
     let r = addUnit(createRoster(detCat, 2000), "e.captain", detCat);
-    r = setDetachment(r, "e.gladius", detCat);
+    r = toggleDetachment(r, "e.gladius", detCat);
     const roles = unitsByRole(r, detCat);
     const allUnits = roles.flatMap((g) => g.units.map((u) => u.entryId));
     expect(allUnits).toContain("e.captain");

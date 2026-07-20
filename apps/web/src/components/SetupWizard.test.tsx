@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import type { IrCatalogue } from "@muster/domain";
-import { createRoster, setDetachment } from "@muster/roster";
+import { createRoster, toggleDetachment } from "@muster/roster";
 import { SetupWizard } from "./SetupWizard";
 
 const cat: IrCatalogue = {
@@ -60,7 +60,7 @@ describe("SetupWizard", () => {
   });
 
   it("previews the chosen detachment's enhancements", () => {
-    const roster = setDetachment(createRoster(cat, 2000), "e.gladius", cat);
+    const roster = toggleDetachment(createRoster(cat, 2000), "e.gladius", cat);
     render(<SetupWizard catalogue={cat} roster={roster} initialStep={2} onSetPoints={noop} onSetDetachment={noop} onClose={noop} />);
     expect(screen.getByText("Artificer Armour")).toBeTruthy();
   });
@@ -72,7 +72,7 @@ describe("SetupWizard", () => {
     );
     const finish = screen.getByText("Start building") as HTMLButtonElement;
     expect(finish.disabled).toBe(true);
-    rerender(<SetupWizard catalogue={cat} roster={setDetachment(createRoster(cat, 2000), "e.gladius", cat)} initialStep={2} onSetPoints={noop} onSetDetachment={noop} onClose={onClose} />);
+    rerender(<SetupWizard catalogue={cat} roster={toggleDetachment(createRoster(cat, 2000), "e.gladius", cat)} initialStep={2} onSetPoints={noop} onSetDetachment={noop} onClose={onClose} />);
     const finish2 = screen.getByText("Start building") as HTMLButtonElement;
     expect(finish2.disabled).toBe(false);
     fireEvent.click(finish2);

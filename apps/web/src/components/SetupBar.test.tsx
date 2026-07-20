@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import type { IrCatalogue } from "@muster/domain";
-import { createRoster, setDetachment } from "@muster/roster";
+import { createRoster, toggleDetachment } from "@muster/roster";
 import { SetupBar } from "./SetupBar";
 
 const detCat: IrCatalogue = {
@@ -21,7 +21,7 @@ const noDetCat: IrCatalogue = {
 describe("SetupBar", () => {
   it("shows points, faction and the chosen detachment; a chip reopens the wizard at its step", () => {
     const onEdit = vi.fn();
-    const roster = setDetachment(createRoster(detCat, 1500), "e.gladius", detCat);
+    const roster = toggleDetachment(createRoster(detCat, 1500), "e.gladius", detCat);
     render(<SetupBar catalogue={detCat} roster={roster} onEdit={onEdit} />);
     expect(screen.getByText("1500 pts")).toBeTruthy();
     expect(screen.getByText("Space Marines")).toBeTruthy();
