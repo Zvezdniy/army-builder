@@ -2,6 +2,11 @@
 <catalogue id="c" name="Twin" revision="1" gameSystemId="gs"
            xmlns="http://www.battlescribe.net/schema/catalogueSchema">
   <categoryEntries><categoryEntry id="cat.hq" name="HQ"/></categoryEntries>
+  <costTypes>
+    <costType id="pts" name="pts"/>
+    <costType id="ct.dp" name="Detachment Points"/>
+    <costType id="ct.cp" name="Crusade Points"/>
+  </costTypes>
   <profileTypes>
     <profileType id="pt.unit" name="Unit">
       <characteristicTypes><characteristicType id="t" name="T"/></characteristicTypes>
@@ -14,7 +19,11 @@
   </sharedProfiles>
   <selectionEntries>
     <selectionEntry id="e.u" name="U" type="model">
-      <costs><cost name="pts" typeId="pts" value="90"/></costs>
+      <costs>
+        <cost name="pts" typeId="pts" value="90"/>
+        <cost name="Detachment Points" typeId="ct.dp" value="3"/>
+        <cost name="Crusade Points" typeId="ct.cp" value="0"/>
+      </costs>
       <categoryLinks><categoryLink id="cl.hq" name="HQ" targetId="cat.hq" primary="true"/></categoryLinks>
       <infoLinks><infoLink name="Invulnerable Save" hidden="false" type="profile" id="il1" targetId="p.inv"/></infoLinks>
       <profiles><profile id="p" name="U" typeName="Unit" typeId="pt">
@@ -38,4 +47,12 @@
       </selectionEntryGroups>
     </selectionEntry>
   </selectionEntries>
+  <forceEntries>
+    <forceEntry id="fe.army" name="Army Roster">
+      <constraints>
+        <constraint id="fc.dp.cap" type="max" value="2" field="ct.dp" scope="parent"/>
+        <constraint id="fc.pts.sentinel" type="max" value="0" field="pts" scope="parent"/>
+      </constraints>
+    </forceEntry>
+  </forceEntries>
 </catalogue>

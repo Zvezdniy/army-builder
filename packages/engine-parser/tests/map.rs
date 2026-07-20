@@ -222,6 +222,72 @@ fn skips_force_global_points_sentinel_constraint() {
     assert_eq!(enh.value, 2.0);
 }
 
+/// The bug this guards: `ir/map.rs` used to decide "is this the points cost
+/// type?" with `type_name.to_lowercase().contains("point")`, which correctly
+/// matches `pts` but ALSO matches `Detachment Points` and `Crusade Points`,
+/// collapsing all three onto the reserved IR name "points". That silently
+/// destroyed the 11e Detachment Points cost (indistinguishable from battle
+/// points) and — via the points-sentinel guard — the DP cap constraint that
+/// depends on it surviving as its own field. A cost type is the points cost
+/// type iff its id is "pts" or its resolved name, trimmed and lowercased, is
+/// exactly "pts" or "points" — nothing else, however it happens to be named.
+#[test]
+fn distinct_point_named_cost_types_are_not_collapsed_onto_points() {
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <costTypes>
+    <costType id="pts" name="pts"/>
+    <costType id="ct.dp" name="Detachment Points"/>
+    <costType id="ct.cp" name="Crusade Points"/>
+  </costTypes>
+  <selectionEntries>
+    <selectionEntry id="e.gladius" name="Gladius Task Force" type="upgrade">
+      <costs>
+        <cost name="pts" typeId="pts" value="0"/>
+        <cost name="Detachment Points" typeId="ct.dp" value="3"/>
+        <cost name="Crusade Points" typeId="ct.cp" value="0"/>
+      </costs>
+    </selectionEntry>
+  </selectionEntries>
+  <forceEntries>
+    <forceEntry id="fe.army" name="Army Roster">
+      <constraints>
+        <constraint id="fc.dp.cap" type="max" value="2" field="ct.dp" scope="parent"/>
+        <constraint id="fc.pts.sentinel" type="max" value="0" field="pts" scope="parent"/>
+      </constraints>
+    </forceEntry>
+  </forceEntries>
+</catalogue>"#;
+    let raw = resolve(parse_raw(xml).unwrap()).unwrap();
+    let (ir, diags) = to_ir(&raw);
+
+    // The entry's costs keep their real, distinct names — only "pts" becomes "points".
+    let gladius = ir.entries.iter().find(|e| e.id == "e.gladius").unwrap();
+    let cost_names: Vec<&str> = gladius.costs.iter().map(|c| c.name.as_str()).collect();
+    assert_eq!(cost_names, vec!["points", "Detachment Points", "Crusade Points"]);
+
+    // Exactly one force constraint survives: the DP cap, with scope normalized
+    // parent -> force (a constraint declared on a forceEntry has that force as
+    // its parent) and field carrying the cost type's real name.
+    assert_eq!(ir.force_constraints.len(), 1, "unexpected force constraints: {:?}", ir.force_constraints);
+    let dp_cap = &ir.force_constraints[0];
+    assert_eq!(dp_cap.id, "fc.dp.cap");
+    assert_eq!(dp_cap.field, "Detachment Points");
+    assert_eq!(dp_cap.type_, "max");
+    assert_eq!(dp_cap.value, 2.0);
+    assert_eq!(dp_cap.scope, "force");
+    assert_eq!(dp_cap.target_type, "force");
+
+    // The pts sentinel is still dropped, with its usual diagnostic.
+    assert!(
+        diags.iter().any(|d| d.code == "constraint.force_points_sentinel_skipped"
+            && d.message.contains("fc.pts.sentinel")),
+        "expected force_points_sentinel_skipped diagnostic for fc.pts.sentinel: {:?}",
+        diags
+    );
+}
+
 #[test]
 fn maps_cost_modifier_with_condition() {
     let raw = resolve(parse_raw(include_bytes!("fixtures/mini40k.cat")).unwrap()).unwrap();
