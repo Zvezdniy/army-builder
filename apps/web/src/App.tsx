@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { IrCatalogue } from "@muster/domain";
 import { loadCatalogue } from "@muster/domain";
 import { createRoster, addUnit, addOption, toggleGroupMember, setGroupMemberCount, setCount, remove,
-  setDetachment, setPointsLimit, availableDetachments, selectedDetachment,
+  toggleDetachment, setPointsLimit, availableDetachments, selectedDetachment,
   detachmentSelectionIds } from "@muster/roster";
 import { evaluate, hiddenEntryIds, hiddenSelectionIds } from "@muster/engine-eval";
 import { RosterList } from "./components/RosterList";
@@ -158,7 +158,7 @@ export function App() {
           registry={registry} activeDescriptorId={activeDescriptorId}
           onSelectFaction={onSelectFaction} factionError={factionError}
           onSetPoints={(n) => setRoster((r) => setPointsLimit(r, n))}
-          onSetDetachment={(id) => setRoster((r) => setDetachment(r, id, catalogue))}
+          onToggleDetachment={(id) => setRoster((r) => toggleDetachment(r, id, catalogue))}
           onClose={() => setWizardOpen(false)} />
       )}
     </main>

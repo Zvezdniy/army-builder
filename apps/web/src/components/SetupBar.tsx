@@ -1,9 +1,10 @@
 import type { IrCatalogue, Roster } from "@muster/domain";
-import { availableDetachments, selectedDetachment } from "@muster/roster";
+import { availableDetachments, selectedDetachments } from "@muster/roster";
 
 /** Persistent, always-editable summary of the army setup: points · faction ·
- *  detachment. Each chip reopens the wizard on its step. The detachment chip is
- *  omitted when the catalogue models no detachment. */
+ *  detachment(s). Each chip reopens the wizard on its step. The detachment chip is
+ *  omitted when the catalogue models no detachment; several chosen detachments (11e)
+ *  are joined into one label instead of showing only the first. */
 export function SetupBar({
   catalogue, roster, onEdit,
 }: {
@@ -12,8 +13,9 @@ export function SetupBar({
   onEdit: (step: number) => void;
 }) {
   const detachments = availableDetachments(catalogue);
-  const chosenId = selectedDetachment(roster, catalogue);
-  const chosen = detachments.find((d) => d.id === chosenId);
+  const chosenNames = selectedDetachments(roster, catalogue)
+    .map((id) => detachments.find((d) => d.id === id)?.name)
+    .filter((n): n is string => n !== undefined);
 
   const chip = (step: number, label: string, value: string) => (
     <button className="setup-chip" onClick={() => onEdit(step)}>
@@ -27,7 +29,7 @@ export function SetupBar({
     <div className="setup-bar" data-testid="setup-bar">
       {chip(0, "Points limit", `${roster.pointsLimit} pts`)}
       {chip(1, "Faction", catalogue.name)}
-      {detachments.length > 0 && chip(2, "Detachment", chosen?.name ?? "Choose…")}
+      {detachments.length > 0 && chip(2, "Detachment", chosenNames.length > 0 ? chosenNames.join(", ") : "Choose…")}
     </div>
   );
 }

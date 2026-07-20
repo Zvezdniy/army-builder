@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { IrCatalogue, IrCondition, IrConstraint, Roster } from "@muster/domain";
-import { buildState, aggregate } from "@muster/engine-eval";
+import { buildState, aggregate, resolveCosts } from "@muster/engine-eval";
 import type { EvalNode, EvalState } from "@muster/engine-eval";
 
 // Catalogue: two HQ, three Heavy units; a squad with 2 special-weapon options.
@@ -205,6 +205,77 @@ describe("aggregate", () => {
     const { state } = setup();
     const c: IrCondition = { id: "c1", value: 0, includeChildSelections: false, comparator: "atLeast", field: "selections", scope: "ancestor", targetType: "category", targetId: "cat.special" };
     expect(aggregate(null, c, state)).toBe(0);
+  });
+});
+
+describe("aggregate applies cost modifiers to named cost types (not just points)", () => {
+  // The real bug this guards: a "Detachment Points" force cap constraint's `actual`
+  // side goes through aggregate() → (previously) cost.ts's raw costOfType, which
+  // read the UNMODIFIED value even though a detachment's cost can carry a `set`
+  // modifier (e.g. real Bastion Task Force: base 2, `set 3`). A node whose DP cost
+  // has a passing modifier must aggregate at the modified value, not the base one.
+  const dpCat: IrCatalogue = {
+    id: "c3", name: "C3", gameSystemId: "gs", revision: 1, forceConstraints: [], categoryNames: {},
+    entries: [
+      {
+        id: "e.bastion", name: "Bastion Task Force", categories: ["cat.det"], constraints: [], children: [],
+        costs: [{
+          name: "Detachment Points", value: 2,
+          modifiers: [{
+            id: "bump", type: "set", value: 3,
+            conditions: [{ id: "gate", comparator: "atLeast", value: 1, field: "selections", scope: "force", targetType: "entry", targetId: "e.gate", includeChildSelections: false }],
+          }],
+        }],
+      },
+      { id: "e.gate", name: "Gate", categories: [], constraints: [], children: [], costs: [] },
+    ],
+  };
+
+  function rosterWith(gate: boolean): Roster {
+    return {
+      id: "r", name: "R", gameSystemId: "gs", catalogueId: "c3", catalogueRevision: 1, pointsLimit: 2000,
+      selections: [
+        { id: "s.bastion", entryId: "e.bastion", count: 1, selections: [] },
+        ...(gate ? [{ id: "s.gate", entryId: "e.gate", count: 1, selections: [] }] : []),
+      ],
+    };
+  }
+
+  const forceDpConstraint: IrConstraint = {
+    id: "fc.dp", value: 0, includeChildSelections: false, type: "max",
+    field: "Detachment Points", scope: "force", targetType: "entry", targetId: "e.bastion",
+  };
+
+  it("aggregates the MODIFIED value when the modifier's condition passes", () => {
+    const state = buildState(rosterWith(true), dpCat);
+    const { costOf } = resolveCosts(state);
+    expect(aggregate(null, forceDpConstraint, state, costOf)).toBe(3);
+  });
+
+  it("aggregates the BASE value when the modifier's condition does not pass", () => {
+    const state = buildState(rosterWith(false), dpCat);
+    const { costOf } = resolveCosts(state);
+    expect(aggregate(null, forceDpConstraint, state, costOf)).toBe(2);
+  });
+
+  it("leaves the points path unchanged (still routed through costOf, not the named-cost path)", () => {
+    // A points-field aggregate must keep using `costOf(n)` directly — unaffected by
+    // this change, which only touches the "any other field" branch.
+    const cat: IrCatalogue = {
+      id: "c4", name: "C4", gameSystemId: "gs", revision: 1, forceConstraints: [], categoryNames: {},
+      entries: [{ id: "e.u", name: "U", categories: ["cat.u"], constraints: [], children: [], costs: [{ name: "points", value: 50 }] }],
+    };
+    const roster: Roster = {
+      id: "r", name: "R", gameSystemId: "gs", catalogueId: "c4", catalogueRevision: 1, pointsLimit: 2000,
+      selections: [{ id: "s.u", entryId: "e.u", count: 1, selections: [] }],
+    };
+    const state = buildState(roster, cat);
+    const { costOf } = resolveCosts(state);
+    const pointsConstraint: IrConstraint = {
+      id: "fc.pts", value: 0, includeChildSelections: false, type: "max",
+      field: "points", scope: "force", targetType: "category", targetId: "cat.u",
+    };
+    expect(aggregate(null, pointsConstraint, state, costOf)).toBe(50);
   });
 });
 

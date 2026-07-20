@@ -23,6 +23,20 @@ pub fn to_ir(cat: &RawCatalogue) -> (IrCatalogue, Vec<Diagnostic>) {
     (ir, diags)
 }
 
+/// A cost type is THE points cost type iff its id is "pts" or its resolved
+/// name, trimmed and lowercased, is exactly "pts" or "points" — nothing
+/// broader. This is the one predicate all three call sites (the constraint
+/// field namer, its `map_field` sibling, and the cost namer) must share:
+/// three divergent copies of a `.contains("point")` check is what previously
+/// collapsed "Detachment Points" and "Crusade Points" onto the reserved IR
+/// name "points" alongside the real points cost.
+fn is_points_cost_type(type_id: &str, type_name: &str) -> bool {
+    if type_id == "pts" {
+        return true;
+    }
+    matches!(type_name.trim().to_lowercase().as_str(), "pts" | "points")
+}
+
 /// Map a force's per-category constraints. In BattleScribe the "1-2 HQ" style
 /// min/max is nested inside the categoryLink it constrains (categoryLink extends
 /// ContainerEntryBase, so it carries its own <constraints>), which makes the
@@ -41,7 +55,17 @@ fn map_force_constraints(force: &crate::raw::RawForce, cat: &RawCatalogue, diags
         }
     }
     for c in &force.constraints {
-        if let Some(mapped) = map_constraint(c, "force", &force.id, cat, diags) {
+        if let Some(mut mapped) = map_constraint(c, "force", &force.id, cat, diags) {
+            // A constraint declared directly on a forceEntry (not inside one of
+            // its categoryLinks) has that force as its structural parent, so a
+            // BattleScribe scope of "parent" here denotes the force itself —
+            // normalize it to "force" so eval's scope switch (which knows
+            // force/roster/self/etc., not "parent") evaluates it. Category-link
+            // constraints (the loop above) are left alone: their "parent" means
+            // the categoryLink's owner, which is a different node.
+            if mapped.scope == "parent" {
+                mapped.scope = "force".to_string();
+            }
             // A force-level constraint on the POINTS cost type is a BattleScribe
             // accounting/game-size sentinel (e.g. the Army Roster's inert `max 0 pts`,
             // or a sibling Crusade Force's `max 0 pts` at force scope), never a
@@ -468,7 +492,7 @@ fn map_constraint(rc: &RawConstraint, target_type: &str, target_id: &str, cat: &
         "selections".to_string()
     } else {
         let type_name = cat.cost_types.get(&rc.field).cloned().unwrap_or_default();
-        if rc.field == "pts" || type_name.to_lowercase().contains("point") {
+        if is_points_cost_type(&rc.field, &type_name) {
             "points".to_string()
         } else if let Some(name) = cat.cost_types.get(&rc.field) {
             // A known cost type that isn't "points" (e.g. 11e's "Enhancements") —
@@ -529,7 +553,7 @@ fn map_field(field: &str, cat: &RawCatalogue, code_prefix: &str, id_for_msg: &st
         return Some("forces".to_string());
     }
     let type_name = cat.cost_types.get(field).cloned().unwrap_or_default();
-    if field == "pts" || type_name.to_lowercase().contains("point") {
+    if is_points_cost_type(field, &type_name) {
         Some("points".to_string())
     } else {
         diags.push(Diagnostic {
@@ -973,11 +997,13 @@ fn map_characteristic_modifier(
     })
 }
 
-/// A cost's IR name is "points" when it is the points cost type (id "pts" or a
-/// type whose name starts with "point"); only "points" is scored by engine-eval.
+/// A cost's IR name is "points" when it is the points cost type (id "pts", or
+/// a type whose resolved name is exactly "pts"/"points"); only "points" is
+/// scored by engine-eval. Every other cost type (e.g. "Detachment Points",
+/// "Crusade Points") keeps its real name.
 fn map_cost(c: &RawCost, cat: &RawCatalogue) -> IrCost {
     let type_name = cat.cost_types.get(&c.type_id).cloned().unwrap_or_default();
-    let name = if c.type_id == "pts" || type_name.to_lowercase().contains("point") {
+    let name = if is_points_cost_type(&c.type_id, &type_name) {
         "points".to_string()
     } else {
         type_name
