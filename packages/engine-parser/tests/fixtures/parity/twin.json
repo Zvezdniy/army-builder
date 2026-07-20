@@ -13,6 +13,7 @@
     "infoLinks":[{"id":"il1","name":"Invulnerable Save","type":"profile","hidden":false,"targetId":"p.inv"}],
     "profiles":[{"id":"p","name":"U","typeName":"Unit","typeId":"pt","characteristics":[
       {"name":"T","typeId":"t","$text":"4"},{"name":"InSv","typeId":"i","$text":"4+"}]}],
+    "rules":[{"id":"r.leader","name":"Leader","description":"May be attached to a Troops unit."}],
     "selectionEntryGroups":[{"id":"g","name":"Wargear",
       "constraints":[{"id":"g.max","type":"max","value":1,"field":"selections","scope":"parent"}],
       "selectionEntries":[

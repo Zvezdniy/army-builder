@@ -183,6 +183,52 @@ fn reads_nested_rule_by_name_and_alias() {
 }
 
 #[test]
+fn entry_rules_declare_rule_names_and_text_lands_once_in_rule_texts() {
+    // A selectionEntry's own <rules> is the ASSOCIATION (which entry declares
+    // which rule); the TEXT still comes from the separate flat pass and must
+    // not be duplicated onto the entry itself.
+    let xml = br#"<catalogue id="c" name="C" gameSystemId="g" revision="1">
+      <selectionEntries>
+        <selectionEntry id="u" name="Unit" type="unit">
+          <rules>
+            <rule id="r1" name="R1"><description>R1 text.</description></rule>
+          </rules>
+        </selectionEntry>
+      </selectionEntries>
+    </catalogue>"#;
+    let cat = parse_raw(xml).unwrap();
+    let u = cat.entries.iter().find(|e| e.id == "u").unwrap();
+    assert_eq!(u.rule_names, vec!["R1".to_string()]);
+    assert_eq!(cat.rules.get("R1").map(String::as_str), Some("R1 text."));
+}
+
+#[test]
+fn entry_rule_names_are_deduped_in_declaration_order() {
+    let xml = br#"<catalogue id="c" name="C" gameSystemId="g" revision="1">
+      <selectionEntries>
+        <selectionEntry id="u" name="Unit" type="unit">
+          <rules>
+            <rule id="r1" name="R1"><description>t1</description></rule>
+            <rule id="r2" name="R2"><description>t2</description></rule>
+            <rule id="r3" name="R1"><description>t1 again</description></rule>
+            <rule id="r4" name=""/>
+          </rules>
+        </selectionEntry>
+      </selectionEntries>
+    </catalogue>"#;
+    let cat = parse_raw(xml).unwrap();
+    let u = cat.entries.iter().find(|e| e.id == "u").unwrap();
+    assert_eq!(u.rule_names, vec!["R1".to_string(), "R2".to_string()]);
+}
+
+#[test]
+fn entry_without_rules_has_empty_rule_names() {
+    let raw = parse_raw(include_bytes!("fixtures/mini40k.cat")).unwrap();
+    let squad = raw.entries.iter().find(|e| e.id == "e.squad").unwrap();
+    assert!(squad.rule_names.is_empty());
+}
+
+#[test]
 fn reads_hidden_attr_and_modifier_value_raw() {
     let xml = br#"<catalogue id="c" name="C" gameSystemId="g" revision="1">
       <selectionEntries>

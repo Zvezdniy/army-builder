@@ -1036,6 +1036,32 @@ fn omits_empty_category_and_rule_maps() {
 }
 
 #[test]
+fn maps_entry_rule_names_and_omits_when_empty() {
+    let xml = br#"<catalogue id="c" name="C" gameSystemId="g" revision="1">
+      <selectionEntries>
+        <selectionEntry id="u" name="Unit" type="unit">
+          <rules>
+            <rule id="r1" name="Leader"><description>May be attached to a Troops unit.</description></rule>
+          </rules>
+        </selectionEntry>
+        <selectionEntry id="v" name="Plain" type="unit"/>
+      </selectionEntries>
+    </catalogue>"#;
+    let raw = resolve(parse_raw(xml).unwrap()).unwrap();
+    let (ir, _diags) = to_ir(&raw);
+    let u = ir.entries.iter().find(|e| e.id == "u").unwrap();
+    assert_eq!(u.rule_names, vec!["Leader".to_string()]);
+    assert_eq!(ir.rule_texts.get("Leader").map(String::as_str), Some("May be attached to a Troops unit."));
+    let v = ir.entries.iter().find(|e| e.id == "v").unwrap();
+    assert!(v.rule_names.is_empty());
+    let json = serde_json::to_value(&ir).unwrap();
+    let u_json = json["entries"].as_array().unwrap().iter().find(|e| e["id"] == "u").unwrap();
+    assert_eq!(u_json["ruleNames"], serde_json::json!(["Leader"]));
+    let v_json = json["entries"].as_array().unwrap().iter().find(|e| e["id"] == "v").unwrap();
+    assert!(v_json.get("ruleNames").is_none(), "empty ruleNames omitted from serialization");
+}
+
+#[test]
 fn maps_hidden_modifier_with_instance_of_roster_scope() {
     let xml = br#"<?xml version="1.0" encoding="utf-8"?>
 <catalogue id="c" name="C" revision="1" gameSystemId="gs"

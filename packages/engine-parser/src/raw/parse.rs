@@ -88,9 +88,11 @@ pub fn parse_raw(bytes: &[u8]) -> Result<RawCatalogue, ParseError> {
         }
     }
     // Rule definitions live both in top-level <sharedRules>/<rules> (game system)
-    // and nested inside selectionEntries/forceEntries (faction rules). The main
-    // structural loop above skips nested <rules>; a flat second pass captures every
-    // <rule> definition regardless of nesting.
+    // and nested inside selectionEntries/forceEntries (faction rules). read_entry
+    // (below) structurally captures a selectionEntry's own <rules> NAMES (the
+    // entry->rule association) but not their text; forceEntries/groups still skip
+    // <rules> entirely. A flat second pass here captures every <rule> definition's
+    // TEXT regardless of nesting, so it stays the single source for rule text.
     cat.rules = read_all_rules(bytes)?;
     Ok(cat)
 }
@@ -182,6 +184,7 @@ fn read_entry(start: &BytesStart, r: &mut SafeXmlReader) -> Result<RawEntry, Par
                     b"modifiers" => read_modifiers_into(&mut entry.modifiers, r)?,
                     b"profiles" => read_profiles_into(&mut entry.profiles, r, b"profiles")?,
                     b"infoLinks" => read_infolinks_into(&mut entry.info_links, r)?,
+                    b"rules" => read_entry_rule_names_into(&mut entry.rule_names, r)?,
                     other => {
                         let name = other.to_vec();
                         skip_element(r, &name)?;
@@ -517,6 +520,48 @@ fn read_infolinks_into(dst: &mut Vec<RawInfoLink>, r: &mut SafeXmlReader) -> Res
                 _ => {}
             },
             None => return Err(ParseError::MalformedXml("unexpected EOF in infoLinks".to_string())),
+        }
+    }
+}
+
+/// Read a selectionEntry's own `<rules>` block, capturing just the declaring
+/// `name` of each `<rule>`, in declaration order, deduped — the ASSOCIATION
+/// between this entry and a rule (RawEntry.rule_names), not the rule's TEXT
+/// (which the flat `read_all_rules` pass captures separately into
+/// `RawCatalogue.rules`, regardless of nesting — never duplicated here). A
+/// `<rule>` with children (description/alias) has them skipped; a
+/// self-closing `<rule/>` still contributes its name. An entryLink's own
+/// inline content is out of scope for this reader (RawEntryLink has no
+/// `rules` field; a `<rules>` found directly under an `<entryLink>` falls
+/// through to that reader's existing `other => skip_element` unchanged).
+fn read_entry_rule_names_into(dst: &mut Vec<String>, r: &mut SafeXmlReader) -> Result<(), ParseError> {
+    loop {
+        match r.read_event()? {
+            Some(ev) => match ev.event {
+                Event::Start(e) if e.local_name().as_ref() == b"rule" => {
+                    if let Some(name) = attr(&e, b"name") {
+                        if !name.is_empty() && !dst.contains(&name) {
+                            dst.push(name);
+                        }
+                    }
+                    skip_element(r, b"rule")?;
+                }
+                Event::Empty(e) if e.local_name().as_ref() == b"rule" => {
+                    if let Some(name) = attr(&e, b"name") {
+                        if !name.is_empty() && !dst.contains(&name) {
+                            dst.push(name);
+                        }
+                    }
+                }
+                Event::End(end) if end.local_name().as_ref() == b"rules" => return Ok(()),
+                Event::Start(e) => {
+                    skip_element(r, e.local_name().as_ref())?;
+                }
+                _ => {}
+            },
+            None => {
+                return Err(ParseError::MalformedXml("unexpected EOF in rules".to_string()))
+            }
         }
     }
 }

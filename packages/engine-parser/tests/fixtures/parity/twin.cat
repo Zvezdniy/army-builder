@@ -40,6 +40,9 @@
           <characteristic name="T" typeId="t">4</characteristic>
           <characteristic name="InSv" typeId="i">4+</characteristic>
         </characteristics></profile></profiles>
+      <rules>
+        <rule id="r.leader" name="Leader"><description>May be attached to a Troops unit.</description></rule>
+      </rules>
       <selectionEntryGroups>
         <selectionEntryGroup id="g" name="Wargear">
           <constraints><constraint id="g.max" type="max" value="1" field="selections" scope="parent"/></constraints>
