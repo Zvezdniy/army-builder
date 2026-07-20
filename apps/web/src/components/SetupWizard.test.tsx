@@ -98,6 +98,70 @@ const modifiedDpCat: IrCatalogue = {
   ],
 };
 
+// A catalogue where the SAME named group ("Gladius Task Force Enhancements") appears
+// at two different placements in the tree with DIFFERENT members — the entryLink
+// scenario: a placement may declare its own children, so the same group name can
+// legitimately carry a different member set at each spot it occurs.
+const dupEnhCat: IrCatalogue = {
+  id: "cdup", name: "Dup", gameSystemId: "gs", revision: 1, forceConstraints: [], categoryNames: {},
+  entries: [
+    // A placement elsewhere in the tree, carrying the group name with BOTH
+    // members. It is reached only AFTER the detachment's own placement below in
+    // a first-match traversal — pinning that a union, not a first-match, is
+    // required to see this member set at all.
+    {
+      id: "e.other", name: "Other Placement", type: "upgrade", costs: [], categories: [], constraints: [], children: [],
+      groups: [{ id: "g.enh.b", name: "Gladius Task Force Enhancements", memberEntryIds: ["e.enh1", "e.enh2"], constraints: [] }],
+    },
+    {
+      id: "e.det", name: "Detachment", type: "upgrade", costs: [], categories: [], constraints: [],
+      groups: [{
+        id: "g.det", name: "Detachment", memberEntryIds: ["e.gladius"],
+        constraints: [
+          { id: "c.max1", type: "max", value: 1, scope: "self" },
+          { id: "c.min1", type: "min", value: 1, scope: "self" },
+        ],
+      }],
+      children: [
+        {
+          id: "e.gladius", name: "Gladius Task Force", type: "upgrade", costs: [], categories: [], constraints: [], children: [],
+          groups: [{ id: "g.enh.a", name: "Gladius Task Force Enhancements", memberEntryIds: ["e.enh1"], constraints: [] }],
+        },
+      ],
+    },
+    { id: "e.enh1", name: "Artificer Armour", type: "upgrade", costs: [{ name: "pts", value: 10 }], categories: [], constraints: [], children: [] },
+    { id: "e.enh2", name: "Iron Halo", type: "upgrade", costs: [{ name: "pts", value: 15 }], categories: [], constraints: [], children: [] },
+  ],
+};
+
+// A single-placement catalogue (only one group named "Gladius Task Force
+// Enhancements" anywhere in the tree) whose members are declared out of id order —
+// pins that the preview renders members in first-encounter (declaration) order,
+// unchanged from before the union-across-placements change.
+const orderedEnhCat: IrCatalogue = {
+  id: "cord", name: "Ordered", gameSystemId: "gs", revision: 1, forceConstraints: [], categoryNames: {},
+  entries: [
+    {
+      id: "e.det", name: "Detachment", type: "upgrade", costs: [], categories: [], constraints: [],
+      groups: [{
+        id: "g.det", name: "Detachment", memberEntryIds: ["e.gladius"],
+        constraints: [
+          { id: "c.max1", type: "max", value: 1, scope: "self" },
+          { id: "c.min1", type: "min", value: 1, scope: "self" },
+        ],
+      }],
+      children: [
+        {
+          id: "e.gladius", name: "Gladius Task Force", type: "upgrade", costs: [], categories: [], constraints: [], children: [],
+          groups: [{ id: "g.enh", name: "Gladius Task Force Enhancements", memberEntryIds: ["e.enh2", "e.enh1"], constraints: [] }],
+        },
+      ],
+    },
+    { id: "e.enh1", name: "Artificer Armour", type: "upgrade", costs: [{ name: "pts", value: 10 }], categories: [], constraints: [], children: [] },
+    { id: "e.enh2", name: "Iron Halo", type: "upgrade", costs: [{ name: "pts", value: 15 }], categories: [], constraints: [], children: [] },
+  ],
+};
+
 const noop = () => {};
 
 describe("SetupWizard", () => {
@@ -133,6 +197,20 @@ describe("SetupWizard", () => {
     const roster = toggleDetachment(createRoster(cat, 2000), "e.gladius", cat);
     render(<SetupWizard catalogue={cat} roster={roster} initialStep={2} onSetPoints={noop} onToggleDetachment={noop} onClose={noop} />);
     expect(screen.getByText("Artificer Armour")).toBeTruthy();
+  });
+
+  it("the enhancement preview unions members across every placement of the same-named group", () => {
+    const roster = toggleDetachment(createRoster(dupEnhCat, 2000), "e.gladius", dupEnhCat);
+    render(<SetupWizard catalogue={dupEnhCat} roster={roster} initialStep={2} onSetPoints={noop} onToggleDetachment={noop} onClose={noop} />);
+    expect(screen.getAllByText("Artificer Armour")).toHaveLength(1);
+    expect(screen.getAllByText("Iron Halo")).toHaveLength(1);
+  });
+
+  it("the enhancement preview renders members in first-encounter order (unchanged for a single placement)", () => {
+    const roster = toggleDetachment(createRoster(orderedEnhCat, 2000), "e.gladius", orderedEnhCat);
+    const { container } = render(<SetupWizard catalogue={orderedEnhCat} roster={roster} initialStep={2} onSetPoints={noop} onToggleDetachment={noop} onClose={noop} />);
+    const names = Array.from(container.querySelectorAll(".enh-name")).map((el) => el.textContent);
+    expect(names).toEqual(["Iron Halo", "Artificer Armour"]);
   });
 
   it("Start building is disabled until a detachment is chosen, then finishes", () => {

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { IrCatalogue, IrEntry, IrGroup, Roster } from "@muster/domain";
+import type { IrCatalogue, IrEntry, Roster } from "@muster/domain";
 import { availableDetachments, selectedDetachments, catalogueEntry } from "@muster/roster";
 import {
   pointsCost, correctedConstraintValue, DETACHMENT_POINTS,
@@ -15,19 +15,32 @@ function detachmentPointsCost(entry: IrEntry): number {
   return entry.costs.find((c) => c.name === DETACHMENT_POINTS)?.value ?? 0;
 }
 
-/** The enhancements a detachment unlocks: the members of its "<name> Enhancements"
- *  group (best-effort by group name — informational preview only). */
+/** The enhancements a detachment unlocks: the union of every group named
+ *  "<name> Enhancements" found anywhere in the catalogue tree (best-effort by group
+ *  name — informational preview only). An `entryLink` is a PLACEMENT, not a pointer —
+ *  it may declare its own children that apply only to that placement — so the same
+ *  named group can legitimately recur at many placements with different members.
+ *  Taking only the first match would silently hide members that only appear at a
+ *  later placement, so this walks the WHOLE tree and unions every match, deduping
+ *  by entry id in first-encounter order. */
 function enhancementsFor(catalogue: IrCatalogue, detachmentName: string): IrEntry[] {
   const wanted = `${detachmentName} Enhancements`;
   const stack: IrEntry[] = [...catalogue.entries];
-  let group: IrGroup | undefined;
-  while (stack.length > 0 && !group) {
+  const seen = new Set<string>();
+  const ids: string[] = [];
+  while (stack.length > 0) {
     const e = stack.pop() as IrEntry;
-    group = (e.groups ?? []).find((g) => g.name === wanted);
+    for (const group of e.groups ?? []) {
+      if (group.name !== wanted) continue;
+      for (const id of group.memberEntryIds) {
+        if (seen.has(id)) continue;
+        seen.add(id);
+        ids.push(id);
+      }
+    }
     stack.push(...e.children);
   }
-  if (!group) return [];
-  return group.memberEntryIds
+  return ids
     .map((id) => catalogueEntry(catalogue, id))
     .filter((e): e is IrEntry => e !== undefined);
 }
