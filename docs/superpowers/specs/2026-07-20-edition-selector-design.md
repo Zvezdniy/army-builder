@@ -133,3 +133,11 @@ any change to points/legality or the parser.
   warning, exactly as 10e faction failures are today; the edition still ships its other factions.
 - **Manifest/registry version skew:** a v1 manifest left over from an earlier run keeps working
   (attributed to 10e), so a stale `public/` never blanks the faction list.
+- **Deploy ordering (the skew in the OTHER direction).** The reverse pairing is *not* tolerant:
+  a pre-edition app build rejects a v2 manifest outright (`version !== 1` → null) and degrades
+  to bundled-only, i.e. the whole faction list disappears for that client. The scheduled
+  pipeline publishes catalogue data independently of the app, so **ship the app build before
+  the first v2 data publish**. Until then local dev is also affected: `apps/web/.env.local`
+  points `VITE_CATALOGUES_BASE` at the deployed GitHub Pages library, so the running app keeps
+  reading the old v1 10e-only data and shows no edition picker — indistinguishable from a
+  regression. Move that file aside to work against `apps/web/public`.
