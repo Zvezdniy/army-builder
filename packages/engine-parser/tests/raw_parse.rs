@@ -262,6 +262,69 @@ fn empty_entrylink_has_hidden_attr_no_modifiers() {
 }
 
 #[test]
+fn entrylink_reads_its_own_inline_content() {
+    // An entryLink is a placement, not a bare pointer: it may declare children that
+    // apply only to that placement (Task E1). All eight collections must survive
+    // the raw layer.
+    let xml = br#"<?xml version="1.0" encoding="utf-8"?>
+<catalogue id="c" name="C" revision="1" gameSystemId="gs"
+           xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+  <selectionEntries>
+    <selectionEntry id="host" name="Host" type="unit">
+      <entryLinks>
+        <entryLink id="lk" name="L" type="selectionEntryGroup" targetId="shared">
+          <selectionEntries>
+            <selectionEntry id="inline.entry" name="Inline Entry" type="upgrade"/>
+          </selectionEntries>
+          <selectionEntryGroups>
+            <selectionEntryGroup id="inline.group" name="Inline Group"/>
+          </selectionEntryGroups>
+          <entryLinks>
+            <entryLink id="inline.link" name="Inline Link" type="selectionEntry" targetId="other"/>
+          </entryLinks>
+          <constraints>
+            <constraint id="inline.constraint" type="max" value="1" field="selections" scope="parent"/>
+          </constraints>
+          <categoryLinks>
+            <categoryLink targetId="inline.category" primary="true"/>
+          </categoryLinks>
+          <costs>
+            <cost typeId="pts" value="10"/>
+          </costs>
+          <profiles>
+            <profile id="inline.profile" name="Inline Profile" typeName="Abilities"/>
+          </profiles>
+          <infoLinks>
+            <infoLink targetId="inline.rule" type="rule"/>
+          </infoLinks>
+        </entryLink>
+      </entryLinks>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>"#;
+    let raw = engine_parser::raw::parse_raw(xml).unwrap();
+    let host = raw.entries.iter().find(|e| e.id == "host").unwrap();
+    let lk = &host.entry_links[0];
+    assert_eq!(lk.entries.len(), 1);
+    assert_eq!(lk.entries[0].id, "inline.entry");
+    assert_eq!(lk.groups.len(), 1);
+    assert_eq!(lk.groups[0].id, "inline.group");
+    assert_eq!(lk.entry_links.len(), 1);
+    assert_eq!(lk.entry_links[0].id, "inline.link");
+    assert_eq!(lk.constraints.len(), 1);
+    assert_eq!(lk.constraints[0].id, "inline.constraint");
+    assert_eq!(lk.category_links.len(), 1);
+    assert_eq!(lk.category_links[0].target_id, "inline.category");
+    assert_eq!(lk.costs.len(), 1);
+    assert_eq!(lk.costs[0].type_id, "pts");
+    assert_eq!(lk.costs[0].value, 10.0);
+    assert_eq!(lk.profiles.len(), 1);
+    assert_eq!(lk.profiles[0].id, "inline.profile");
+    assert_eq!(lk.info_links.len(), 1);
+    assert_eq!(lk.info_links[0].target_id, "inline.rule");
+}
+
+#[test]
 fn reads_modifier_scope_and_affects() {
     // B1: a characteristic-modifier's BattleScribe addressing (`scope`/`affects`)
     // must survive the raw layer — both the Start (nested <conditions>) and Empty

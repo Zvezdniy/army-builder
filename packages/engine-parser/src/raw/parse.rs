@@ -770,7 +770,7 @@ fn read_entrylinks_into(
                         target_id: attr(&e, b"targetId").unwrap_or_default(),
                         link_type: attr(&e, b"type").unwrap_or_default(),
                         hidden: attr_bool(&e, b"hidden"),
-                        modifiers: Vec::new(),
+                        ..Default::default()
                     });
                 }
                 Event::Start(e) if e.local_name().as_ref() == b"entryLink" => {
@@ -780,15 +780,31 @@ fn read_entrylinks_into(
                         link_type: attr(&e, b"type").unwrap_or_default(),
                         hidden: attr_bool(&e, b"hidden"),
                         modifiers: Vec::new(),
+                        ..Default::default()
                     };
                     loop {
                         match r.read_event()? {
                             Some(inner) => match inner.event {
-                                Event::Start(m) if m.local_name().as_ref() == b"modifiers" => {
-                                    read_modifiers_into(&mut link.modifiers, r)?;
-                                }
+                                Event::Start(m) => match m.local_name().as_ref() {
+                                    b"modifiers" => read_modifiers_into(&mut link.modifiers, r)?,
+                                    b"selectionEntries" => {
+                                        read_entries_into(&mut link.entries, r, b"selectionEntries")?
+                                    }
+                                    b"selectionEntryGroups" => {
+                                        read_groups_into(&mut link.groups, r, b"selectionEntryGroups")?
+                                    }
+                                    b"entryLinks" => read_entrylinks_into(&mut link.entry_links, r)?,
+                                    b"constraints" => read_constraints_into(&mut link.constraints, r)?,
+                                    b"categoryLinks" => read_catlinks_into(&mut link.category_links, r)?,
+                                    b"costs" => read_costs_into(&mut link.costs, r)?,
+                                    b"profiles" => read_profiles_into(&mut link.profiles, r, b"profiles")?,
+                                    b"infoLinks" => read_infolinks_into(&mut link.info_links, r)?,
+                                    other => {
+                                        let name = other.to_vec();
+                                        skip_element(r, &name)?;
+                                    }
+                                },
                                 Event::End(end) if end.local_name().as_ref() == b"entryLink" => break,
-                                Event::Start(other) => skip_element(r, other.local_name().as_ref())?,
                                 _ => {}
                             },
                             None => return Err(ParseError::MalformedXml(
