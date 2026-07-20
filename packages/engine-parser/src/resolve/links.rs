@@ -438,10 +438,15 @@ fn drop_inline_duplicate_ids(
     // Symmetric case deliberately NOT closed here: two DIFFERENT (non-colliding,
     // even under `collect_group_ids`'s nested walk) groups — existing/existing,
     // existing/inline or inline/inline — whose MEMBER trees collide with each
-    // other without either GROUP id colliding. A collision on a group's own id —
-    // top-level or nested inside a sub-group tree — is fully handled by the pass
-    // above (the whole duplicate group is dropped, like any other duplicate); a
-    // collision buried inside two otherwise-legitimate groups' members cannot be
+    // other without either GROUP id colliding. The pass above drops an inline
+    // group whose OWN top-level id is already taken, and it seeds from the whole
+    // nested tree — so an inline group colliding with a buried sub-group id is
+    // caught. The reverse is NOT: an inline group whose own id is free but which
+    // NESTS a colliding sub-group id passes untouched and undiagnosed, because
+    // the check tests `g.id` alone. Closing it means dropping a whole inline
+    // group over one buried sub-group, discarding its other legitimate content —
+    // the same trade-off as the member case below, so it is left open with it.
+    // A collision buried inside two otherwise-legitimate groups' members cannot be
     // resolved by dropping either group whole without also discarding its other,
     // non-colliding members and corrupting its own choose-N accounting (member
     // count, default) — that needs per-member surgery this function does not
@@ -484,6 +489,12 @@ fn collect_group_member_ids(g: &RawGroup, out: &mut HashSet<String>) {
 /// a group and every sub-group beneath it. Mirrors `collect_group_member_ids`
 /// above, one level up: that walk finds ids a group's MEMBERS occupy, this one
 /// finds ids a group's OWN (and its sub-groups') ids occupy.
+///
+/// Deliberately conservative: `map_group` returns None for a constraint-less
+/// group, so such a group never emits an IrGroup and could not have collided in
+/// the IR at all. Seeding from it anyway can drop a harmless inline group. That
+/// matches the top-level behaviour this replaced, and no real 10e/11e catalogue
+/// exercises the difference.
 fn collect_group_ids(g: &RawGroup, out: &mut HashSet<String>) {
     out.insert(g.id.clone());
     for sub in &g.groups {
@@ -1318,7 +1329,10 @@ mod tests {
         // Finding 1 (review): the existing target's group "outer" nests a
         // sub-group "X". An inline group ALSO declares id "X" — the old
         // top-level-only seed (`existing_groups.iter().map(|g| g.id)`) would
-        // miss this and let "X" reach the IR twice: `collect_groups` (ir/map.rs)
+        // miss this and let "X" reach the resolved tree twice (these fixture
+        // groups carry no constraint, so `map_group` drops them before the IR —
+        // the assertion below is on the resolved tree, where the duplicate is
+        // introduced). It matters because `collect_groups` (ir/map.rs)
         // flattens every nested sub-group into the IR the same way
         // `flatten_group_members` flattens members, so a nested sub-group id is
         // exactly as "already on this placement" as a top-level one.

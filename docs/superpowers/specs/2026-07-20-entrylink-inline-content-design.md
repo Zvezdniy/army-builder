@@ -69,8 +69,9 @@ The merge rule is per collection, chosen from what the data actually contains:
   tree (existing or itself just inlined; `flatten_group_members` hoists group members into
   the owning entry's IR children too) — is diagnosed (`entryLink.inline_duplicate_id`) and
   DROPPED. The survivor is not simply "declaration order": the member-tree seed is built
-  before top-level entries are checked, so a group member always wins over a top-level
-  inline entry regardless of which was declared first; among top-level entries themselves
+  before top-level entries are checked, so a member of a SURVIVING group always wins over a
+  top-level inline entry regardless of which was declared first (a dropped group's members
+  do not — the group pass runs first precisely so they cannot); among top-level entries themselves
   (no group on either side), the first one declared wins. Real data: 56 cases at first
   measurement across both editions, overwhelmingly byte-identical duplicates of content
   already reachable another way; later waves closed further cases the group-member-tree
