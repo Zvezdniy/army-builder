@@ -260,7 +260,29 @@ fn apply_link_content(
         // itself was already named (map_entry concatenates a categoryLink's
         // constraints onto the entry, keyed off the surviving link).
         match resolved.category_links.iter_mut().find(|e| e.target_id == cl.target_id) {
-            Some(existing) => existing.constraints.extend(cl.constraints.iter().cloned()),
+            Some(existing) => {
+                // map_entry concatenates EVERY categoryLink's constraints onto the
+                // entry unconditionally (ir/map.rs), so merging two constraints
+                // that share an id here would put both on the entry — mirror
+                // drop_inline_duplicate_ids and drop the repeat, diagnosed. Inert
+                // on real data today (verified: zero 11e link categoryLinks carry
+                // constraints at all), but it is the one place this branch would
+                // otherwise ADD a duplicate-id path.
+                let mut seen: HashSet<String> =
+                    existing.constraints.iter().map(|c| c.id.clone()).collect();
+                for c in &cl.constraints {
+                    if seen.insert(c.id.clone()) {
+                        existing.constraints.push(c.clone());
+                    } else {
+                        diags.push(Diagnostic {
+                            code: "entryLink.categoryLink_constraint_duplicate_id".to_string(),
+                            message: format!(
+                                "entryLink's categoryLink to {} declares constraint {}, which this placement's categoryLink already has (dropped)",
+                                cl.target_id, c.id),
+                        });
+                    }
+                }
+            }
             None => resolved.category_links.push(cl.clone()),
         }
     }
@@ -343,7 +365,44 @@ fn drop_inline_duplicate_ids(
     existing_groups: &[RawGroup], inline_groups: &mut Vec<RawGroup>,
     diags: &mut Vec<Diagnostic>,
 ) {
+    // `flatten_group_members` (ir/map.rs) hoists a group's members — recursively
+    // through its own sub-groups — into the OWNING ENTRY's IR children. So an id
+    // that reaches this placement only via a group's member tree is exactly as
+    // "already on this placement" as a top-level entry id, even though it never
+    // appears in `existing_entries`/`inline_entries` themselves. Seed the entries
+    // `seen` set with every id in that reachable member tree — BOTH from
+    // `existing_groups` (already on the target before this link) AND from
+    // `inline_groups` (this SAME link's own additions, already fully resolved by
+    // the time this runs) — or an inline entry repeating one survives the check
+    // below and reaches `children` a second time.
+    //
+    // Real case (`Imperium - Space Marines.json`): the placement link to "Twin
+    // lightning claws" declares two of its OWN nested entryLinks — one straight to
+    // entry `4485-…` ("Archeotech Armament upgrade"), the other to group `8cf2-…`
+    // ("Weapon Upgrades"), which itself nests down to group `eb04-…` ("Codex
+    // Crusade Relic Upgrades") whose member is that SAME `4485-…`. Neither
+    // `existing_entries` nor `existing_groups` has it — "Twin lightning claws" (the
+    // link's target) carries no groups of its own at all — so only cross-checking
+    // against `inline_groups` catches it. This is the one real-data 11e regression
+    // this fix closes (measured against a `main` baseline over both editions); it
+    // is a collision between a link's own two nested declarations, not a
+    // pre-existing-target-group collision.
+    //
+    // Symmetric case deliberately NOT closed here: two DIFFERENT (non-colliding by
+    // their own ids) groups — existing/existing, existing/inline or inline/inline —
+    // whose MEMBER trees collide with each other without either colliding with a
+    // top-level entry id. An id-collision on a group's own id can just drop the
+    // whole group, like any other duplicate; a collision buried inside two
+    // otherwise-legitimate groups' members cannot be resolved by dropping either
+    // group whole without also discarding its other, non-colliding members and
+    // corrupting its own choose-N accounting (member count, default) — that needs
+    // per-member surgery this function does not attempt. No real 10e/11e catalogue
+    // exercises this narrower shape (verified over both editions against the same
+    // `main` baseline); if one ever does, this is the place to extend the check.
     let mut seen: HashSet<String> = existing_entries.iter().map(|e| e.id.clone()).collect();
+    for g in existing_groups.iter().chain(inline_groups.iter()) {
+        collect_group_member_ids(g, &mut seen);
+    }
     inline_entries.retain(|e| {
         if seen.insert(e.id.clone()) {
             true
@@ -371,6 +430,18 @@ fn drop_inline_duplicate_ids(
             false
         }
     });
+}
+
+/// Collect a group's member entry ids, recursively through its sub-groups —
+/// the same walk `flatten_group_members` (ir/map.rs) does when it hoists group
+/// members into the owning entry's IR children.
+fn collect_group_member_ids(g: &RawGroup, out: &mut HashSet<String>) {
+    for e in &g.entries {
+        out.insert(e.id.clone());
+    }
+    for sub in &g.groups {
+        collect_group_member_ids(sub, out);
+    }
 }
 
 /// Inline each `type="profile"` infoLink's target profile into `profiles`.
@@ -850,6 +921,42 @@ mod tests {
     }
 
     #[test]
+    fn link_duplicate_category_constraint_sharing_an_id_is_dropped_not_duplicated() {
+        // Finding 2 (review minor): the merge above appends a duplicate
+        // categoryLink's constraints unconditionally, so if the target's own
+        // categoryLink constraint and the link's constraint happen to SHARE an
+        // id, map_entry (ir/map.rs) would concatenate both onto the entry as two
+        // constraints with the same id. Mirror drop_inline_duplicate_ids: the
+        // repeat is dropped, diagnosed, exactly one constraint with that id
+        // survives.
+        let mut target = entry("t", vec![]);
+        target.category_links.push(RawCategoryLink {
+            target_id: "c1".into(), constraints: vec![constraint("shared.max", 2.0)], ..Default::default()
+        });
+        let mut rich = link("t");
+        rich.category_links.push(RawCategoryLink {
+            target_id: "c1".into(), constraints: vec![constraint("shared.max", 1.0)], ..Default::default()
+        });
+        let owner = RawEntry {
+            id: "owner".into(), entry_type: "unit".into(),
+            entry_links: vec![rich], ..Default::default()
+        };
+        let cat = RawCatalogue {
+            id: "c".into(), entries: vec![owner], shared_entries: vec![target], ..Default::default()
+        };
+        let mut diags = Vec::new();
+        let resolved = resolve_with_diags(cat, &mut diags).unwrap();
+        let clone = &resolved.entries[0].entries[0];
+        assert_eq!(clone.category_links.len(), 1);
+        let matches: Vec<&RawConstraint> = clone.category_links[0].constraints.iter()
+            .filter(|c| c.id == "shared.max").collect();
+        assert_eq!(matches.len(), 1, "exactly one constraint with the shared id survives");
+        assert_eq!(matches[0].value, 2.0, "the target's own constraint (processed first) wins");
+        assert!(diags.iter().any(|d| d.code == "entryLink.categoryLink_constraint_duplicate_id"
+            && d.message.contains("shared.max") && d.message.contains("dropped")));
+    }
+
+    #[test]
     fn link_profile_and_infolink_reach_the_clone() {
         let target = entry("t", vec![]);
         let mut rich = link("t");
@@ -1086,6 +1193,77 @@ mod tests {
         let clone = &resolved.entries[0].entries[0];
         assert_eq!(clone.groups.iter().filter(|g| g.id == "gdup").count(), 1,
             "the second inline group with the same id was dropped");
+    }
+
+    #[test]
+    fn link_inline_duplicate_id_via_existing_group_member_is_dropped() {
+        // Finding 1 (residual, real-data): a duplicate id can reach the clone via
+        // a GROUP's member, not only a top-level child — `flatten_group_members`
+        // (ir/map.rs) hoists a group's members into IrEntry.children too, so an id
+        // buried in an EXISTING group's members is just as "already here" as a
+        // top-level one. The target already carries group "g0" whose member is
+        // "dup"; the link also declares an inline entry with that SAME id
+        // directly. Exactly one "dup" must reach the entry.
+        let mut target = entry("t", vec![]);
+        let mut g0 = RawGroup { id: "g0".into(), ..Default::default() };
+        g0.entries.push(entry("dup", vec![]));
+        target.groups.push(g0);
+        let mut rich = link("t");
+        rich.entries.push(entry("dup", vec![]));
+        let owner = RawEntry {
+            id: "owner".into(), entry_type: "unit".into(),
+            entry_links: vec![rich], ..Default::default()
+        };
+        let cat = RawCatalogue {
+            id: "c".into(), entries: vec![owner], shared_entries: vec![target], ..Default::default()
+        };
+        let mut diags = Vec::new();
+        let resolved = resolve_with_diags(cat, &mut diags).unwrap();
+        assert!(diags.iter().any(|d| d.code == "entryLink.inline_duplicate_id"
+            && d.message.contains("dup") && d.message.contains("dropped")));
+        let clone = &resolved.entries[0].entries[0];
+        assert_eq!(clone.entries.iter().filter(|e| e.id == "dup").count(), 0,
+            "the inline entry duplicating an existing group's member was dropped, not kept as a top-level duplicate");
+        assert_eq!(clone.groups[0].entries.iter().filter(|e| e.id == "dup").count(), 1,
+            "the group's own member is untouched — \"dup\" still reaches the entry exactly once");
+    }
+
+    #[test]
+    fn link_inline_duplicate_id_via_a_sibling_nested_links_group_member_is_dropped() {
+        // The actual real-data 11e shape (`Imperium - Space Marines.json`'s "Twin
+        // lightning claws"): the collision is between the link's OWN two nested
+        // declarations, not a pre-existing target group — the target carries no
+        // groups at all. One nested entryLink resolves straight to entry "dup"; a
+        // SIBLING nested entryLink resolves to a group whose member is that SAME
+        // "dup". Exactly one "dup" must reach the entry.
+        let target = entry("t", vec![]);
+        let mut g0 = RawGroup { id: "g0".into(), ..Default::default() };
+        g0.entries.push(entry("dup", vec![]));
+        let mut rich = link("t");
+        rich.entry_links.push(link("dup"));
+        rich.entry_links.push(group_link("g0"));
+        let owner = RawEntry {
+            id: "owner".into(), entry_type: "unit".into(),
+            entry_links: vec![rich], ..Default::default()
+        };
+        let cat = RawCatalogue {
+            id: "c".into(), entries: vec![owner],
+            // "dup" is registered ONLY as g0's member — the symbol table indexes
+            // group members too, so `link("dup")` resolves against that same
+            // registered copy without a second, colliding top-level declaration.
+            shared_entries: vec![target],
+            shared_groups: vec![g0],
+            ..Default::default()
+        };
+        let mut diags = Vec::new();
+        let resolved = resolve_with_diags(cat, &mut diags).unwrap();
+        assert!(diags.iter().any(|d| d.code == "entryLink.inline_duplicate_id"
+            && d.message.contains("dup") && d.message.contains("dropped")));
+        let clone = &resolved.entries[0].entries[0];
+        assert_eq!(clone.entries.iter().filter(|e| e.id == "dup").count(), 0,
+            "the direct inline entry was dropped, not kept as a top-level duplicate");
+        assert_eq!(clone.groups[0].entries.iter().filter(|e| e.id == "dup").count(), 1,
+            "\"dup\" still reaches the entry exactly once, via the inline group's member");
     }
 
     #[test]

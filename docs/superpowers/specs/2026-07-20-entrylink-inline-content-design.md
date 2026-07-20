@@ -60,19 +60,36 @@ unique per placement, so nothing leaks back to the shared target.
 
 The merge rule is per collection, chosen from what the data actually contains:
 
-- **`selectionEntries`, `selectionEntryGroups`, `entryLinks` — append.** They resolve
-  through the existing `resolve_entry` / `resolve_group` / `resolve_link` recursion, into
-  the same `children`/`groups` sinks, after the target's own. Nested links reuse the
-  existing cycle path-set, node budget and depth cap unchanged.
+- **`selectionEntries`, `selectionEntryGroups`, `entryLinks` — append, dropping an id the
+  placement already carries.** They resolve through the existing `resolve_entry` /
+  `resolve_group` / `resolve_link` recursion, into the same `children`/`groups` sinks,
+  after the target's own. Nested links reuse the existing cycle path-set, node budget and
+  depth cap unchanged. An inline entry/group whose id the clone already has — from the
+  target's own content, from a sibling nested link's content, OR from any group's member
+  tree (existing or itself just inlined; `flatten_group_members` hoists group members into
+  the owning entry's IR children too) — is diagnosed (`entryLink.inline_duplicate_id`) and
+  DROPPED, keeping the first occurrence only. Real data: 56 observed cases across both
+  editions, overwhelmingly byte-identical duplicates of content already reachable another
+  way — one residual case only closes once the check also walks group member trees, not
+  just top-level ids.
 - **`constraints` — append.** Verified across all of 11e: 6 244 link constraints, **zero**
   share an id with a constraint on their target, so a link constraint is always an
   addition and never an override. Appending cannot double a limit.
 - **`costs` — merge by cost-type id, link wins.** Appending is wrong here: the Aeldari
   *Warlock* link declares `pts 45` and its target declares `pts 45`, so appending would
   charge 90. Most link costs name a type the target lacks, where merge and append agree.
-- **`categoryLinks` — append, de-duplicated by target category id.** The *Warlock* link
-  repeats four of its target's categories; a repeated category is meaningless, and
-  duplicates would inflate any category-scoped count.
+- **`categoryLinks` — append, de-duplicated by target category id; the duplicate's
+  `constraints` are merged onto the surviving link, also de-duplicated by constraint id.**
+  The *Warlock* link repeats four of its target's categories; a repeated category is
+  meaningless, and duplicates would inflate any category-scoped count. But `map_entry`
+  concatenates every categoryLink's constraints onto the entry regardless, so simply
+  dropping the duplicate categoryLink would silently discard a per-category min/max it
+  carries — its constraints are merged onto the one that survives instead. If that merge
+  would itself put two constraints with the same id on the entry, the repeat is diagnosed
+  (`entryLink.categoryLink_constraint_duplicate_id`) and dropped, mirroring the
+  duplicate-id handling above. Inert on real data today (zero 11e link categoryLinks carry
+  constraints at all) but the one place this change could otherwise add a duplicate-id
+  path.
 - **`infoLinks`, `profiles` — append**, through the same `resolve_info_links` path an
   entry uses, so a link-declared profile reaches the datasheet like any other.
 - **`modifiers` — unchanged.** Already appended; `hidden` handling stays as it is.

@@ -261,6 +261,28 @@ fn xml_and_json_produce_identical_ir() {
         serde_json::to_value(&json_ir).unwrap(),
         "JSON front-end must produce IR identical to the XML front-end",
     );
+
+    // Finding 4: the equality check above is vacuous against a change that drops
+    // the SAME link-carried collections from both front-ends at once. Assert the
+    // fixture's link content (`twin.cat`/`twin.json`'s entryLink `lnk.s` ->
+    // `e.shared`, nested under `e.u`) actually reached the IR, in each front-end
+    // independently: the nested-link entry `e.nested`, the link's own inline
+    // profile `p.linkprofile`, and the link's infoLink-resolved profile `p.inv`.
+    for (front_end, ir) in [("xml", &xml_ir), ("json", &json_ir)] {
+        let u = ir.entries.iter().find(|e| e.id == "e.u").expect("e.u root");
+        let clone = u.children.iter().find(|e| e.id == "e.shared").unwrap_or_else(|| {
+            panic!("{front_end}: e.shared clone missing from e.u's children")
+        });
+        assert!(clone.children.iter().any(|c| c.id == "e.nested"),
+            "{front_end}: the link's nested entryLink target e.nested did not reach the IR");
+        // IrProfile drops the source id (name/typeName/characteristics only), so
+        // match on name — "Link Profile" (p.linkprofile) and "Invulnerable Save"
+        // (p.inv, via the link's infoLink) are each unique in this fixture.
+        assert!(clone.profiles.iter().any(|p| p.name == "Link Profile"),
+            "{front_end}: the link's own inline profile p.linkprofile did not reach the IR");
+        assert!(clone.profiles.iter().any(|p| p.name == "Invulnerable Save"),
+            "{front_end}: the link's infoLink-resolved profile p.inv did not reach the IR");
+    }
 }
 
 #[test]
