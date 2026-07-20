@@ -1,7 +1,9 @@
 #!/usr/bin/env node
-// Scans apps/web/public/catalogues/*.ir.json and writes apps/web/public/catalogues.json
-// listing each catalogue's { id, name, file }. Run after dropping packed/tree IRs there.
-// No GW data enters git — apps/web/public/ is gitignored; this only builds a local manifest.
+// Scans apps/web/public/catalogues/<edition>/*.ir.json (and any loose *.ir.json directly
+// under catalogues/, attributed to edition 10e) and writes apps/web/public/catalogues.json
+// (manifest v2) listing each catalogue's { id, edition, name, file }. Run after dropping
+// packed/tree IRs there. No GW data enters git — apps/web/public/ is gitignored; this only
+// builds a local manifest.
 import { readdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 
@@ -13,15 +15,45 @@ if (!existsSync(dir)) {
   process.exit(1);
 }
 
-const catalogues = [];
-for (const f of readdirSync(dir).filter((n) => n.endsWith(".ir.json")).sort()) {
-  const json = JSON.parse(readFileSync(join(dir, f), "utf8"));
-  if (typeof json.id !== "string" || typeof json.name !== "string") {
-    console.warn(`Skipping ${f}: missing id/name`);
-    continue;
-  }
-  catalogues.push({ id: json.id, name: json.name, file: `catalogues/${f}` });
+// Edition display names come from the pipeline config when it is present; an edition
+// directory with no config entry still ships, labelled by its id.
+const configPath = join(process.cwd(), "scripts/catalogues.config.json");
+const editionNames = new Map();
+if (existsSync(configPath)) {
+  const cfg = JSON.parse(readFileSync(configPath, "utf8"));
+  for (const e of cfg.editions ?? []) editionNames.set(e.id, e.name);
 }
 
-writeFileSync(out, JSON.stringify({ version: 1, catalogues }, null, 2) + "\n");
-console.log(`Wrote ${out} with ${catalogues.length} catalogue(s).`);
+function collect(dir, edition, prefix) { // prefix: path recorded in the manifest
+  const out = [];
+  for (const f of readdirSync(dir).filter((n) => n.endsWith(".ir.json")).sort()) {
+    const json = JSON.parse(readFileSync(join(dir, f), "utf8"));
+    if (typeof json.id !== "string" || typeof json.name !== "string") {
+      console.warn(`Skipping ${f}: missing id/name`);
+      continue;
+    }
+    out.push({ id: json.id, edition, name: json.name, file: `${prefix}${f}` });
+  }
+  return out;
+}
+
+const catalogues = [];
+for (const entry of readdirSync(dir, { withFileTypes: true })) {
+  if (entry.isDirectory()) {
+    catalogues.push(...collect(join(dir, entry.name), entry.name, `catalogues/${entry.name}/`));
+  } else if (entry.isFile() && entry.name.endsWith(".ir.json")) {
+    // A stale flat output directory (pre-edition layout) degrades to edition 10e
+    // instead of vanishing.
+    const json = JSON.parse(readFileSync(join(dir, entry.name), "utf8"));
+    if (typeof json.id !== "string" || typeof json.name !== "string") {
+      console.warn(`Skipping ${entry.name}: missing id/name`);
+      continue;
+    }
+    catalogues.push({ id: json.id, edition: "10e", name: json.name, file: `catalogues/${entry.name}` });
+  }
+}
+
+const editions = [...new Set(catalogues.map((c) => c.edition))].sort()
+  .map((id) => ({ id, name: editionNames.get(id) ?? id }));
+writeFileSync(out, JSON.stringify({ version: 2, editions, catalogues }, null, 2) + "\n");
+console.log(`Wrote ${out} with ${catalogues.length} catalogue(s) across ${editions.length} edition(s).`);
