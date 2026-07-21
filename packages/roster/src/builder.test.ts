@@ -1410,6 +1410,6 @@ describe("remove() clears dangling attachedTo", () => {
     } as unknown as Roster;
     const next = remove(roster, "B");
     expect(next.selections.map((s) => s.id)).toEqual(["L"]);
-    expect(next.selections[0].attachedTo).toBeUndefined();
+    expect(next.selections[0]?.attachedTo).toBeUndefined();
   });
 });
