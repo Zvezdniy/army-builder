@@ -1,8 +1,9 @@
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { IrCatalogue, IrCharacteristic, IrProfile, Roster, RosterSelection } from "@muster/domain";
 import { unitLoadout, invulnSave } from "@muster/roster";
 import { effectiveDatasheet, type DatasheetSection } from "@muster/engine-eval";
 import { weaponKeywords, makeRuleResolver, KEYWORDS_CHARACTERISTIC, type WeaponKeyword } from "../keywords";
+import { placeTooltip } from "../tooltip";
 
 /** Devices that can hover (desktop) show rule popups on hover; touch shows on tap. */
 const canHover =
@@ -241,8 +242,20 @@ export function Datasheet({
   const weapons = all.filter((s) => WEAPON_TYPES.has(s.typeName));
   const specials = all.filter((s) => !WEAPON_TYPES.has(s.typeName) && !RESERVED.has(s.typeName));
   const loadout = unitLoadout(catalogue, selection);
-  const [tip, setTip] = useState<{ kw: WeaponKeyword; x: number; y: number } | null>(null);
+  type Anchor = { top: number; bottom: number; left: number };
+  const [tip, setTip] = useState<{ kw: WeaponKeyword; anchor: Anchor } | null>(null);
+  const tipRef = useRef<HTMLDivElement>(null);
+  // Final on-screen position, computed after the tooltip is measured (below/flip/clamp).
+  // Null until measured so the first paint doesn't flash at an off-screen spot.
+  const [tipPos, setTipPos] = useState<{ left: number; top: number } | null>(null);
   const resolveRule = useMemo(() => makeRuleResolver(catalogue.ruleTexts), [catalogue.ruleTexts]);
+
+  useLayoutEffect(() => {
+    if (!tip || !tipRef.current) { setTipPos(null); return; }
+    const t = tipRef.current.getBoundingClientRect();
+    setTipPos(placeTooltip(tip.anchor, { width: t.width, height: t.height },
+      { width: window.innerWidth, height: window.innerHeight }));
+  }, [tip]);
 
   // The invuln chip (in UnitStatline) already shows a bare "N+"; drop that same
   // ability line here to avoid showing it twice. A qualified invuln (extra prose or
@@ -257,14 +270,14 @@ export function Datasheet({
   const hasRight = loadout.wargear.length > 0 || hasAbilities || specials.length > 0;
   if (weapons.length === 0 && !hasRight) return null;
 
-  const at = (el: HTMLElement) => {
+  const at = (el: HTMLElement): Anchor => {
     const r = el.getBoundingClientRect();
-    return { x: r.left, y: r.bottom + 6 };
+    return { top: r.top, bottom: r.bottom, left: r.left };
   };
   const rules: RuleHandlers = {
-    onShow: (kw, el) => setTip({ kw, ...at(el) }),
+    onShow: (kw, el) => setTip({ kw, anchor: at(el) }),
     onHide: () => setTip(null),
-    onToggle: (kw, el) => setTip((prev) => (prev?.kw.label === kw.label ? null : { kw, ...at(el) })),
+    onToggle: (kw, el) => setTip((prev) => (prev?.kw.label === kw.label ? null : { kw, anchor: at(el) })),
   };
   const ruleText = tip ? (resolveRule(tip.kw.ruleKey) ?? "No rule description.") : "";
 
@@ -281,7 +294,13 @@ export function Datasheet({
         </div>
       </div>
       {tip && (
-        <div className="rule-tip" role="tooltip" style={{ position: "fixed", left: tip.x, top: tip.y }}>
+        <div ref={tipRef} className="rule-tip" role="tooltip"
+          style={{
+            position: "fixed",
+            left: tipPos?.left ?? tip.anchor.left,
+            top: tipPos?.top ?? tip.anchor.bottom + 6,
+            visibility: tipPos ? "visible" : "hidden",
+          }}>
           <strong className="rule-tip-name">{tip.kw.label}</strong>
           <span>{ruleText}</span>
         </div>
