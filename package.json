@@ -5,7 +5,8 @@
   "scripts": {
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",
-    "update-catalogues": "node scripts/update-catalogues.mjs"
+    "update-catalogues": "node scripts/update-catalogues.mjs",
+    "test:scripts": "vitest run --config scripts/vitest.config.ts"
   },
   "devDependencies": {
     "@muster/domain": "workspace:^",
