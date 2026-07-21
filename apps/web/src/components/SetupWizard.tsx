@@ -5,7 +5,7 @@ import {
   pointsCost, correctedConstraintValue, DETACHMENT_POINTS,
   buildState, resolveCosts, effectiveCostOfType,
 } from "@muster/engine-eval";
-import type { CatalogueDescriptor } from "../registry/catalogueRegistry";
+import { offerableFactions, editionsOf, type CatalogueDescriptor } from "../registry/catalogueRegistry";
 
 const POINTS_PRESETS = [1000, 1500, 2000];
 
@@ -45,17 +45,20 @@ function enhancementsFor(catalogue: IrCatalogue, detachmentName: string): IrEntr
     .filter((e): e is IrEntry => e !== undefined);
 }
 
-const STEPS = ["Points", "Faction", "Detachment"] as const;
+export type SetupStep = "points" | "edition" | "faction" | "detachment";
+const STEP_LABEL: Record<SetupStep, string> = {
+  points: "Points", edition: "Edition", faction: "Faction", detachment: "Detachment",
+};
 
-/** First-run army setup: points → faction (placeholder) → detachment. Controlled —
+/** First-run army setup: points → (edition) → faction → detachment. Controlled —
  *  reads live roster/catalogue, applies each choice immediately via callbacks. */
 export function SetupWizard({
-  catalogue, roster, initialStep = 0, onSetPoints, onToggleDetachment, onClose,
+  catalogue, roster, initialStep = "points", onSetPoints, onToggleDetachment, onClose,
   registry, activeDescriptorId, onSelectFaction, factionError,
 }: {
   catalogue: IrCatalogue;
   roster: Roster;
-  initialStep?: number;
+  initialStep?: SetupStep;
   onSetPoints: (n: number) => void;
   onToggleDetachment: (entryId: string) => void;
   onClose: () => void;
@@ -65,9 +68,6 @@ export function SetupWizard({
   factionError?: string;
 }) {
   const detachments = availableDetachments(catalogue);
-  const hasDetachmentStep = detachments.length > 0;
-  const lastStep = hasDetachmentStep ? 2 : 1;
-  const [step, setStep] = useState(Math.min(initialStep, lastStep));
   const chosenIds = selectedDetachments(roster, catalogue);
   const [customPts, setCustomPts] = useState("");
 
@@ -75,18 +75,12 @@ export function SetupWizard({
   // initial active catalogue, but it should not be offered as a faction to build once
   // real catalogues are loaded. Hide the bundled descriptor from the picker WHENEVER a
   // real (manifest) faction exists; keep it when it is the only thing there (manifest
-  // fetch failed), so the picker is never empty. Both the edition tabs and the faction
+  // fetch failed), so the picker is never empty. Both the Edition step and the faction
   // grid derive from this filtered view.
-  const shownRegistry = registry?.some((d) => d.source.kind !== "bundled")
-    ? registry.filter((d) => d.source.kind !== "bundled")
-    : registry;
+  const shownRegistry = offerableFactions(registry);
 
   // Edition list derived from the shown registry, first-appearance order preserved.
-  const editions = shownRegistry
-    ? shownRegistry.reduce<{ id: string; name: string }[]>((acc, d) => (
-        acc.some((e) => e.id === d.edition) ? acc : [...acc, { id: d.edition, name: d.editionName }]
-      ), [])
-    : [];
+  const editions = shownRegistry ? editionsOf(shownRegistry) : [];
   const activeEdition = shownRegistry?.find((d) => d.id === activeDescriptorId)?.edition ?? editions[0]?.id;
   // `undefined` means "the user hasn't picked an edition locally yet" — the displayed
   // edition then tracks `activeEdition` for free. Once the user clicks a segment this
@@ -95,6 +89,19 @@ export function SetupWizard({
   // descriptor), so we deliberately don't add one — the derived fallback covers it.
   const [edition, setEdition] = useState<string | undefined>(undefined);
   const displayedEdition = edition ?? activeEdition;
+
+  const hasEditionStep = editions.length > 1;
+  const hasDetachmentStep = detachments.length > 0;
+  const steps: SetupStep[] = [
+    "points",
+    ...(hasEditionStep ? (["edition"] as const) : []),
+    "faction",
+    ...(hasDetachmentStep ? (["detachment"] as const) : []),
+  ];
+  const lastStep = steps.length - 1;
+  const initialIndex = Math.max(0, steps.indexOf(initialStep));
+  const [step, setStep] = useState(Math.min(initialIndex, lastStep));
+  const stepKey = steps[step];
 
   const canFinish = !hasDetachmentStep || chosenIds.length > 0;
   const next = () => (step < lastStep ? setStep(step + 1) : onClose());
@@ -144,16 +151,16 @@ export function SetupWizard({
         </div>
 
         <div className="steps">
-          {STEPS.slice(0, lastStep + 1).map((label, i) => (
-            <button key={label} className={`step-tab${i === step ? " active" : ""}${i < step ? " done" : ""}`}
+          {steps.map((key, i) => (
+            <button key={key} className={`step-tab${i === step ? " active" : ""}${i < step ? " done" : ""}`}
               aria-current={i === step} onClick={() => (i <= step ? setStep(i) : undefined)}>
-              <span className="dot">{i + 1}</span><span className="step-lbl">{label}</span>
+              <span className="dot">{i + 1}</span><span className="step-lbl">{STEP_LABEL[key]}</span>
             </button>
           ))}
         </div>
 
         <div className="wizard-body">
-          {step === 0 && (
+          {stepKey === "points" && (
             <div data-testid="step-points">
               <p className="wizard-lead">Pick the matched-play points limit.</p>
               <div className="uc-options">
@@ -174,21 +181,24 @@ export function SetupWizard({
             </div>
           )}
 
-          {step === 1 && (
+          {stepKey === "edition" && (
+            <div data-testid="step-edition">
+              <p className="wizard-lead">Choose the rules edition.</p>
+              <div className="faction-grid">
+                {editions.map((e) => (
+                  <button key={e.id} className={`faction-card${e.id === displayedEdition ? " chosen" : ""}`}
+                    aria-pressed={e.id === displayedEdition}
+                    onClick={() => { setEdition(e.id); setStep((s) => Math.min(s + 1, lastStep)); }}>
+                    <span className="fname">{e.name}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {stepKey === "faction" && (
             <div data-testid="step-faction">
               <p className="wizard-lead">Choose the faction this army is built from.</p>
-              {editions.length > 1 && (
-                <div className="edition-picker" data-testid="edition-picker">
-                  {editions.map((e) => (
-                    <button key={e.id} type="button"
-                      className={`step-tab${e.id === displayedEdition ? " active" : ""}`}
-                      aria-pressed={e.id === displayedEdition}
-                      onClick={() => setEdition(e.id)}>
-                      <span className="step-lbl">{e.name}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
               <div className="faction-grid">
                 {shownRegistry
                   ? shownRegistry.filter((d) => d.edition === displayedEdition).map((d) => (
@@ -211,7 +221,7 @@ export function SetupWizard({
             </div>
           )}
 
-          {step === 2 && hasDetachmentStep && (
+          {stepKey === "detachment" && (
             <div data-testid="step-detachment">
               {pricesDetachments && (
                 <div className={`dp-meter${dpOverBudget ? " over" : ""}`} data-testid="dp-meter">

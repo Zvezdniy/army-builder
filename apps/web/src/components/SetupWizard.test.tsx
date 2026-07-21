@@ -219,34 +219,34 @@ describe("SetupWizard", () => {
 
   it("choosing a detachment calls onToggleDetachment", () => {
     const onToggleDetachment = vi.fn();
-    render(<SetupWizard catalogue={cat} roster={createRoster(cat, 2000)} initialStep={2} onSetPoints={noop} onToggleDetachment={onToggleDetachment} onClose={noop} />);
+    render(<SetupWizard catalogue={cat} roster={createRoster(cat, 2000)} initialStep="detachment" onSetPoints={noop} onToggleDetachment={onToggleDetachment} onClose={noop} />);
     fireEvent.click(screen.getByText("Gladius Task Force"));
     expect(onToggleDetachment).toHaveBeenCalledWith("e.gladius");
   });
 
   it("previews the chosen detachment's enhancements", () => {
     const roster = toggleDetachment(createRoster(cat, 2000), "e.gladius", cat);
-    render(<SetupWizard catalogue={cat} roster={roster} initialStep={2} onSetPoints={noop} onToggleDetachment={noop} onClose={noop} />);
+    render(<SetupWizard catalogue={cat} roster={roster} initialStep="detachment" onSetPoints={noop} onToggleDetachment={noop} onClose={noop} />);
     expect(screen.getByText("Artificer Armour")).toBeTruthy();
   });
 
   it("the enhancement preview unions members across every placement of the same-named group", () => {
     const roster = toggleDetachment(createRoster(dupEnhCat, 2000), "e.gladius", dupEnhCat);
-    render(<SetupWizard catalogue={dupEnhCat} roster={roster} initialStep={2} onSetPoints={noop} onToggleDetachment={noop} onClose={noop} />);
+    render(<SetupWizard catalogue={dupEnhCat} roster={roster} initialStep="detachment" onSetPoints={noop} onToggleDetachment={noop} onClose={noop} />);
     expect(screen.getAllByText("Artificer Armour")).toHaveLength(1);
     expect(screen.getAllByText("Iron Halo")).toHaveLength(1);
   });
 
   it("the enhancement preview renders members in first-encounter order (unchanged for a single placement)", () => {
     const roster = toggleDetachment(createRoster(orderedEnhCat, 2000), "e.gladius", orderedEnhCat);
-    const { container } = render(<SetupWizard catalogue={orderedEnhCat} roster={roster} initialStep={2} onSetPoints={noop} onToggleDetachment={noop} onClose={noop} />);
+    const { container } = render(<SetupWizard catalogue={orderedEnhCat} roster={roster} initialStep="detachment" onSetPoints={noop} onToggleDetachment={noop} onClose={noop} />);
     const names = Array.from(container.querySelectorAll(".enh-name")).map((el) => el.textContent);
     expect(names).toEqual(["Iron Halo", "Artificer Armour"]);
   });
 
   it("previews a chosen detachment's rule name AND its text, preserving line breaks", () => {
     const roster = toggleDetachment(createRoster(ruleCat, 2000), "e.saga", ruleCat);
-    const { container } = render(<SetupWizard catalogue={ruleCat} roster={roster} initialStep={2} onSetPoints={noop} onToggleDetachment={noop} onClose={noop} />);
+    const { container } = render(<SetupWizard catalogue={ruleCat} roster={roster} initialStep="detachment" onSetPoints={noop} onToggleDetachment={noop} onClose={noop} />);
     expect(screen.getByText("Loping Charge")).toBeTruthy();
     const text = container.querySelector(".det-rule-text") as HTMLElement;
     expect(text).toBeTruthy();
@@ -255,14 +255,14 @@ describe("SetupWizard", () => {
 
   it("a detachment with no rules renders no rules block at all", () => {
     const roster = toggleDetachment(createRoster(ruleCat, 2000), "e.anvil", ruleCat);
-    const { container } = render(<SetupWizard catalogue={ruleCat} roster={roster} initialStep={2} onSetPoints={noop} onToggleDetachment={noop} onClose={noop} />);
+    const { container } = render(<SetupWizard catalogue={ruleCat} roster={roster} initialStep="detachment" onSetPoints={noop} onToggleDetachment={noop} onClose={noop} />);
     expect(container.querySelector(".det-rules")).toBeNull();
     expect(container.querySelector(".det-rule-name")).toBeNull();
   });
 
   it("a rule name with no matching ruleTexts entry renders the name without inventing text", () => {
     const roster = toggleDetachment(createRoster(ruleCat, 2000), "e.unknown", ruleCat);
-    const { container } = render(<SetupWizard catalogue={ruleCat} roster={roster} initialStep={2} onSetPoints={noop} onToggleDetachment={noop} onClose={noop} />);
+    const { container } = render(<SetupWizard catalogue={ruleCat} roster={roster} initialStep="detachment" onSetPoints={noop} onToggleDetachment={noop} onClose={noop} />);
     expect(screen.getByText("Mystery Rule")).toBeTruthy();
     expect(container.querySelector(".det-rule-text")).toBeNull();
   });
@@ -270,11 +270,11 @@ describe("SetupWizard", () => {
   it("Start building is disabled until a detachment is chosen, then finishes", () => {
     const onClose = vi.fn();
     const { rerender } = render(
-      <SetupWizard catalogue={cat} roster={createRoster(cat, 2000)} initialStep={2} onSetPoints={noop} onToggleDetachment={noop} onClose={onClose} />,
+      <SetupWizard catalogue={cat} roster={createRoster(cat, 2000)} initialStep="detachment" onSetPoints={noop} onToggleDetachment={noop} onClose={onClose} />,
     );
     const finish = screen.getByText("Start building") as HTMLButtonElement;
     expect(finish.disabled).toBe(true);
-    rerender(<SetupWizard catalogue={cat} roster={toggleDetachment(createRoster(cat, 2000), "e.gladius", cat)} initialStep={2} onSetPoints={noop} onToggleDetachment={noop} onClose={onClose} />);
+    rerender(<SetupWizard catalogue={cat} roster={toggleDetachment(createRoster(cat, 2000), "e.gladius", cat)} initialStep="detachment" onSetPoints={noop} onToggleDetachment={noop} onClose={onClose} />);
     const finish2 = screen.getByText("Start building") as HTMLButtonElement;
     expect(finish2.disabled).toBe(false);
     fireEvent.click(finish2);
@@ -292,7 +292,7 @@ describe("SetupWizard", () => {
 
   it("10e-shaped catalogue: unpriced detachments, no DP meter (regression guard)", () => {
     const roster = toggleDetachment(createRoster(cat, 2000), "e.gladius", cat);
-    render(<SetupWizard catalogue={cat} roster={roster} initialStep={2} onSetPoints={noop} onToggleDetachment={noop} onClose={noop} />);
+    render(<SetupWizard catalogue={cat} roster={roster} initialStep="detachment" onSetPoints={noop} onToggleDetachment={noop} onClose={noop} />);
     expect(screen.queryByTestId("dp-meter")).toBeNull();
   });
 
@@ -300,7 +300,7 @@ describe("SetupWizard", () => {
     let roster = createRoster(elevenECat, 2000);
     roster = toggleDetachment(roster, "e.gladius", elevenECat);
     roster = toggleDetachment(roster, "e.anvil", elevenECat);
-    render(<SetupWizard catalogue={elevenECat} roster={roster} initialStep={2} onSetPoints={noop} onToggleDetachment={noop} onClose={noop} />);
+    render(<SetupWizard catalogue={elevenECat} roster={roster} initialStep="detachment" onSetPoints={noop} onToggleDetachment={noop} onClose={noop} />);
 
     const list = within(screen.getByTestId("step-detachment").querySelector(".det-list") as HTMLElement);
     const gladiusCard = list.getByText("Gladius Task Force").closest("button") as HTMLElement;
@@ -323,7 +323,7 @@ describe("SetupWizard", () => {
     let roster = createRoster(modifiedDpCat, 2000);
     roster = toggleDetachment(roster, "e.bastion", modifiedDpCat);
     roster = toggleDetachment(roster, "e.outrider", modifiedDpCat);
-    render(<SetupWizard catalogue={modifiedDpCat} roster={roster} initialStep={2} onSetPoints={noop} onToggleDetachment={noop} onClose={noop} />);
+    render(<SetupWizard catalogue={modifiedDpCat} roster={roster} initialStep="detachment" onSetPoints={noop} onToggleDetachment={noop} onClose={noop} />);
 
     // Bastion's raw cost is 2, but its `set 3` modifier is always active, so the
     // true total is 3 (Bastion) + 1 (Outrider) = 4 over the (corrected) cap of 3 —
@@ -339,7 +339,7 @@ describe("SetupWizard", () => {
     let roster = createRoster(elevenECat, 2000);
     roster = toggleDetachment(roster, "e.gladius", elevenECat);
     roster = toggleDetachment(roster, "e.anvil", elevenECat);
-    render(<SetupWizard catalogue={elevenECat} roster={roster} initialStep={2} onSetPoints={noop} onToggleDetachment={noop} onClose={noop} />);
+    render(<SetupWizard catalogue={elevenECat} roster={roster} initialStep="detachment" onSetPoints={noop} onToggleDetachment={noop} onClose={noop} />);
     const finish = screen.getByText("Start building") as HTMLButtonElement;
     expect(finish.disabled).toBe(false);
   });
@@ -348,7 +348,7 @@ describe("SetupWizard", () => {
     let roster = createRoster(elevenECat, 2000);
     roster = toggleDetachment(roster, "e.gladius", elevenECat);
     roster = toggleDetachment(roster, "e.anvil", elevenECat);
-    render(<SetupWizard catalogue={elevenECat} roster={roster} initialStep={2} onSetPoints={noop} onToggleDetachment={noop} onClose={noop} />);
+    render(<SetupWizard catalogue={elevenECat} roster={roster} initialStep="detachment" onSetPoints={noop} onToggleDetachment={noop} onClose={noop} />);
     expect(screen.getByText("Artificer Armour")).toBeTruthy();
     // Both chosen detachment names appear (as a card label and a preview section head).
     expect(screen.getAllByText("Gladius Task Force").length).toBeGreaterThanOrEqual(2);
@@ -359,7 +359,7 @@ describe("SetupWizard", () => {
     const onToggleDetachment = vi.fn();
     let roster = createRoster(elevenECat, 2000);
     roster = toggleDetachment(roster, "e.gladius", elevenECat);
-    render(<SetupWizard catalogue={elevenECat} roster={roster} initialStep={2} onSetPoints={noop} onToggleDetachment={onToggleDetachment} onClose={noop} />);
+    render(<SetupWizard catalogue={elevenECat} roster={roster} initialStep="detachment" onSetPoints={noop} onToggleDetachment={onToggleDetachment} onClose={noop} />);
     const list = within(screen.getByTestId("step-detachment").querySelector(".det-list") as HTMLElement);
     fireEvent.click(list.getByText("Gladius Task Force"));
     expect(onToggleDetachment).toHaveBeenCalledWith("e.gladius");
@@ -376,7 +376,7 @@ describe("SetupWizard", () => {
       ...registry,
     ];
     render(
-      <SetupWizard catalogue={cat} roster={createRoster(cat, 2000)} initialStep={1}
+      <SetupWizard catalogue={cat} roster={createRoster(cat, 2000)} initialStep="faction"
         registry={withBundled} activeDescriptorId="bundled" onSelectFaction={noop}
         onSetPoints={noop} onToggleDetachment={noop} onClose={noop} />,
     );
@@ -387,7 +387,7 @@ describe("SetupWizard", () => {
 
   it("keeps the bundled fixture when it is the only faction (manifest unavailable)", () => {
     render(
-      <SetupWizard catalogue={cat} roster={createRoster(cat, 2000)} initialStep={1}
+      <SetupWizard catalogue={cat} roster={createRoster(cat, 2000)} initialStep="faction"
         registry={[{ id: "bundled", catalogueId: "mini", name: "Mini 40k", edition: "10e", editionName: "10th Edition", source: { kind: "bundled" as const, data: {} } }]}
         activeDescriptorId="bundled" onSelectFaction={noop}
         onSetPoints={noop} onToggleDetachment={noop} onClose={noop} />,
@@ -397,7 +397,7 @@ describe("SetupWizard", () => {
 
   it("renders a card per registry faction and marks the active one", () => {
     render(
-      <SetupWizard catalogue={cat} roster={createRoster(cat, 2000)} initialStep={1}
+      <SetupWizard catalogue={cat} roster={createRoster(cat, 2000)} initialStep="faction"
         registry={registry} activeDescriptorId="a" onSelectFaction={noop}
         onSetPoints={noop} onToggleDetachment={noop} onClose={noop} />,
     );
@@ -409,7 +409,7 @@ describe("SetupWizard", () => {
   it("calls onSelectFaction when a non-active faction is clicked", () => {
     const onSelectFaction = vi.fn();
     render(
-      <SetupWizard catalogue={cat} roster={createRoster(cat, 2000)} initialStep={1}
+      <SetupWizard catalogue={cat} roster={createRoster(cat, 2000)} initialStep="faction"
         registry={registry} activeDescriptorId="a" onSelectFaction={onSelectFaction}
         onSetPoints={noop} onToggleDetachment={noop} onClose={noop} />,
     );
@@ -420,7 +420,7 @@ describe("SetupWizard", () => {
   it("does not call onSelectFaction when the active faction is clicked", () => {
     const onSelectFaction = vi.fn();
     render(
-      <SetupWizard catalogue={cat} roster={createRoster(cat, 2000)} initialStep={1}
+      <SetupWizard catalogue={cat} roster={createRoster(cat, 2000)} initialStep="faction"
         registry={registry} activeDescriptorId="a" onSelectFaction={onSelectFaction}
         onSetPoints={noop} onToggleDetachment={noop} onClose={noop} />,
     );
@@ -430,7 +430,7 @@ describe("SetupWizard", () => {
 
   it("shows a faction load error when provided", () => {
     render(
-      <SetupWizard catalogue={cat} roster={createRoster(cat, 2000)} initialStep={1}
+      <SetupWizard catalogue={cat} roster={createRoster(cat, 2000)} initialStep="faction"
         registry={[{ id: "a", catalogueId: "a", name: "Alpha", edition: "10e", editionName: "10th Edition", source: { kind: "bundled" as const, data: {} } }]}
         activeDescriptorId="a" onSelectFaction={noop} factionError="Couldn't load Beta"
         onSetPoints={noop} onToggleDetachment={noop} onClose={noop} />,
@@ -440,7 +440,7 @@ describe("SetupWizard", () => {
 
   it("falls back to a single card for the current catalogue when no registry is passed", () => {
     render(
-      <SetupWizard catalogue={cat} roster={createRoster(cat, 2000)} initialStep={1}
+      <SetupWizard catalogue={cat} roster={createRoster(cat, 2000)} initialStep="faction"
         onSetPoints={noop} onToggleDetachment={noop} onClose={noop} />,
     );
     expect(screen.getByText("Space Marines")).toBeTruthy();
@@ -452,50 +452,41 @@ describe("SetupWizard", () => {
     { id: "11e:a", catalogueId: "a", name: "Alpha", edition: "11e", editionName: "11th Edition", source: { kind: "manifest" as const, file: "a11.ir.json" } },
   ];
 
-  it("renders one segment per edition with the active descriptor's edition selected", () => {
+  it("the Edition step renders one card per edition with the active edition chosen", () => {
     render(
-      <SetupWizard catalogue={cat} roster={createRoster(cat, 2000)} initialStep={1}
+      <SetupWizard catalogue={cat} roster={createRoster(cat, 2000)} initialStep="edition"
         registry={twoEditionRegistry} activeDescriptorId="10e:a" onSelectFaction={noop}
         onSetPoints={noop} onToggleDetachment={noop} onClose={noop} />,
     );
-    const picker = screen.getByTestId("edition-picker");
-    const tenE = screen.getByText("10th Edition").closest("button") as HTMLElement;
-    const elevenE = screen.getByText("11th Edition").closest("button") as HTMLElement;
-    expect(picker.contains(tenE)).toBe(true);
-    expect(picker.contains(elevenE)).toBe(true);
+    const step = screen.getByTestId("step-edition");
+    const tenE = within(step).getByText("10th Edition").closest("button") as HTMLElement;
+    const elevenE = within(step).getByText("11th Edition").closest("button") as HTMLElement;
+    expect(tenE.className).toMatch(/chosen/);
     expect(tenE.getAttribute("aria-pressed")).toBe("true");
+    expect(elevenE.className).not.toMatch(/chosen/);
     expect(elevenE.getAttribute("aria-pressed")).toBe("false");
   });
 
-  it("shows only the selected edition's factions in the grid", () => {
-    render(
-      <SetupWizard catalogue={cat} roster={createRoster(cat, 2000)} initialStep={1}
-        registry={twoEditionRegistry} activeDescriptorId="10e:a" onSelectFaction={noop}
-        onSetPoints={noop} onToggleDetachment={noop} onClose={noop} />,
-    );
-    // 10e has Alpha + Beta; 11e's Alpha is a distinct descriptor and must not appear
-    // alongside them even though it shares the display name.
-    expect(screen.getAllByText("Alpha")).toHaveLength(1);
-    expect(screen.getByText("Beta")).toBeTruthy();
-  });
-
-  it("clicking another edition segment switches the grid without selecting a faction", () => {
+  it("clicking another edition card advances to the Faction step showing that edition's factions", () => {
     const onSelectFaction = vi.fn();
     render(
-      <SetupWizard catalogue={cat} roster={createRoster(cat, 2000)} initialStep={1}
+      <SetupWizard catalogue={cat} roster={createRoster(cat, 2000)} initialStep="edition"
         registry={twoEditionRegistry} activeDescriptorId="10e:a" onSelectFaction={onSelectFaction}
         onSetPoints={noop} onToggleDetachment={noop} onClose={noop} />,
     );
     fireEvent.click(screen.getByText("11th Edition"));
-    expect(screen.getByText("Alpha")).toBeTruthy();
-    expect(screen.queryByText("Beta")).toBeNull();
+    const step = screen.getByTestId("step-faction");
+    // 11e has only Alpha (a distinct descriptor from 10e's Alpha); 10e's Beta must not
+    // appear alongside it.
+    expect(within(step).getAllByText("Alpha")).toHaveLength(1);
+    expect(within(step).queryByText("Beta")).toBeNull();
     expect(onSelectFaction).not.toHaveBeenCalled();
   });
 
-  it("clicking a faction after switching edition calls onSelectFaction with the composite id", () => {
+  it("selecting a faction after switching edition calls onSelectFaction with the composite id", () => {
     const onSelectFaction = vi.fn();
     render(
-      <SetupWizard catalogue={cat} roster={createRoster(cat, 2000)} initialStep={1}
+      <SetupWizard catalogue={cat} roster={createRoster(cat, 2000)} initialStep="edition"
         registry={twoEditionRegistry} activeDescriptorId="10e:a" onSelectFaction={onSelectFaction}
         onSetPoints={noop} onToggleDetachment={noop} onClose={noop} />,
     );
@@ -504,12 +495,22 @@ describe("SetupWizard", () => {
     expect(onSelectFaction).toHaveBeenCalledWith("11e:a");
   });
 
-  it("hides the edition picker with a single-edition registry", () => {
+  it("the old inline edition segmented control is gone from the Faction step", () => {
     render(
-      <SetupWizard catalogue={cat} roster={createRoster(cat, 2000)} initialStep={1}
-        registry={registry} activeDescriptorId="a" onSelectFaction={noop}
+      <SetupWizard catalogue={cat} roster={createRoster(cat, 2000)} initialStep="faction"
+        registry={twoEditionRegistry} activeDescriptorId="10e:a" onSelectFaction={noop}
         onSetPoints={noop} onToggleDetachment={noop} onClose={noop} />,
     );
     expect(screen.queryByTestId("edition-picker")).toBeNull();
+  });
+
+  it("no Edition step or tab with a single-edition registry", () => {
+    render(
+      <SetupWizard catalogue={cat} roster={createRoster(cat, 2000)} initialStep="faction"
+        registry={registry} activeDescriptorId="a" onSelectFaction={noop}
+        onSetPoints={noop} onToggleDetachment={noop} onClose={noop} />,
+    );
+    expect(screen.queryByTestId("step-edition")).toBeNull();
+    expect(screen.queryByText("Edition")).toBeNull();
   });
 });
