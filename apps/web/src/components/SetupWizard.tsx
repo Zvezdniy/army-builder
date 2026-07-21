@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { IrCatalogue, IrEntry, Roster } from "@muster/domain";
-import { availableDetachments, selectedDetachments, catalogueEntry } from "@muster/roster";
+import { availableDetachments, selectedDetachments, enhancementsForDetachment } from "@muster/roster";
 import {
   pointsCost, correctedConstraintValue, DETACHMENT_POINTS,
   buildState, resolveCosts, effectiveCostOfType,
@@ -13,36 +13,6 @@ const POINTS_PRESETS = [1000, 1500, 2000];
 // triggers the meter below — no edition check needed.
 function detachmentPointsCost(entry: IrEntry): number {
   return entry.costs.find((c) => c.name === DETACHMENT_POINTS)?.value ?? 0;
-}
-
-/** The enhancements a detachment unlocks: the union of every group named
- *  "<name> Enhancements" found anywhere in the catalogue tree (best-effort by group
- *  name — informational preview only). An `entryLink` is a PLACEMENT, not a pointer —
- *  it may declare its own children that apply only to that placement — so the same
- *  named group can legitimately recur at many placements with different members.
- *  Taking only the first match would silently hide members that only appear at a
- *  later placement, so this walks the WHOLE tree and unions every match, deduping
- *  by entry id in first-encounter order. */
-function enhancementsFor(catalogue: IrCatalogue, detachmentName: string): IrEntry[] {
-  const wanted = `${detachmentName} Enhancements`;
-  const stack: IrEntry[] = [...catalogue.entries];
-  const seen = new Set<string>();
-  const ids: string[] = [];
-  while (stack.length > 0) {
-    const e = stack.pop() as IrEntry;
-    for (const group of e.groups ?? []) {
-      if (group.name !== wanted) continue;
-      for (const id of group.memberEntryIds) {
-        if (seen.has(id)) continue;
-        seen.add(id);
-        ids.push(id);
-      }
-    }
-    stack.push(...e.children);
-  }
-  return ids
-    .map((id) => catalogueEntry(catalogue, id))
-    .filter((e): e is IrEntry => e !== undefined);
 }
 
 export type SetupStep = "points" | "edition" | "faction" | "detachment";
@@ -110,7 +80,7 @@ export function SetupWizard({
   const previews = chosenIds
     .map((id) => detachments.find((d) => d.id === id))
     .filter((d): d is IrEntry => d !== undefined)
-    .map((d) => ({ detachment: d, enhancements: enhancementsFor(catalogue, d.name) }));
+    .map((d) => ({ detachment: d, enhancements: enhancementsForDetachment(catalogue, d.id) }));
 
   // The DP budget meter renders only when the catalogue actually PRICES detachments
   // (a "Detachment Points" cost on at least one detachment entry) — never on an

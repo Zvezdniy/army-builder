@@ -1,4 +1,4 @@
-import type { IrCatalogue, IrEntry, IrGroup, IrProfile, Roster, RosterSelection } from "@muster/domain";
+import type { IrCatalogue, IrEntry, IrGroup, IrProfile, Roster, RosterSelection, VisibilityModifier, IrCondition } from "@muster/domain";
 import { battlefieldRole, OTHER_ROLE, roleRank } from "./roles";
 
 // The BSData cost-type an 11e detachment is priced in. Used only to shape the
@@ -194,6 +194,54 @@ export function setPointsLimit(roster: Roster, pointsLimit: number): Roster {
 /** Find an entry anywhere in the catalogue tree by id (roots and nested children). */
 export function catalogueEntry(catalogue: IrCatalogue, entryId: string): IrEntry | undefined {
   return findEntry(catalogue, entryId);
+}
+
+/** Flatten a visibility modifier's conditions: its own `conditions` plus, recursively,
+ *  every nested `conditionGroups[].conditions`. */
+function flattenConditions(vm: VisibilityModifier): IrCondition[] {
+  const out: IrCondition[] = [...(vm.conditions ?? [])];
+  const stack = [...(vm.conditionGroups ?? [])];
+  while (stack.length > 0) {
+    const g = stack.pop()!;
+    out.push(...(g.conditions ?? []));
+    stack.push(...(g.conditionGroups ?? []));
+  }
+  return out;
+}
+
+/** True when `entry` has a `set hidden` visibility gate that hides it until
+ *  `detachmentId` is selected — a `lessThan selections <detachmentId>` condition. */
+function visibilityGatesDetachment(entry: IrEntry, detachmentId: string): boolean {
+  for (const vm of entry.visibilityModifiers ?? []) {
+    if (vm.set !== true) continue;
+    for (const c of flattenConditions(vm)) {
+      if (c.field === "selections" && c.comparator === "lessThan"
+        && c.targetType === "entry" && c.targetId === detachmentId) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+/** The enhancements a detachment unlocks: every entry in the catalogue tree whose
+ *  `set hidden` visibility gate is keyed on this detachment's selection (see
+ *  `visibilityGatesDetachment`). Deduped by entry id in first-encounter order. This
+ *  reads the real per-detachment gate the parser emits, so it works for every faction
+ *  — unlike a group-name convention that only the Space Marine family follows. */
+export function enhancementsForDetachment(catalogue: IrCatalogue, detachmentId: string): IrEntry[] {
+  const stack: IrEntry[] = [...catalogue.entries];
+  const seen = new Set<string>();
+  const out: IrEntry[] = [];
+  while (stack.length > 0) {
+    const e = stack.pop()!;
+    if (!seen.has(e.id) && visibilityGatesDetachment(e, detachmentId)) {
+      seen.add(e.id);
+      out.push(e);
+    }
+    stack.push(...e.children);
+  }
+  return out;
 }
 
 /** A datasheet section: all profiles of one typeName across the selected subtree. */
