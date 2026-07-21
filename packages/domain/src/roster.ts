@@ -44,3 +44,39 @@ export const Roster = z.object({
   overrides: z.array(RosterOverride).optional(),
 });
 export type Roster = z.infer<typeof Roster>;
+
+/** File format for a single exported roster. `schema` is a version gate the
+ *  importer checks before trusting the payload. `edition` is required because
+ *  10e/11e catalogue ids collide — it is not on `Roster`. */
+export const ROSTER_ENVELOPE_SCHEMA = "muster-roster/v1";
+export const RosterEnvelope = z.object({
+  schema: z.literal(ROSTER_ENVELOPE_SCHEMA),
+  edition: z.string(),
+  catalogueId: z.string(),
+  roster: Roster,
+});
+export type RosterEnvelope = z.infer<typeof RosterEnvelope>;
+
+/** One saved roster plus denormalized display fields, so the library list
+ *  renders without loading each catalogue. `id === roster.id`. */
+export const LibraryEntry = z.object({
+  id: z.string(),
+  name: z.string(),
+  edition: z.string(),
+  catalogueId: z.string(),
+  catalogueName: z.string(),
+  points: z.number().finite(),
+  updatedAt: z.number().finite(),
+  roster: Roster,
+});
+export type LibraryEntry = z.infer<typeof LibraryEntry>;
+
+/** The whole persisted library. `activeId` is the last-edited entry restored
+ *  on app open. */
+export const LIBRARY_VERSION = 1;
+export const RosterLibrary = z.object({
+  version: z.literal(LIBRARY_VERSION),
+  activeId: z.string().nullable(),
+  entries: z.array(LibraryEntry).default([]),
+});
+export type RosterLibrary = z.infer<typeof RosterLibrary>;
