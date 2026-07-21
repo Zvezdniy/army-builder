@@ -292,6 +292,7 @@ fn apply_link_content(
 
     resolved.profiles.extend(link.profiles.iter().cloned());
     resolve_info_links(&link.info_links, symbols, diags, &mut resolved.profiles);
+    resolve_rule_info_links(&link.info_links, &mut resolved.rule_names);
     Ok(())
 }
 
@@ -523,6 +524,21 @@ fn resolve_info_links(
     }
 }
 
+/// Append each non-hidden `type="rule"` infoLink's name to `rule_names`, deduped
+/// against names already present. Unlike a profile link (whose content is resolved
+/// by id), a rule link's `name` IS the key into the global rule-text map, so no
+/// symbol lookup is needed. Empty-name links (no key to record) are skipped.
+fn resolve_rule_info_links(info_links: &[RawInfoLink], rule_names: &mut Vec<String>) {
+    for link in info_links {
+        if link.link_type != "rule" || link.hidden || link.name.is_empty() {
+            continue;
+        }
+        if !rule_names.iter().any(|n| n == &link.name) {
+            rule_names.push(link.name.clone());
+        }
+    }
+}
+
 fn resolve_entry(entry: &RawEntry, symbols: &SymbolTable, path: &mut HashSet<String>,
     budget: &mut Budget, diags: &mut Vec<Diagnostic>, depth: usize) -> Result<RawEntry, ParseError> {
     budget.check_depth(depth)?;
@@ -540,6 +556,7 @@ fn resolve_entry(entry: &RawEntry, symbols: &SymbolTable, path: &mut HashSet<Str
         resolve_link(link, symbols, path, budget, diags, depth, &mut children, &mut groups)?;
     }
     resolve_info_links(&entry.info_links, symbols, diags, &mut out.profiles);
+    resolve_rule_info_links(&entry.info_links, &mut out.rule_names);
     out.entries = children;
     out.groups = groups;
     out.entry_links = Vec::new();
@@ -1020,7 +1037,7 @@ mod tests {
         let mut rich = link("t");
         rich.profiles.push(RawProfile { id: "inline.p".into(), ..Default::default() });
         rich.info_links.push(RawInfoLink {
-            target_id: "shared.p".into(), link_type: "profile".into(), hidden: false });
+            target_id: "shared.p".into(), link_type: "profile".into(), hidden: false, name: String::new() });
         let owner = RawEntry {
             id: "owner".into(), entry_type: "unit".into(),
             entry_links: vec![rich], ..Default::default()
@@ -1034,6 +1051,46 @@ mod tests {
         let clone = &resolved.entries[0].entries[0];
         let ids: Vec<&str> = clone.profiles.iter().map(|p| p.id.as_str()).collect();
         assert_eq!(ids, vec!["inline.p", "shared.p"], "inline profile and infoLink target both land");
+    }
+
+    #[test]
+    fn link_declared_rule_infolink_reaches_the_clone() {
+        let target = entry("t", vec![]);
+        let mut rich = link("t");
+        rich.info_links.push(RawInfoLink {
+            target_id: "t".into(), link_type: "rule".into(), hidden: false,
+            name: "Placement Rule".into() });
+        let owner = RawEntry {
+            id: "owner".into(), entry_type: "unit".into(),
+            entry_links: vec![rich], ..Default::default()
+        };
+        let cat = RawCatalogue {
+            id: "c".into(), entries: vec![owner], shared_entries: vec![target],
+            ..Default::default()
+        };
+        let resolved = resolve(cat).unwrap();
+        let clone = &resolved.entries[0].entries[0];
+        assert!(clone.rule_names.contains(&"Placement Rule".to_string()),
+            "a rule infoLink declared on the entryLink itself should reach the clone");
+    }
+
+    fn rule_link(name: &str, hidden: bool) -> RawInfoLink {
+        RawInfoLink { target_id: "t".into(), link_type: "rule".into(), hidden, name: name.into() }
+    }
+
+    #[test]
+    fn rule_info_links_append_dedup_skip_hidden_and_empty() {
+        let mut names = vec!["Angelic Judgement".to_string()]; // a direct <rule> already present
+        let links = vec![
+            rule_link("The Blood of Martyrs", false), // added
+            rule_link("Angelic Judgement", false),    // dedup: already present
+            rule_link("Hidden Rule", true),           // skip: hidden
+            rule_link("", false),                     // skip: empty name
+            RawInfoLink { target_id: "p".into(), link_type: "profile".into(), hidden: false, name: "Some Profile".into() }, // skip: not a rule
+        ];
+        resolve_rule_info_links(&links, &mut names);
+        assert_eq!(names, vec!["Angelic Judgement", "The Blood of Martyrs"],
+            "direct name kept first; one linked name appended; hidden/empty/profile skipped; no dup");
     }
 
     #[test]
