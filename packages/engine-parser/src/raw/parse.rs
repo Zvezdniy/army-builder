@@ -503,6 +503,7 @@ fn read_infolinks_into(dst: &mut Vec<RawInfoLink>, r: &mut SafeXmlReader) -> Res
                         target_id: attr(&e, b"targetId").unwrap_or_default(),
                         link_type: attr(&e, b"type").unwrap_or_default(),
                         hidden: attr_bool(&e, b"hidden"),
+                        name: attr(&e, b"name").unwrap_or_default(),
                     });
                 }
                 Event::Start(e) if e.local_name().as_ref() == b"infoLink" => {
@@ -510,6 +511,7 @@ fn read_infolinks_into(dst: &mut Vec<RawInfoLink>, r: &mut SafeXmlReader) -> Res
                         target_id: attr(&e, b"targetId").unwrap_or_default(),
                         link_type: attr(&e, b"type").unwrap_or_default(),
                         hidden: attr_bool(&e, b"hidden"),
+                        name: attr(&e, b"name").unwrap_or_default(),
                     });
                     skip_element(r, b"infoLink")?; // consume the (rare) child subtree
                 }

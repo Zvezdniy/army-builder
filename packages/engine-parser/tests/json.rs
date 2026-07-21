@@ -328,3 +328,15 @@ fn parse_system_files_reads_json_faction_plus_gamesystem() {
     assert_eq!(wg.constraints.len(), 1);
     assert!(!diags.iter().any(|d| d.code == "entry.associations_dropped"));
 }
+
+#[test]
+fn info_link_name_round_trips() {
+    let json = br#"{"catalogue":{"id":"c","name":"C","revision":1,"gameSystemId":"gs",
+      "selectionEntries":[{"id":"e.u","name":"U","type":"unit",
+        "infoLinks":[{"id":"l","name":"The Blood of Martyrs","type":"rule","targetId":"r1"}]}]}}"#;
+    let raw = parse_raw_json(json, &mut Vec::new()).unwrap();
+    let u = raw.entries.iter().find(|e| e.id == "e.u").unwrap();
+    assert_eq!(u.info_links.len(), 1);
+    assert_eq!(u.info_links[0].name, "The Blood of Martyrs");
+    assert_eq!(u.info_links[0].link_type, "rule");
+}

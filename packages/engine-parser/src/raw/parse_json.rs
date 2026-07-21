@@ -112,7 +112,7 @@ struct JsonGroup {
 
 #[derive(Deserialize, Default)]
 #[serde(default, rename_all = "camelCase")]
-struct JsonInfoLink { target_id: String, #[serde(rename = "type")] link_type: String, hidden: bool }
+struct JsonInfoLink { target_id: String, #[serde(rename = "type")] link_type: String, hidden: bool, name: String }
 
 #[derive(Deserialize, Default)]
 #[serde(default, rename_all = "camelCase")]
@@ -380,6 +380,7 @@ fn map_profiles(ps: &[JsonProfile]) -> Vec<RawProfile> {
 fn map_info_links(ls: &[JsonInfoLink]) -> Vec<RawInfoLink> {
     ls.iter().map(|l| RawInfoLink {
         target_id: l.target_id.clone(), link_type: l.link_type.clone(), hidden: l.hidden,
+        name: l.name.clone(),
     }).collect()
 }
 

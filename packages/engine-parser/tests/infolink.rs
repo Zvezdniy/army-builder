@@ -27,6 +27,7 @@ fn parse_reads_shared_profiles_and_infolinks() {
     assert_eq!(u.info_links.len(), 1);
     assert_eq!((u.info_links[0].target_id.as_str(), u.info_links[0].link_type.as_str()), ("p.inv", "profile"));
     assert!(!u.info_links[0].hidden);
+    assert_eq!(u.info_links[0].name, "Invulnerable Save");
 }
 
 use engine_parser::parse_bytes;

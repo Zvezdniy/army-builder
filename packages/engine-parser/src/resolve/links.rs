@@ -1020,7 +1020,7 @@ mod tests {
         let mut rich = link("t");
         rich.profiles.push(RawProfile { id: "inline.p".into(), ..Default::default() });
         rich.info_links.push(RawInfoLink {
-            target_id: "shared.p".into(), link_type: "profile".into(), hidden: false });
+            target_id: "shared.p".into(), link_type: "profile".into(), hidden: false, name: String::new() });
         let owner = RawEntry {
             id: "owner".into(), entry_type: "unit".into(),
             entry_links: vec![rich], ..Default::default()

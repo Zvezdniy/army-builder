@@ -85,6 +85,7 @@ pub struct RawInfoLink {
     pub target_id: String,
     pub link_type: String,   // profile | rule | infoGroup
     pub hidden: bool,
+    pub name: String,        // the link's display name; for a rule link this is the ruleTexts key
 }
 
 #[derive(Debug, Default, Clone)]
