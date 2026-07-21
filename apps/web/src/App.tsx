@@ -11,8 +11,11 @@ import { AddUnitPicker } from "./components/AddUnitPicker";
 import { SetupWizard, type SetupStep } from "./components/SetupWizard";
 import { SetupBar } from "./components/SetupBar";
 import { DetachmentPanel } from "./components/DetachmentPanel";
+import { StratagemPanel } from "./components/StratagemPanel";
 import { LegalityPanel } from "./components/LegalityPanel";
 import { bundledDescriptor, loadRegistry, loadCatalogueFor, normalizeBase, type CatalogueDescriptor } from "./registry/catalogueRegistry";
+import { loadStratagemLibrary, loadStratagemsFor, slugForDescriptor } from "./registry/stratagemRegistry";
+import type { StratagemManifest, StratagemFile } from "@muster/domain";
 import mini40k from "./mini40k.ir.json";
 
 // Where catalogue data is served from. Defaults to the app's own origin (Vite's
@@ -44,6 +47,8 @@ export function App() {
   const [registry, setRegistry] = useState<CatalogueDescriptor[]>([bundled]);
   const [activeDescriptorId, setActiveDescriptorId] = useState(bundled.id);
   const [factionError, setFactionError] = useState<string | undefined>(undefined);
+  const [stratagemManifest, setStratagemManifest] = useState<StratagemManifest | undefined>(undefined);
+  const [stratagemData, setStratagemData] = useState<{ core: StratagemFile; faction?: StratagemFile } | undefined>(undefined);
   const result = useMemo(() => {
     const r = evaluate(roster, catalogue);
     // The detachment is an army-level choice made in the wizard, not a roster unit,
@@ -69,6 +74,21 @@ export function App() {
       if (reg.length > 1) setRegistry(reg);
     });
   }, []);
+
+  // Discover the stratagem library from the same base as the catalogue library.
+  // Any failure leaves the manifest undefined → the panel simply never appears.
+  useEffect(() => {
+    void loadStratagemLibrary(boundFetch, CATALOGUES_BASE).then(setStratagemManifest);
+  }, []);
+
+  // Load Core + the active faction's stratagems whenever the faction or the manifest
+  // changes. A bundled/imported descriptor has no slug → core-only; any failure → undefined.
+  useEffect(() => {
+    if (!stratagemManifest) { setStratagemData(undefined); return; }
+    const desc = registry.find((d) => d.id === activeDescriptorId);
+    const slug = desc ? slugForDescriptor(desc) : undefined;
+    void loadStratagemsFor(boundFetch, CATALOGUES_BASE, stratagemManifest, slug).then(setStratagemData);
+  }, [activeDescriptorId, stratagemManifest, registry]);
 
   // Shared swap of the active catalogue: fresh roster, cleared selection, wizard
   // re-evaluated. Used by both file-import and faction switching.
@@ -131,6 +151,8 @@ export function App() {
       <DetachmentPanel catalogue={catalogue} roster={roster}
         onSelectUnit={setSelectedUnitId}
         onToggleGroupMember={(pid, group, eid) => setRoster((r) => toggleGroupMember(r, pid, group, eid, catalogue))} />
+      <StratagemPanel data={stratagemData} roster={roster} catalogue={catalogue}
+        attribution={stratagemManifest?.attribution} />
       <LegalityPanel
         result={result}
         // Resolves the name of a TOP-LEVEL unit. Issues carrying a nested
