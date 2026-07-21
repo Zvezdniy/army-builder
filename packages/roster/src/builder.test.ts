@@ -1373,10 +1373,25 @@ describe("enhancementTargets", () => {
     r = addUnit(r, "e.canoness", enhHostCat);
     expect(enhancementTargets(r, enhHostCat, "e.enh")).toHaveLength(2);
   });
-  it("skips the detachment-root subtree", () => {
-    const r = toggleDetachment(createRoster(enhHostCat, 2000), "e.saga", enhHostCat);
-    // The detachment root has no Enhancements group anyway, but assert no target leaks from it.
-    expect(enhancementTargets(r, enhHostCat, "e.enh")).toEqual([]);
+  it("skips the WHOLE detachment-root subtree even when a node in it hosts the group", () => {
+    // Give the detachment option itself a matching "…Enhancements" group with e.enh. Once
+    // the detachment is chosen, e.saga sits under the detachment root; the whole root
+    // subtree must be skipped, so no target leaks — proving the skip, not just an absent group.
+    const cat = {
+      ...enhHostCat,
+      entries: [
+        {
+          ...enhHostCat.entries[0]!,
+          children: [{
+            id: "e.saga", name: "Saga", type: "upgrade" as const, costs: [], categories: [], constraints: [], children: [],
+            groups: [{ id: "g.saga.enh", name: "Enhancements", memberEntryIds: ["e.enh"], constraints: [] }],
+          }],
+        },
+        enhHostCat.entries[1]!,
+      ],
+    };
+    const r = toggleDetachment(createRoster(cat, 2000), "e.saga", cat);
+    expect(enhancementTargets(r, cat, "e.enh")).toEqual([]);
   });
   it("falls back to the entryId when a top-level selection's entry is absent from the catalogue", () => {
     const r = { ...createRoster(enhHostCat, 2000), selections: [{ id: "sel.ghost", entryId: "e.ghost", count: 1, selections: [] }] };
