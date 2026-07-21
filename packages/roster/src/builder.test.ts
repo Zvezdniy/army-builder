@@ -763,6 +763,25 @@ const detCatCustodes: IrCatalogue = {
     },
   ],
 };
+// Votann: the ROOT ENTRY is named "Detachment Choice" — the third, most literal-fragile
+// regex branch, and a shape that occurs in real production data (leagues-of-votann 11e).
+const detCatVotann: IrCatalogue = {
+  ...detCat,
+  entries: [
+    detCat.entries[0]!,
+    {
+      id: "e.det", name: "Detachment Choice", type: "upgrade", costs: [], categories: [], constraints: [],
+      children: [
+        { id: "e.gladius", name: "Hearthband", type: "upgrade", costs: dpCost, categories: [], constraints: [], children: [] },
+        { id: "e.anvil", name: "Oathband", type: "upgrade", costs: dpCost, categories: [], constraints: [], children: [] },
+      ],
+      groups: [{
+        id: "g.det", name: "Detachment", memberEntryIds: ["e.gladius", "e.anvil"],
+        constraints: [{ id: "gc.min", type: "min", value: 1, scope: "self" }],
+      }],
+    },
+  ],
+};
 // Mechanicus: root "Detachment" but GROUP "Detachments" (plural). min 1 only → accumulate.
 const detCatMech: IrCatalogue = {
   ...detCat,
@@ -800,6 +819,17 @@ const detCatBudgetedNoGroup: IrCatalogue = {
 describe("detachment naming variants (real BSData shapes)", () => {
   it("finds the root when the entry is named 'Detachments' (Custodes)", () => {
     expect(availableDetachments(detCatCustodes).map((d) => d.id)).toEqual(["e.gladius", "e.anvil"]);
+    // Exercise the group-resolution path end-to-end for a plural-root shape too.
+    let r = toggleDetachment(createRoster(detCatCustodes, 2000), "e.gladius", detCatCustodes);
+    r = toggleDetachment(r, "e.anvil", detCatCustodes);
+    expect(selectedDetachments(r, detCatCustodes)).toEqual(["e.gladius", "e.anvil"]);
+  });
+
+  it("finds the root when the entry is named 'Detachment Choice' (Votann)", () => {
+    expect(availableDetachments(detCatVotann).map((d) => d.id)).toEqual(["e.gladius", "e.anvil"]);
+    let r = toggleDetachment(createRoster(detCatVotann, 2000), "e.gladius", detCatVotann);
+    r = toggleDetachment(r, "e.anvil", detCatVotann);
+    expect(selectedDetachments(r, detCatVotann)).toEqual(["e.gladius", "e.anvil"]);
   });
 
   it("accumulates when the root's group is named 'Detachments' (Mechanicus)", () => {
