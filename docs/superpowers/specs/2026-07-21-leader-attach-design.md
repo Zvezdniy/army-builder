@@ -35,8 +35,9 @@ The gap is entirely in the **roster model** (no attachment relationship) and the
 - Offer, in the roster, the Leader's eligible **targets that are actually present**
   in the current roster and not already led.
 - Store the attachment (Leader → Bodyguard) in the roster domain.
-- Show the relationship in the builder: the Leader rendered under its Bodyguard,
-  a "leading …" marker, and a combined points subtotal.
+- Show the relationship in the builder: the Leader rendered under its Bodyguard
+  with a "leading …" marker (the roster list shows model counts, not per-unit
+  points, so v1 adds no points subtotal — see Non-goals).
 - Legality guard **at the attach operation**: only an eligible, un-led target;
   at most one Leader per Bodyguard.
 
@@ -134,9 +135,9 @@ Leader; removing a Leader drops its own attachment with the subtree.
   - *Not attached, targets exist* → a button per `leaderTargets` entry (`attachLeader`).
   - *Not attached, no targets* → hint: "Add an eligible unit to this roster to attach."
 - **`RosterList`**: an attached Leader is rendered indented beneath its Bodyguard
-  with a "leading" marker, and the pair shows a combined points subtotal (sum of the
-  two units' points — points still come per-unit from `evaluate`). Un-attached units
-  render as today.
+  with a "leading" marker; the Leader no longer appears in its own role bucket while
+  attached (it moves under the Bodyguard). Un-attached units render as today. No
+  points subtotal — the list shows model counts, not per-unit points.
 - **`App.tsx`** wires `attachLeader` / `detachLeader` into `setRoster`, like the
   existing `onToggleGroupMember` handlers.
 
@@ -152,7 +153,7 @@ eligible names ──intersect── roster top-level unit names (case-insensiti
 UnitDetail "Attach to unit" ──user click──▶ attachLeader ──▶ RosterSelection.attachedTo set
    │                                                              │
    ▼                                                              ▼
-RosterList groups Leader under Bodyguard, combined points     remove() clears dangling refs
+RosterList groups Leader under Bodyguard (no points)          remove() clears dangling refs
 ```
 
 ## Testing
@@ -171,8 +172,8 @@ RosterList groups Leader under Bodyguard, combined points     remove() clears da
 - **`builder.test.ts`:** `remove()` clears a dangling `attachedTo` when the Bodyguard
   is removed.
 - **Web component tests:** `UnitDetail` renders the three attach states and fires the
-  handlers; `RosterList` renders an attached Leader grouped under its Bodyguard with a
-  combined subtotal.
+  handlers; `RosterList` renders an attached Leader grouped under its Bodyguard (and
+  not in its own role bucket).
 
 ## Non-goals recap
 
