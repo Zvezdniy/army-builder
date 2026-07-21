@@ -1,5 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
-import { bundledDescriptor, loadRegistry, loadCatalogueFor, normalizeBase, type CatalogueDescriptor } from "./catalogueRegistry";
+import {
+  bundledDescriptor, loadRegistry, loadCatalogueFor, normalizeBase,
+  offerableFactions, editionsOf, type CatalogueDescriptor,
+} from "./catalogueRegistry";
 import mini40k from "../mini40k.ir.json";
 
 const bundled = bundledDescriptor(mini40k, { id: "10e", name: "10th Edition" });
@@ -144,6 +147,43 @@ describe("loadRegistry — editions", () => {
     const sm = reg.find((d) => d.catalogueId === "sm");
     expect(sm?.edition).toBe("10e");
     expect(sm?.editionName).toBe("10th Edition");
+  });
+});
+
+describe("offerableFactions", () => {
+  const bundledDesc: CatalogueDescriptor = {
+    id: "10e:mini", catalogueId: "mini", name: "Mini 40k", edition: "10e", editionName: "10th Edition",
+    source: { kind: "bundled", data: {} },
+  };
+  const manifestDesc: CatalogueDescriptor = {
+    id: "10e:sm", catalogueId: "sm", name: "Space Marines", edition: "10e", editionName: "10th Edition",
+    source: { kind: "manifest", file: "sm.ir.json" },
+  };
+
+  it("hides the bundled descriptor once a manifest descriptor exists", () => {
+    expect(offerableFactions([bundledDesc, manifestDesc])).toEqual([manifestDesc]);
+  });
+
+  it("keeps the bundled descriptor when it is the only one", () => {
+    expect(offerableFactions([bundledDesc])).toEqual([bundledDesc]);
+  });
+
+  it("returns undefined unchanged", () => {
+    expect(offerableFactions(undefined)).toBeUndefined();
+  });
+});
+
+describe("editionsOf", () => {
+  it("dedupes by id, preserving first-appearance order", () => {
+    const descs: CatalogueDescriptor[] = [
+      { id: "10e:a", catalogueId: "a", name: "Alpha", edition: "10e", editionName: "10th Edition", source: { kind: "manifest", file: "a.ir.json" } },
+      { id: "11e:a", catalogueId: "a", name: "Alpha", edition: "11e", editionName: "11th Edition", source: { kind: "manifest", file: "a11.ir.json" } },
+      { id: "10e:b", catalogueId: "b", name: "Beta", edition: "10e", editionName: "10th Edition", source: { kind: "manifest", file: "b.ir.json" } },
+    ];
+    expect(editionsOf(descs)).toEqual([
+      { id: "10e", name: "10th Edition" },
+      { id: "11e", name: "11th Edition" },
+    ]);
   });
 });
 

@@ -128,6 +128,27 @@ export async function loadRegistry(
   }
 }
 
+/** The faction descriptors to OFFER in the picker. The bundled fixture (Mini 40k) is
+ *  hidden once any real (manifest) faction exists, but kept when it is the only entry
+ *  (manifest fetch failed) so the picker is never empty. Returns the input unchanged
+ *  when it is undefined. */
+export function offerableFactions(
+  registry: CatalogueDescriptor[] | undefined,
+): CatalogueDescriptor[] | undefined {
+  if (!registry) return registry;
+  return registry.some((d) => d.source.kind !== "bundled")
+    ? registry.filter((d) => d.source.kind !== "bundled")
+    : registry;
+}
+
+/** Distinct editions across descriptors, in first-appearance order. */
+export function editionsOf(descriptors: CatalogueDescriptor[]): { id: string; name: string }[] {
+  return descriptors.reduce<{ id: string; name: string }[]>(
+    (acc, d) => (acc.some((e) => e.id === d.edition) ? acc : [...acc, { id: d.edition, name: d.editionName }]),
+    [],
+  );
+}
+
 /** Lazily materialize the IrCatalogue for a descriptor through the shared load seam.
  *  Bundled descriptors need no fetch; a manifest descriptor without a `fetchFn`
  *  (no global fetch available) throws, which callers surface as a load error. */

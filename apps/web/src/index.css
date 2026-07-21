@@ -276,8 +276,6 @@ section { background: var(--panel); border: 1px solid var(--line); border-radius
 .btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
 .btn-ghost { background: transparent; }
 
-.edition-picker { display: flex; gap: 6px; margin: 0 0 10px; }
-
 .faction-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
 .faction-card { display: flex; flex-direction: column; gap: 2px; padding: 12px; border: 1px solid var(--line);
   border-radius: 10px; background: var(--panel); cursor: pointer; text-align: left; }

@@ -8,7 +8,7 @@ import { evaluate, hiddenEntryIds, hiddenSelectionIds } from "@muster/engine-eva
 import { RosterList } from "./components/RosterList";
 import { UnitDetail } from "./components/UnitDetail";
 import { AddUnitPicker } from "./components/AddUnitPicker";
-import { SetupWizard } from "./components/SetupWizard";
+import { SetupWizard, type SetupStep } from "./components/SetupWizard";
 import { SetupBar } from "./components/SetupBar";
 import { LegalityPanel } from "./components/LegalityPanel";
 import { bundledDescriptor, loadRegistry, loadCatalogueFor, normalizeBase, type CatalogueDescriptor } from "./registry/catalogueRegistry";
@@ -38,7 +38,7 @@ export function App() {
   const [roster, setRoster] = useState(() => createRoster(catalogue, 2000));
   const [selectedUnitId, setSelectedUnitId] = useState<string | undefined>(undefined);
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [wizardStep, setWizardStep] = useState(0);
+  const [wizardStep, setWizardStep] = useState<SetupStep>("points");
   const [wizardOpen, setWizardOpen] = useState(() => needsSetup(catalogue, roster));
   const [registry, setRegistry] = useState<CatalogueDescriptor[]>([bundled]);
   const [activeDescriptorId, setActiveDescriptorId] = useState(bundled.id);
@@ -78,7 +78,7 @@ export function App() {
     setActiveDescriptorId(descriptorId);
     setSelectedUnitId(undefined);
     setPickerOpen(false);
-    setWizardStep(0);
+    setWizardStep("points");
     setWizardOpen(needsSetup(next, nextRoster));
   };
 
@@ -97,7 +97,7 @@ export function App() {
       .catch(() => setFactionError(`Couldn't load ${desc.name}`));
   };
 
-  const openWizardAt = (step: number) => { setWizardStep(step); setWizardOpen(true); };
+  const openWizardAt = (step: SetupStep) => { setWizardStep(step); setWizardOpen(true); };
 
   // Add a unit and focus it, so its config/datasheet render immediately.
   // addUnit is called once (not in an updater) so its fresh id is knowable and
@@ -125,7 +125,8 @@ export function App() {
             onChange={(e) => { const f = e.target.files?.[0]; if (f) void loadIr(f); }} />
         </label>
       </header>
-      <SetupBar catalogue={catalogue} roster={roster} onEdit={openWizardAt} />
+      <SetupBar catalogue={catalogue} roster={roster} onEdit={openWizardAt}
+        registry={registry} activeDescriptorId={activeDescriptorId} />
       <LegalityPanel
         result={result}
         // Resolves the name of a TOP-LEVEL unit. Issues carrying a nested
@@ -136,7 +137,7 @@ export function App() {
           const sel = roster.selections.find((s) => s.id === selectionId);
           return sel ? catalogue.entries.find((e) => e.id === sel.entryId)?.name : undefined;
         }}
-        onEditPoints={() => openWizardAt(0)}
+        onEditPoints={() => openWizardAt("points")}
         onFocusUnit={setSelectedUnitId}
       />
       <div className="builder" data-view={selectedUnitId ? "detail" : "list"}>

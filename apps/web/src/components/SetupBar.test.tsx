@@ -50,7 +50,7 @@ describe("SetupBar", () => {
     expect(screen.getByText("Space Marines")).toBeTruthy();
     expect(screen.getByText("Gladius Task Force")).toBeTruthy();
     fireEvent.click(screen.getByText("Gladius Task Force"));
-    expect(onEdit).toHaveBeenCalledWith(2);
+    expect(onEdit).toHaveBeenCalledWith("detachment");
   });
 
   it("shows a 'Choose…' detachment chip before one is picked", () => {
@@ -70,5 +70,33 @@ describe("SetupBar", () => {
     render(<SetupBar catalogue={noDetCat} roster={createRoster(noDetCat, 2000)} onEdit={() => {}} />);
     expect(screen.getByText("Mini")).toBeTruthy();
     expect(screen.queryByText("Detachment")).toBeNull();
+  });
+
+  const twoEditionRegistry = [
+    { id: "10e:a", catalogueId: "a", name: "Alpha", edition: "10e", editionName: "10th Edition", source: { kind: "manifest" as const, file: "a.ir.json" } },
+    { id: "11e:a", catalogueId: "a", name: "Alpha", edition: "11e", editionName: "11th Edition", source: { kind: "manifest" as const, file: "a11.ir.json" } },
+  ];
+  const oneEditionRegistry = [
+    { id: "10e:a", catalogueId: "a", name: "Alpha", edition: "10e", editionName: "10th Edition", source: { kind: "manifest" as const, file: "a.ir.json" } },
+  ];
+
+  it("shows the Edition chip with the active descriptor's edition name when the library offers several editions", () => {
+    const onEdit = vi.fn();
+    render(
+      <SetupBar catalogue={detCat} roster={createRoster(detCat, 2000)} onEdit={onEdit}
+        registry={twoEditionRegistry} activeDescriptorId="10e:a" />,
+    );
+    expect(screen.getByText("10th Edition")).toBeTruthy();
+    fireEvent.click(screen.getByText("10th Edition"));
+    expect(onEdit).toHaveBeenCalledWith("edition");
+  });
+
+  it("omits the Edition chip when the library offers only one edition", () => {
+    render(
+      <SetupBar catalogue={detCat} roster={createRoster(detCat, 2000)} onEdit={() => {}}
+        registry={oneEditionRegistry} activeDescriptorId="10e:a" />,
+    );
+    expect(screen.queryByText("10th Edition")).toBeNull();
+    expect(screen.queryByText("Edition")).toBeNull();
   });
 });
