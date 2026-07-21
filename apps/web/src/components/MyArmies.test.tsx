@@ -25,4 +25,14 @@ describe("MyArmies", () => {
     render(<MyArmies {...props} library={emptyLibrary()} />);
     expect(screen.getByText(/no saved armies/i)).toBeTruthy();
   });
+  it("enters rename mode: shows the input, hides the row's action buttons, commits on Enter", () => {
+    const onRename = vi.fn();
+    render(<MyArmies {...props} onRename={onRename} />);
+    fireEvent.click(screen.getByRole("button", { name: /^rename Alpha$/i }));
+    const input = screen.getByLabelText(/rename Alpha/i);      // exactly one now — no dup label
+    expect(screen.queryByRole("button", { name: /^duplicate Alpha$/i })).toBeNull();
+    fireEvent.change(input, { target: { value: "Beta" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onRename).toHaveBeenCalledWith("r1", "Beta");
+  });
 });

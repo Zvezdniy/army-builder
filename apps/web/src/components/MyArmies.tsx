@@ -24,8 +24,7 @@ export function MyArmies({
 }) {
   const [renaming, setRenaming] = useState<string | undefined>(undefined);
   const [draft, setDraft] = useState("");
-  // Deterministic "relative time" reference computed once per render open.
-  const nowMs = library.entries.reduce((m, e) => Math.max(m, e.updatedAt), 0);
+  const nowMs = Date.now();
   const entries = [...library.entries].sort((a, b) => b.updatedAt - a.updatedAt);
 
   return (
@@ -51,20 +50,25 @@ export function MyArmies({
                 <input autoFocus value={draft} aria-label={`rename ${e.name}`}
                   onChange={(ev) => setDraft(ev.target.value)}
                   onBlur={() => { onRename(e.id, draft.trim() || e.name); setRenaming(undefined); }}
-                  onKeyDown={(ev) => { if (ev.key === "Enter") { onRename(e.id, draft.trim() || e.name); setRenaming(undefined); } }} />
+                  onKeyDown={(ev) => {
+                    if (ev.key === "Enter") { onRename(e.id, draft.trim() || e.name); setRenaming(undefined); }
+                    else if (ev.key === "Escape") { setRenaming(undefined); }
+                  }} />
               ) : (
-                <button className="army-open" aria-label={`open ${e.name}`} style={{ flex: 1, textAlign: "left" }}
-                  onClick={() => onOpen(e.id)}>
-                  <strong>{e.name}</strong>{" — "}
-                  <span>{e.catalogueName}</span>{" · "}
-                  <span>{e.points} pts</span>{" · "}
-                  <span>{when(e.updatedAt, nowMs)}</span>
-                </button>
+                <>
+                  <button className="army-open" aria-label={`open ${e.name}`} style={{ flex: 1, textAlign: "left" }}
+                    onClick={() => onOpen(e.id)}>
+                    <strong>{e.name}</strong>{" — "}
+                    <span>{e.catalogueName}</span>{" · "}
+                    <span>{e.points} pts</span>{" · "}
+                    <span>{when(e.updatedAt, nowMs)}</span>
+                  </button>
+                  <button aria-label={`rename ${e.name}`} onClick={() => { setRenaming(e.id); setDraft(e.name); }}>✎</button>
+                  <button aria-label={`duplicate ${e.name}`} onClick={() => onDuplicate(e.id)}>⧉</button>
+                  <button aria-label={`export ${e.name}`} onClick={() => onExport(e.id)}>⭳</button>
+                  <button aria-label={`delete ${e.name}`} onClick={() => { if (confirm(`Delete "${e.name}"?`)) onDelete(e.id); }}>✕</button>
+                </>
               )}
-              <button aria-label={`rename ${e.name}`} onClick={() => { setRenaming(e.id); setDraft(e.name); }}>✎</button>
-              <button aria-label={`duplicate ${e.name}`} onClick={() => onDuplicate(e.id)}>⧉</button>
-              <button aria-label={`export ${e.name}`} onClick={() => onExport(e.id)}>⭳</button>
-              <button aria-label={`delete ${e.name}`} onClick={() => { if (confirm(`Delete "${e.name}"?`)) onDelete(e.id); }}>✕</button>
             </div>
           ))}
         </div>
