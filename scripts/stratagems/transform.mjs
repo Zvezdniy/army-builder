@@ -58,3 +58,49 @@ export function recordToStratagem(rec) {
     description: rec.description,
   };
 }
+
+// The owner label before the en-dash ("Core", "Boarding Actions", a detachment name).
+function typePrefix(type) {
+  return (type || "").split("–")[0].trim();
+}
+
+// A universal Core stratagem: no faction AND owner exactly "Core". This excludes
+// empty-faction game-mode rows (Boarding Actions, Challenger) and the "Core
+// Stratagem" artefact rows.
+export function isCore(rec) {
+  return rec.faction_id === "" && typePrefix(rec.type) === "Core";
+}
+
+export function bucketStratagems(records, factionIds) {
+  const core = [];
+  const byFaction = new Map();
+  const dropped = new Map();
+  const bump = (key) => dropped.set(key, (dropped.get(key) ?? 0) + 1);
+  for (const rec of records) {
+    if (isCore(rec)) { core.push(recordToStratagem(rec)); continue; }
+    if (rec.faction_id === "") { bump(typePrefix(rec.type) || "(blank)"); continue; }
+    if (!factionIds.has(rec.faction_id)) { bump(rec.faction_id); continue; }
+    if (!byFaction.has(rec.faction_id)) byFaction.set(rec.faction_id, []);
+    byFaction.get(rec.faction_id).push(recordToStratagem(rec));
+  }
+  return { core, byFaction, dropped };
+}
+
+export function buildManifest(config, buckets) {
+  const factions = Object.entries(config.factionMap).map(([slug, wahaId]) => {
+    const canonical = config.canonicalSlug[wahaId];
+    return {
+      slug,
+      wahapediaFactionId: wahaId,
+      file: `stratagems/${canonical}.json`,
+      count: buckets.byFaction.get(wahaId)?.length ?? 0,
+    };
+  });
+  return {
+    version: 1,
+    source: "Wahapedia",
+    attribution: config.attribution,
+    core: { file: "stratagems/_core.json", count: buckets.core.length },
+    factions,
+  };
+}

@@ -82,3 +82,59 @@ describe("recordToStratagem", () => {
     expect(out.id).toBe("000000123");
   });
 });
+
+import { isCore, bucketStratagems, buildManifest } from "./transform.mjs";
+
+const rec = (o) => ({ faction_id: "", name: "X", id: "i" + Math.abs(0), type: "", cp_cost: "1",
+  legend: "", turn: "", phase: "", detachment: "", detachment_id: "", description: "", ...o });
+
+describe("isCore", () => {
+  it("is true only for empty faction_id with a 'Core' type-prefix", () => {
+    expect(isCore(rec({ faction_id: "", type: "Core – Wargear Stratagem" }))).toBe(true);
+    expect(isCore(rec({ faction_id: "", type: "Boarding Actions – Battle Tactic Stratagem" }))).toBe(false);
+    expect(isCore(rec({ faction_id: "", type: "Core Stratagem – Strategic Ploy Stratagem" }))).toBe(false);
+    expect(isCore(rec({ faction_id: "SM", type: "Core – Wargear Stratagem" }))).toBe(false);
+  });
+});
+
+describe("bucketStratagems", () => {
+  const records = [
+    rec({ faction_id: "", id: "c1", type: "Core – Wargear Stratagem", name: "GRENADE" }),
+    rec({ faction_id: "", id: "b1", type: "Boarding Actions – Battle Tactic Stratagem", name: "EXPLOSIVE CLEARANCE" }),
+    rec({ faction_id: "SM", id: "s1", type: "Foo – Battle Tactic Stratagem", detachment_id: "d1", detachment: "Foo" }),
+    rec({ faction_id: "TL", id: "t1", type: "Bar – Battle Tactic Stratagem", detachment_id: "d2", detachment: "Bar" }),
+  ];
+  const factionIds = new Set(["SM", "NEC"]);
+  it("splits Core, per-faction, and drops game-mode + out-of-map", () => {
+    const { core, byFaction, dropped } = bucketStratagems(records, factionIds);
+    expect(core.map((s) => s.name)).toEqual(["GRENADE"]);
+    expect(byFaction.get("SM")).toHaveLength(1);
+    expect(byFaction.has("NEC")).toBe(false);
+    expect(dropped.get("Boarding Actions")).toBe(1); // empty-faction non-Core
+    expect(dropped.get("TL")).toBe(1);               // out-of-map faction
+  });
+});
+
+describe("buildManifest", () => {
+  const config = {
+    attribution: "ATTR",
+    factionMap: { "space-marines": "SM", "blood-angels": "SM", "necrons": "NEC" },
+    canonicalSlug: { SM: "space-marines", NEC: "necrons" },
+  };
+  const buckets = {
+    core: [rec({}), rec({})],
+    byFaction: new Map([["SM", [rec({}), rec({})]], ["NEC", [rec({})]]]),
+    dropped: new Map(),
+  };
+  it("emits one entry per slug, chapters sharing the SM file", () => {
+    const m = buildManifest(config, buckets);
+    expect(m.version).toBe(1);
+    expect(m.attribution).toBe("ATTR");
+    expect(m.core).toEqual({ file: "stratagems/_core.json", count: 2 });
+    const bySlug = Object.fromEntries(m.factions.map((f) => [f.slug, f]));
+    expect(bySlug["space-marines"]).toEqual({ slug: "space-marines", wahapediaFactionId: "SM", file: "stratagems/space-marines.json", count: 2 });
+    expect(bySlug["blood-angels"].file).toBe("stratagems/space-marines.json");
+    expect(bySlug["blood-angels"].count).toBe(2);
+    expect(bySlug["necrons"].count).toBe(1);
+  });
+});
