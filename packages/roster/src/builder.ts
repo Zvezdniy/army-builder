@@ -244,6 +244,22 @@ export function enhancementsForDetachment(catalogue: IrCatalogue, detachmentId: 
   return out;
 }
 
+/** The detachment's own rules resolved to displayable text, in declaration order,
+ *  dropping any name whose text is absent or empty in `ruleTexts`. Shared by the
+ *  wizard preview and the builder's detachment panel so they render identical rules. */
+export function detachmentRuleTexts(
+  catalogue: IrCatalogue, detachmentId: string,
+): { name: string; text: string }[] {
+  const det = availableDetachments(catalogue).find((d) => d.id === detachmentId);
+  if (det === undefined) return [];
+  const out: { name: string; text: string }[] = [];
+  for (const name of det.ruleNames ?? []) {
+    const text = catalogue.ruleTexts?.[name];
+    if (typeof text === "string" && text.length > 0) out.push({ name, text });
+  }
+  return out;
+}
+
 /** A datasheet section: all profiles of one typeName across the selected subtree. */
 export interface DatasheetSection {
   typeName: string;
