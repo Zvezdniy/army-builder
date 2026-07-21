@@ -74,4 +74,26 @@ fn hidden_and_non_profile_infolinks_are_not_inlined() {
     let (ir, _diags) = parse_bytes(xml, false).unwrap();
     let u = ir.entries.iter().find(|e| e.id == "e.u").unwrap();
     assert!(u.profiles.is_empty(), "hidden profile link and rule-type link are not inlined");
+    assert!(u.rule_names.is_empty(),
+        "a rule link with no name attribute adds no rule name (nothing to key on)");
+}
+
+#[test]
+fn resolve_rule_infolink_lands_in_rule_names() {
+    let xml = br#"<?xml version="1.0"?><catalogue id="c" name="C" revision="1" gameSystemId="gs"
+      xmlns="http://www.battlescribe.net/schema/catalogueSchema">
+      <sharedRules>
+        <rule id="r.mart" name="The Blood of Martyrs"><description>Reroll.</description></rule>
+      </sharedRules>
+      <selectionEntries><selectionEntry id="e.det" name="Hallowed Martyrs" type="upgrade">
+        <infoLinks>
+          <infoLink name="The Blood of Martyrs" hidden="false" type="rule" id="l1" targetId="r.mart"/>
+        </infoLinks>
+      </selectionEntry></selectionEntries></catalogue>"#;
+    let (ir, _diags) = parse_bytes(xml, false).unwrap();
+    let d = ir.entries.iter().find(|e| e.id == "e.det").unwrap();
+    assert!(d.rule_names.iter().any(|n| n == "The Blood of Martyrs"),
+        "rule infoLink name is recorded in rule_names");
+    // And its text is resolvable through the global rule map.
+    assert_eq!(ir.rule_texts.get("The Blood of Martyrs").map(String::as_str), Some("Reroll."));
 }
