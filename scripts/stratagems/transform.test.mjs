@@ -138,3 +138,18 @@ describe("buildManifest", () => {
     expect(bySlug["necrons"].count).toBe(1);
   });
 });
+
+import { validateCsvBody } from "./transform.mjs";
+
+describe("validateCsvBody", () => {
+  const opts = { minBytes: 20, headerPrefix: "faction_id|name|id|type" };
+  it("passes a well-formed body", () => {
+    expect(() => validateCsvBody("faction_id|name|id|type|more|padding|here", opts)).not.toThrow();
+  });
+  it("throws on a too-short body", () => {
+    expect(() => validateCsvBody("short", opts)).toThrow(/floor/);
+  });
+  it("throws on a wrong header (e.g. an HTML error page)", () => {
+    expect(() => validateCsvBody("<html>error</html> and some more padding text", opts)).toThrow(/header/);
+  });
+});

@@ -6,6 +6,7 @@
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",
     "update-catalogues": "node scripts/update-catalogues.mjs",
+    "update-stratagems": "node scripts/update-stratagems.mjs",
     "test:scripts": "vitest run --config scripts/vitest.config.ts"
   },
   "devDependencies": {

@@ -104,3 +104,15 @@ export function buildManifest(config, buckets) {
     factions,
   };
 }
+
+// Guard a fetched body before it can overwrite good data: reject a truncated body
+// or an HTML error page whose first line is not the expected pipe header.
+export function validateCsvBody(text, { minBytes, headerPrefix }) {
+  if (text.length < minBytes) {
+    throw new Error(`body ${text.length}B < ${minBytes}B floor — truncated or error page`);
+  }
+  const first = text.replace(/^﻿/, "").split("\n", 1)[0];
+  if (!first.startsWith(headerPrefix)) {
+    throw new Error(`unexpected header "${first.slice(0, 40)}" — not the Wahapedia stratagem CSV`);
+  }
+}
