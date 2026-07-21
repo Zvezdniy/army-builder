@@ -11,6 +11,7 @@ export interface RosterSelection {
   entryId: string;
   count: number;
   selections: RosterSelection[];
+  attachedTo?: string;
 }
 // Input generic is `unknown` for the same reason as IrEntry: the
 // `.default([])` on `selections` makes it optional in the input type.
@@ -20,6 +21,7 @@ export const RosterSelection: z.ZodType<RosterSelection, z.ZodTypeDef, unknown> 
     entryId: z.string(),
     count: z.number().int().positive().max(MAX_SELECTION_COUNT),
     selections: z.array(RosterSelection).default([]),
+    attachedTo: z.string().optional(),
   }),
 );
 
