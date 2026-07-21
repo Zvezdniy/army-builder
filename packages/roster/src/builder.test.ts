@@ -1057,15 +1057,17 @@ describe("enhancementsForDetachment", () => {
     expect(ids).not.toContain("e.enhForce");
     expect(ids).not.toContain("e.enhNone");
   });
-  it("finds a gate nested in a conditionGroup and dedupes repeats", () => {
-    const twice = {
-      ...enhCat.entries[1]!,
-      children: [{
-        id: "e.enhDup", name: "Dup", type: "upgrade" as const, costs: [], categories: [], constraints: [], children: [],
-        visibilityModifiers: [selGate("e.gladius"), selGate("e.gladius")],
-      }],
+  it("reads a gate nested in a conditionGroup and dedupes the same entry id across tree positions", () => {
+    // entryLink inlining can place the SAME enhancement id at two placements; the by-id
+    // dedup must list it once (removing the `seen` guard would return it twice). selGate
+    // wraps its condition in a conditionGroup, so this also covers the nested-gate path.
+    const gated = {
+      id: "e.enhDup", name: "Dup", type: "upgrade" as const, costs: [], categories: [], constraints: [], children: [],
+      visibilityModifiers: [selGate("e.gladius")],
     };
-    const cat2 = { ...enhCat, entries: [enhCat.entries[0]!, twice] };
+    const heroA = { id: "e.heroA", name: "HeroA", type: "model" as const, costs: [], categories: [], constraints: [], children: [gated] };
+    const heroB = { id: "e.heroB", name: "HeroB", type: "model" as const, costs: [], categories: [], constraints: [], children: [gated] };
+    const cat2 = { ...enhCat, entries: [enhCat.entries[0]!, heroA, heroB] };
     expect(enhancementsForDetachment(cat2, "e.gladius").map((e) => e.id)).toEqual(["e.enhDup"]);
   });
   it("skips a set:false modifier and still finds a gate nested two conditionGroups deep", () => {
