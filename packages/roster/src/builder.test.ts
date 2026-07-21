@@ -741,6 +741,97 @@ const detCat11e: IrCatalogue = {
   ),
 };
 
+// Naming-variant shapes seen in real BSData. Custodes/Votann name the ROOT ENTRY
+// differently ("Detachments" / "Detachment Choice"); Mechanicus names the root's
+// GROUP "Detachments". All are otherwise 11e-shaped (min 1, DP-priced options), so
+// detachments must be available and must accumulate.
+const dpCost = [{ name: "Detachment Points", value: 2 }];
+const detCatCustodes: IrCatalogue = {
+  ...detCat,
+  entries: [
+    detCat.entries[0]!,
+    {
+      id: "e.det", name: "Detachments", type: "upgrade", costs: [], categories: [], constraints: [],
+      children: [
+        { id: "e.gladius", name: "Shield Host", type: "upgrade", costs: dpCost, categories: [], constraints: [], children: [] },
+        { id: "e.anvil", name: "Auric Champions", type: "upgrade", costs: dpCost, categories: [], constraints: [], children: [] },
+      ],
+      groups: [{
+        id: "g.det", name: "Detachment", memberEntryIds: ["e.gladius", "e.anvil"],
+        constraints: [{ id: "gc.min", type: "min", value: 1, scope: "self" }],
+      }],
+    },
+  ],
+};
+// Mechanicus: root "Detachment" but GROUP "Detachments" (plural). min 1 only → accumulate.
+const detCatMech: IrCatalogue = {
+  ...detCat,
+  entries: [
+    detCat.entries[0]!,
+    {
+      id: "e.det", name: "Detachment", type: "upgrade", costs: [], categories: [], constraints: [],
+      children: [
+        { id: "e.gladius", name: "Rad-zone Corps", type: "upgrade", costs: dpCost, categories: [], constraints: [], children: [] },
+        { id: "e.anvil", name: "Explorator Maniple", type: "upgrade", costs: dpCost, categories: [], constraints: [], children: [] },
+      ],
+      groups: [{
+        id: "g.det", name: "Detachments", memberEntryIds: ["e.gladius", "e.anvil"],
+        constraints: [{ id: "gc.min", type: "min", value: 1, scope: "self" }],
+      }],
+    },
+  ],
+};
+// DP-priced root with NO modelled group at all → synthetic fallback must omit the max.
+const detCatBudgetedNoGroup: IrCatalogue = {
+  ...detCat,
+  entries: [
+    detCat.entries[0]!,
+    {
+      id: "e.det", name: "Detachment", type: "upgrade", costs: [], categories: [], constraints: [],
+      children: [
+        { id: "e.gladius", name: "One", type: "upgrade", costs: dpCost, categories: [], constraints: [], children: [] },
+        { id: "e.anvil", name: "Two", type: "upgrade", costs: dpCost, categories: [], constraints: [], children: [] },
+      ],
+      // no groups
+    },
+  ],
+};
+
+describe("detachment naming variants (real BSData shapes)", () => {
+  it("finds the root when the entry is named 'Detachments' (Custodes)", () => {
+    expect(availableDetachments(detCatCustodes).map((d) => d.id)).toEqual(["e.gladius", "e.anvil"]);
+  });
+
+  it("accumulates when the root's group is named 'Detachments' (Mechanicus)", () => {
+    let r = toggleDetachment(createRoster(detCatMech, 2000), "e.gladius", detCatMech);
+    r = toggleDetachment(r, "e.anvil", detCatMech);
+    expect(r.selections.filter((s) => s.entryId === "e.det")).toHaveLength(1);
+    expect(selectedDetachments(r, detCatMech)).toEqual(["e.gladius", "e.anvil"]);
+  });
+
+  it("the synthetic fallback accumulates for a DP-budgeted group-less root", () => {
+    let r = toggleDetachment(createRoster(detCatBudgetedNoGroup, 2000), "e.gladius", detCatBudgetedNoGroup);
+    r = toggleDetachment(r, "e.anvil", detCatBudgetedNoGroup);
+    expect(selectedDetachments(r, detCatBudgetedNoGroup)).toEqual(["e.gladius", "e.anvil"]);
+  });
+
+  it("the synthetic fallback still swaps (max 1) for an unpriced 10e group-less root", () => {
+    const cat10 = {
+      ...detCatBudgetedNoGroup,
+      entries: [
+        detCat.entries[0]!,
+        {
+          ...detCatBudgetedNoGroup.entries[1]!,
+          children: detCatBudgetedNoGroup.entries[1]!.children.map((c) => ({ ...c, costs: [] })),
+        },
+      ],
+    };
+    let r = toggleDetachment(createRoster(cat10, 2000), "e.gladius", cat10);
+    r = toggleDetachment(r, "e.anvil", cat10);
+    expect(selectedDetachments(r, cat10)).toEqual(["e.anvil"]); // swapped, not accumulated
+  });
+});
+
 describe("detachment + points-limit API", () => {
   it("availableDetachments lists the root Detachment's option children", () => {
     expect(availableDetachments(detCat).map((d) => d.id)).toEqual(["e.gladius", "e.anvil"]);

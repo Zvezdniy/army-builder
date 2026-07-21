@@ -1,6 +1,12 @@
 import type { IrCatalogue, IrEntry, IrGroup, IrProfile, Roster, RosterSelection } from "@muster/domain";
 import { battlefieldRole, OTHER_ROLE, roleRank } from "./roles";
 
+// The BSData cost-type an 11e detachment is priced in. Used only to shape the
+// synthetic fallback group's max (a budgeted root accumulates; an unpriced 10e root is
+// single-choice). engine-eval owns the canonical copy for legality — this rules-free
+// package can't import it, so it names the same literal; both are fixed BSData strings.
+const DETACHMENT_POINTS = "Detachment Points";
+
 /** Create an empty roster bound to a catalogue. */
 export function createRoster(catalogue: IrCatalogue, pointsLimit: number, name = "New Roster"): Roster {
   return {
@@ -63,16 +69,29 @@ export function remove(roster: Roster, selectionId: string): Roster {
 }
 
 /**
+ * Most BSData catalogues name the detachment root (and its choose-group) exactly
+ * "Detachment", but a handful use spelling variants that are otherwise identical in
+ * shape: "Detachments" (Adeptus Custodes, Adeptus Mechanicus, Aeldari, Drukhari,
+ * Grey Knights) and "Detachment Choice" (Leagues of Votann, Ynnari). Matching only
+ * "Detachment" silently disabled detachment support (Custodes) or capped selection at
+ * one via the synthetic fallback group (Mechanicus). This predicate accepts all three
+ * so the naming variant no longer breaks detachments.
+ */
+function isDetachmentLabel(name: string): boolean {
+  return /^detachments?(?: choice)?$/i.test(name.trim());
+}
+
+/**
  * The root "Detachment" choice entry, if this catalogue models detachments. It is a
- * top-level `upgrade` entry named "Detachment" whose children are the detachment options
- * (matched-play requires exactly one). Absent in catalogues without detachments.
+ * top-level `upgrade` entry named "Detachment" (or a spelling variant — see
+ * `isDetachmentLabel`) whose children are the detachment options. Absent in catalogues
+ * without detachments.
  *
- * NOTE: identification is by English name + type. A localized or differently-named
- * detachment node would silently disable detachment support; revisit if we ingest
- * catalogues that don't follow the BSData "Detachment" convention.
+ * NOTE: identification is by English name + type; a localized detachment node would
+ * still slip past. Revisit if we ingest non-English catalogues.
  */
 function detachmentRoot(catalogue: IrCatalogue): IrEntry | undefined {
-  return catalogue.entries.find((e) => e.name === "Detachment" && e.type === "upgrade");
+  return catalogue.entries.find((e) => e.type === "upgrade" && isDetachmentLabel(e.name));
 }
 
 /** The detachment options available in this catalogue (empty if it models none). */
@@ -118,32 +137,34 @@ export function detachmentSelectionIds(roster: Roster, catalogue: IrCatalogue): 
 }
 
 /**
- * The root Detachment entry's own choose-group (also named "Detachment"), whose
- * constraints ARE the edition rule: 10e catalogues declare `min 1, max 1` on it, so
+ * The root Detachment entry's own choose-group (named "Detachment" or a spelling
+ * variant — see `isDetachmentLabel`; Adeptus Mechanicus names the group "Detachments").
+ * Its constraints ARE the edition rule: 10e catalogues declare `min 1, max 1` on it, so
  * `toggleGroupMember` swaps; 11e catalogues declare only `min 1` (the `max` is gone,
  * replaced by a Detachment Points budget), so it accumulates. No edition check —
  * the difference is read straight from the data.
  *
- * Falls back to an implicit `max 1` group (matching the old hardcoded single-choice
- * behaviour) when the root carries no such group at all — defensive only; every real
- * BSData Detachment root models this group (see the design doc's Findings table).
+ * Falls back to a synthetic group when the root carries no matching group at all —
+ * defensive only; every real BSData Detachment root models this group. The fallback's
+ * max mirrors the edition: a root whose options are priced in Detachment Points (11e)
+ * budgets several detachments, so it gets `min 1` only; otherwise (10e) `min 1, max 1`.
  */
 function detachmentGroup(root: IrEntry): IrGroup {
-  return (
-    root.groups?.find((g) => g.name === "Detachment") ?? {
-      id: `${root.id}.detachment`,
-      name: "Detachment",
-      memberEntryIds: root.children.map((c) => c.id),
-      // `min 1` alongside the max makes this a REQUIRED radio in toggleGroupMember,
-      // which is what the old hardcoded behaviour was: you swap the chosen
-      // detachment, you never empty it. Omitting the min would silently make the
-      // fallback more permissive than the thing it stands in for.
-      constraints: [
-        { id: `${root.id}.detachment.max1`, type: "max", value: 1, scope: "self" },
-        { id: `${root.id}.detachment.min1`, type: "min", value: 1, scope: "self" },
-      ],
-    }
-  );
+  const modelled = root.groups?.find((g) => isDetachmentLabel(g.name));
+  if (modelled) return modelled;
+  // `min 1` makes this a REQUIRED radio in toggleGroupMember: you swap/keep the chosen
+  // detachment, you never empty it. A Detachment-Points-budgeted (11e) root omits the
+  // max so the fallback accumulates like the real modelled 11e group would.
+  const budgeted = root.children.some((c) => c.costs.some((cost) => cost.name === DETACHMENT_POINTS));
+  const min: IrGroup["constraints"][number] = { id: `${root.id}.detachment.min1`, type: "min", value: 1, scope: "self" };
+  return {
+    id: `${root.id}.detachment`,
+    name: "Detachment",
+    memberEntryIds: root.children.map((c) => c.id),
+    constraints: budgeted
+      ? [min]
+      : [{ id: `${root.id}.detachment.max1`, type: "max", value: 1, scope: "self" }, min],
+  };
 }
 
 /**
