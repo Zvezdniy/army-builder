@@ -33,12 +33,14 @@ catalogue library already works.
 
 ## Source data (verified 2026-07-21)
 
-Wahapedia publishes pipe-delimited CSVs. We use two:
+Wahapedia publishes pipe-delimited CSVs. We fetch one:
 
 - `https://wahapedia.ru/wh40k10ed/Stratagems.csv` (~1.06 MB, 1481 records)
-- `https://wahapedia.ru/wh40k10ed/Factions.csv` (26 factions)
 
-Both require a browser `User-Agent` header (a bare curl UA gets blocked).
+`Factions.csv` (26 codes) was used once, offline, to author the faction-mapping
+table below; it is **not fetched at build time** — the mapping ships in
+`scripts/stratagems.config.json`, so the pipeline has a single network dependency.
+The fetch requires a browser `User-Agent` header (a bare curl UA gets blocked).
 
 ### Edition note — 11e currently mirrors 10e
 
@@ -68,8 +70,8 @@ faction_id | name | id | type | cp_cost | legend | turn | phase | detachment | d
 |--------|---------|---------|
 | `faction_id` | Wahapedia faction code, **empty for Core stratagems** | `SM`, `NEC`, `` |
 | `name` | Stratagem display name (ALL-CAPS in source) | `ARMOUR OF CONTEMPT` |
-| `id` | Ordinal within its detachment — **not globally unique** | `1`, `2` |
-| `type` | `"<detachment> – <category> Stratagem"` (empty for Core) | `1st Company Task Force – Battle Tactic Stratagem` |
+| `id` | Wahapedia's **stable, globally-unique** stratagem id (all 1481 distinct) | `000008495003` |
+| `type` | `"<owner> – <category> Stratagem"`; owner is `Core` for universal core | `1st Company Task Force – Battle Tactic Stratagem` |
 | `cp_cost` | Command-point cost | `1`, `2` |
 | `legend` | Flavour text (may be empty) | `…` |
 | `turn` | Whose turn it may be used | `Either Player's turn` |
@@ -80,14 +82,25 @@ faction_id | name | id | type | cp_cost | legend | turn | phase | detachment | d
 
 ### Two clean tiers (drives S-B selection)
 
-Counting the real data confirms exactly two tiers — there is **no**
-faction-wide-but-detachment-agnostic middle tier:
+Two tiers matter for matched play; a third slice is game-mode noise we drop.
+The `type` column encodes the owning "detachment" as its prefix (`"<owner> –
+<category> Stratagem"`), and that prefix is what classifies the empty-faction rows:
 
-- **Core stratagems** — `faction_id == ""`. **28 records.** Universal; apply to
-  every army regardless of faction and detachment (Command Re-roll, Counter-offensive,
-  Insane Bravery, …).
+- **Universal Core stratagems** — `faction_id == "" AND type-prefix == "Core"`.
+  **11 records** — exactly GW's matched-play core (Command Re-roll, Counter-offensive,
+  Epic Challenge, Insane Bravery, Go to Ground, Smokescreen, Grenade, Tank Shock,
+  Rapid Ingress, Fire Overwatch, Heroic Intervention). Apply to every army.
 - **Detachment stratagems** — `faction_id != ""`. **1453 records.** Each belongs to
-  exactly one detachment (`detachment_id`) inside its faction.
+  exactly one detachment (`detachment_id`) inside its faction. (All 1453 carry a
+  `detachment_id`; game-mode pseudo-detachments never match a real BSData detachment
+  choice, so no extra filtering is needed on this side — S-B keys on the roster's
+  chosen `detachment_id`.)
+- **Dropped — game-mode / artefact** — the other **17** empty-faction rows:
+  Boarding Actions (5) and Challenger (9) are narrative-mode stratagems, not matched
+  play; three duplicate "NEW ORDERS" rows (type-prefix `"Core Stratagem"`, not
+  `"Core"`) are a source artefact. S-A drops all 17 and logs the count. Detecting
+  Core by the exact `"Core"` prefix — not merely by an empty `faction_id` — is what
+  excludes them.
 
 So S-B's `stratagemsForRoster` will be **Core (always) + the selected detachment's
 stratagems** — a two-set union, nothing more. S-A's job is to make those two sets
@@ -157,7 +170,7 @@ mirroring the catalogue pipeline's per-faction warn-and-continue.
 Written under `apps/web/public/stratagems/` (gitignored, same as
 `public/catalogues/`). Flat, per-faction, edition-agnostic.
 
-### `stratagems/_core.json` — the 28 Core stratagems
+### `stratagems/_core.json` — the 11 universal Core stratagems
 
 ```json
 {
@@ -189,7 +202,7 @@ Each element of `stratagems[]`:
 
 ```jsonc
 {
-  "id": "000000798-1",        // `${detachmentId||'core'}-${wahapediaId}` — unique within a file
+  "id": "000008495003",       // rec.id verbatim — Wahapedia's stable, globally-unique id
   "name": "HEROES OF THE CHAPTER",
   "category": "Battle Tactic", // parsed from `type`: the "<X>" in "… – <X> Stratagem"; "" for Core
   "cpCost": 1,                 // integer; parsed from cp_cost, non-numeric → 0
@@ -216,7 +229,7 @@ Mirrors `catalogues.json`'s role: the app fetches this first.
   "version": 1,
   "source": "Wahapedia",
   "attribution": "Data from Wahapedia (wahapedia.ru). Not affiliated with Games Workshop.",
-  "core": { "file": "stratagems/_core.json", "count": 28 },
+  "core": { "file": "stratagems/_core.json", "count": 11 },
   "factions": [
     { "slug": "space-marines", "wahapediaFactionId": "SM", "file": "stratagems/space-marines.json", "count": 255 },
     { "slug": "blood-angels",  "wahapediaFactionId": "SM", "file": "stratagems/space-marines.json", "count": 255 }
@@ -249,10 +262,10 @@ A standalone Node ESM script, same shape and error-handling discipline as
 
 1. Read `scripts/stratagems.config.json` (source base URL, the slug→faction map,
    attribution string).
-2. Fetch `Stratagems.csv` and `Factions.csv` with a browser `User-Agent`. Guard the
-   response: non-200, or a body under a sanity floor (e.g. < 100 KB), or a body
-   whose first line is not the expected pipe header → **throw** (a truncated/HTML
-   error page must never overwrite good data).
+2. Fetch `Stratagems.csv` with a browser `User-Agent`. Guard the response: non-200,
+   or a body under a sanity floor (e.g. < 100 KB), or a body whose first line is not
+   the expected pipe header → **throw** (a truncated/HTML error page must never
+   overwrite good data).
 3. Parse with the header-pipe-count reassembly reader (above). Assert the record
    count is within a sane band (e.g. ≥ 1000) — a thin parse means the reader broke.
 4. Split into Core (`faction_id == ""`) and per-faction buckets keyed by
@@ -310,20 +323,23 @@ small importable module so it can be unit-tested without network:
 - **CSV reader** (`parseStratagemCsv(text)`): a fixture with an embedded-newline
   description reassembles into the right record count and column split; the BOM is
   stripped; the trailing empty field is tolerated.
-- **Record → `Stratagem` transform:** a Core record (`faction_id==""`) yields
-  `detachment=""`, `detachmentId=""`, `category=""`; a detachment record yields the
-  parsed `category` from `type`; `cpCost` coerces (`"1"`→1, `""`→0); `id` is
-  `${detachmentId||'core'}-${wahapediaId}`.
-- **Bucketing:** records split into exactly one Core bucket + per-`faction_id`
-  buckets; an out-of-map `faction_id` (e.g. `TL`) is dropped.
+- **Record → `Stratagem` transform:** a Core record yields `detachment=""`,
+  `detachmentId=""` with its parsed `category` (e.g. `"Battle Tactic"`); a detachment
+  record yields non-empty `detachment`/`detachmentId` and the `category` parsed from
+  `type`; `cpCost` coerces (`"1"`→1, `""`→0); `id` is `rec.id` verbatim.
+- **Core detection / bucketing:** an empty-`faction_id` row with type-prefix `"Core"`
+  lands in the Core bucket; empty-`faction_id` rows with any other prefix (Boarding
+  Actions, Challenger, "Core Stratagem") are **dropped and counted**; a non-empty
+  `faction_id` in the mapping goes to its per-faction bucket; an out-of-map
+  `faction_id` (e.g. `TL`) is dropped. Result: Core bucket = 11.
 - **Manifest expansion:** all 35 config slugs appear in `factions[]`; SM chapters
-  all point at `space-marines.json`; `core.count == 28`.
+  all point at `space-marines.json`; `core.count == 11`.
 - **Guard behaviour:** an empty / non-header / short body causes the fetch step to
   throw rather than write output (tested against the transform's validate helper, no
   real network).
 
 A single end-to-end **local run** against live Wahapedia is the acceptance check
-(not a CI test): produces `_core.json` (28), 23 faction files, and a 35-entry
+(not a CI test): produces `_core.json` (11), 23 faction files, and a 35-entry
 manifest, with `space-marines.json` at 255 stratagems.
 
 ## Non-goals (S-A)
