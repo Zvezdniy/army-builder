@@ -127,6 +127,16 @@ export function selectedDetachment(roster: Roster, catalogue: IrCatalogue): stri
   return selectedDetachments(roster, catalogue)[0];
 }
 
+/** The display names of the roster's selected detachments, in selection order.
+ *  Maps each selected detachment entryId to its catalogue entry name; an id with
+ *  no catalogue entry is dropped. Empty if none selected. This is the bridge from
+ *  roster state to the domain `selectStratagems` (which joins on detachment name). */
+export function selectedDetachmentNames(roster: Roster, catalogue: IrCatalogue): string[] {
+  return selectedDetachments(roster, catalogue)
+    .map((id) => catalogueEntry(catalogue, id)?.name)
+    .filter((name): name is string => name !== undefined);
+}
+
 /** Selection ids of the detachment root subtree — the army-level detachment choice
  *  and everything under it. Callers exclude these from unit-facing signals (like the
  *  "became unavailable" warning): the detachment is picked in the setup wizard, not a

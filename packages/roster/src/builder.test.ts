@@ -3,7 +3,7 @@ import type { IrCatalogue, IrGroup, Roster } from "@muster/domain";
 import {
   createRoster, availableUnits, addUnit, addOption, setCount, remove, optionsFor,
   selectedGroupMembers, toggleGroupMember, groupControl, optionControl, catalogueEntry,
-  unitLoadout, availableDetachments, selectedDetachment, selectedDetachments, toggleDetachment, setPointsLimit,
+  unitLoadout, availableDetachments, selectedDetachment, selectedDetachments, selectedDetachmentNames, toggleDetachment, setPointsLimit,
   unitsByRole, detachmentSelectionIds, groupMemberCounts, groupTotal, setGroupMemberCount,
   invulnSave, enhancementsForDetachment, detachmentRuleTexts, enhancementTargets,
 } from "./index";
@@ -1411,5 +1411,28 @@ describe("remove() clears dangling attachedTo", () => {
     const next = remove(roster, "B");
     expect(next.selections.map((s) => s.id)).toEqual(["L"]);
     expect(next.selections[0]?.attachedTo).toBeUndefined();
+  });
+});
+
+describe("selectedDetachmentNames", () => {
+  it("returns [] when no detachment is selected", () => {
+    const roster = createRoster(detCat, 2000);
+    expect(selectedDetachmentNames(roster, detCat)).toEqual([]);
+  });
+
+  it("returns the selected detachment's display name", () => {
+    const r = toggleDetachment(createRoster(detCat, 2000), "e.gladius", detCat);
+    expect(selectedDetachmentNames(r, detCat)).toEqual(["Gladius Task Force"]);
+  });
+
+  it("accumulates names in selection order for a no-max (11e) group", () => {
+    let r = toggleDetachment(createRoster(detCat11e, 2000), "e.gladius", detCat11e);
+    r = toggleDetachment(r, "e.anvil", detCat11e);
+    expect(selectedDetachmentNames(r, detCat11e)).toEqual(["Gladius Task Force", "Anvil Siege Force"]);
+  });
+
+  it("drops a selected entryId with no catalogue entry", () => {
+    const r = toggleDetachment(createRoster(detCat, 2000), "e.unknown", detCat);
+    expect(selectedDetachmentNames(r, detCat)).toEqual([]);
   });
 });
