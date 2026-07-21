@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import type { IrCatalogue } from "@muster/domain";
+import type { IrCatalogue, Roster } from "@muster/domain";
 import { loadCatalogue } from "@muster/domain";
 import { createRoster, addUnit, addOption, toggleGroupMember, setGroupMemberCount, setCount, remove,
   toggleDetachment, setPointsLimit, availableDetachments, selectedDetachment,
-  detachmentSelectionIds, attachLeader, detachLeader } from "@muster/roster";
+  detachmentSelectionIds, attachLeader, detachLeader,
+  upsertActive, activeEntry, renameEntry, duplicateEntry, deleteEntry, toEnvelope, fromEnvelope } from "@muster/roster";
 import { evaluate, hiddenEntryIds, hiddenSelectionIds } from "@muster/engine-eval";
 import { RosterList } from "./components/RosterList";
 import { UnitDetail } from "./components/UnitDetail";
@@ -13,7 +14,9 @@ import { SetupBar } from "./components/SetupBar";
 import { DetachmentPanel } from "./components/DetachmentPanel";
 import { StratagemPanel } from "./components/StratagemPanel";
 import { LegalityPanel } from "./components/LegalityPanel";
+import { MyArmies } from "./components/MyArmies";
 import { bundledDescriptor, loadRegistry, loadCatalogueFor, normalizeBase, type CatalogueDescriptor } from "./registry/catalogueRegistry";
+import { useRosterLibrary } from "./registry/rosterLibrary";
 import { loadStratagemLibrary, loadStratagemsFor, slugForDescriptor } from "./registry/stratagemRegistry";
 import type { StratagemManifest, StratagemFile } from "@muster/domain";
 import mini40k from "./mini40k.ir.json";
@@ -49,6 +52,9 @@ export function App() {
   const [factionError, setFactionError] = useState<string | undefined>(undefined);
   const [stratagemManifest, setStratagemManifest] = useState<StratagemManifest | undefined>(undefined);
   const [stratagemData, setStratagemData] = useState<{ core: StratagemFile; faction?: StratagemFile } | undefined>(undefined);
+  const { library, setLibrary } = useRosterLibrary();
+  const [myArmiesOpen, setMyArmiesOpen] = useState(false);
+  const [restored, setRestored] = useState(false);
   const result = useMemo(() => {
     const r = evaluate(roster, catalogue);
     // The detachment is an army-level choice made in the wizard, not a roster unit,
@@ -75,6 +81,34 @@ export function App() {
     });
   }, []);
 
+  // Autosave the active roster whenever it or the catalogue changes, once restore
+  // has settled (otherwise this would overwrite the stored active entry with a
+  // fresh empty roster on first mount, before restore gets a chance to run).
+  useEffect(() => {
+    if (!restored) return;
+    const desc = registry.find((d) => d.id === activeDescriptorId);
+    if (!desc) return; // bundled/imported-IR without a descriptor still has one; guard anyway
+    setLibrary((lib) => upsertActive(lib, roster, { edition: desc.edition, catalogueId: desc.catalogueId, catalogueName: desc.name }, Date.now()));
+  }, [roster, activeDescriptorId, restored]);
+
+  // Restore the last-edited roster once the manifest is available. Runs once.
+  useEffect(() => {
+    if (restored) return;
+    const entry = activeEntry(library);
+    if (!entry) { setRestored(true); return; }
+    const desc = registry.find((d) => d.edition === entry.edition && d.catalogueId === entry.catalogueId);
+    if (!desc) {
+      // Descriptor not in the manifest yet — wait for a fuller registry, unless
+      // it is already the full one (then surface an error and keep the default).
+      if (registry.length > 1) { setFactionError(`Couldn't load ${entry.catalogueName}`); setRestored(true); }
+      return;
+    }
+    void loadCatalogueFor(desc, boundFetch, CATALOGUES_BASE)
+      .then((next) => { applyCatalogueWithRoster(next, desc.id, entry.roster); })
+      .catch(() => setFactionError(`Couldn't load ${entry.catalogueName}`))
+      .finally(() => setRestored(true));
+  }, [registry, library, restored]);
+
   // Discover the stratagem library from the same base as the catalogue library.
   // Any failure leaves the manifest undefined → the panel simply never appears.
   useEffect(() => {
@@ -90,10 +124,8 @@ export function App() {
     void loadStratagemsFor(boundFetch, CATALOGUES_BASE, stratagemManifest, slug).then(setStratagemData);
   }, [activeDescriptorId, stratagemManifest, registry]);
 
-  // Shared swap of the active catalogue: fresh roster, cleared selection, wizard
-  // re-evaluated. Used by both file-import and faction switching.
-  const applyCatalogue = (next: IrCatalogue, descriptorId: string) => {
-    const nextRoster = createRoster(next, 2000);
+  // Install a catalogue and a specific roster (used by restore/open/import).
+  const applyCatalogueWithRoster = (next: IrCatalogue, descriptorId: string, nextRoster: Roster) => {
     setCatalogue(next);
     setRoster(nextRoster);
     setActiveDescriptorId(descriptorId);
@@ -102,6 +134,9 @@ export function App() {
     setWizardStep("points");
     setWizardOpen(needsSetup(next, nextRoster));
   };
+  // Swap to a fresh roster (faction switch / new army).
+  const applyCatalogue = (next: IrCatalogue, descriptorId: string) =>
+    applyCatalogueWithRoster(next, descriptorId, createRoster(next, 2000));
 
   const loadIr = async (file: File) => {
     applyCatalogue(loadCatalogue(JSON.parse(await file.text())), "imported");
@@ -136,10 +171,52 @@ export function App() {
     if (!next.selections.some((s) => s.id === selectedUnitId)) setSelectedUnitId(undefined);
   };
 
+  const openFromLibrary = (id: string) => {
+    const entry = library.entries.find((e) => e.id === id);
+    if (!entry) return;
+    setLibrary((lib) => ({ ...lib, activeId: id }));
+    const desc = registry.find((d) => d.edition === entry.edition && d.catalogueId === entry.catalogueId);
+    if (!desc) { setFactionError(`Couldn't load ${entry.catalogueName}`); return; }
+    void loadCatalogueFor(desc, boundFetch, CATALOGUES_BASE)
+      .then((next) => { applyCatalogueWithRoster(next, desc.id, entry.roster); setMyArmiesOpen(false); })
+      .catch(() => setFactionError(`Couldn't load ${entry.catalogueName}`));
+  };
+
+  const exportRoster = (id: string) => {
+    const entry = library.entries.find((e) => e.id === id);
+    if (!entry) return;
+    const env = toEnvelope(entry.roster, entry.edition, entry.catalogueId);
+    const blob = new Blob([JSON.stringify(env, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${entry.name.replace(/[^\w.-]+/g, "_") || "roster"}.muster.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const importRoster = async (file: File) => {
+    try {
+      const { roster: imported, edition, catalogueId } = fromEnvelope(JSON.parse(await file.text()));
+      // Avoid clobbering an existing entry with the same id.
+      const id = library.entries.some((e) => e.id === imported.id) ? crypto.randomUUID() : imported.id;
+      const desc = registry.find((d) => d.edition === edition && d.catalogueId === catalogueId);
+      if (!desc) { setFactionError(`Couldn't load the imported army's faction`); return; }
+      const roster: Roster = { ...imported, id };
+      const next = await loadCatalogueFor(desc, boundFetch, CATALOGUES_BASE);
+      setLibrary((lib) => upsertActive(lib, roster, { edition: desc.edition, catalogueId: desc.catalogueId, catalogueName: desc.name }, Date.now()));
+      applyCatalogueWithRoster(next, desc.id, roster);
+      setMyArmiesOpen(false);
+    } catch {
+      setFactionError("That file isn't a valid Muster roster");
+    }
+  };
+
   return (
     <main style={{ fontFamily: "system-ui, sans-serif", padding: 16 }}>
       <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
         <h1 style={{ margin: 0 }}>Muster — {catalogue.name}</h1>
+        <button onClick={() => setMyArmiesOpen(true)}>My armies</button>
         <label style={{ fontSize: 13 }}>
           load IR:{" "}
           <input type="file" accept="application/json"
@@ -188,6 +265,18 @@ export function App() {
           onSetPoints={(n) => setRoster((r) => setPointsLimit(r, n))}
           onToggleDetachment={(id) => setRoster((r) => toggleDetachment(r, id, catalogue))}
           onClose={() => setWizardOpen(false)} />
+      )}
+      {myArmiesOpen && (
+        <MyArmies
+          library={library}
+          onOpen={openFromLibrary}
+          onRename={(id, name) => setLibrary((lib) => renameEntry(lib, id, name, Date.now()))}
+          onDuplicate={(id) => setLibrary((lib) => duplicateEntry(lib, id, crypto.randomUUID(), Date.now()))}
+          onDelete={(id) => setLibrary((lib) => deleteEntry(lib, id))}
+          onExport={exportRoster}
+          onImport={(f) => void importRoster(f)}
+          onNew={() => { setMyArmiesOpen(false); applyCatalogue(loadCatalogue(mini40k), bundled.id); setWizardOpen(true); }}
+          onClose={() => setMyArmiesOpen(false)} />
       )}
     </main>
   );

@@ -1,3 +1,4 @@
+import { beforeEach } from "vitest";
 import "@testing-library/jest-dom";
 
 // This jsdom build exposes a `localStorage` without the full Storage API
@@ -16,3 +17,12 @@ if (typeof localStorage === "undefined" || typeof localStorage.clear !== "functi
   };
   Object.defineProperty(globalThis, "localStorage", { value: mock, configurable: true, writable: true });
 }
+
+// App now persists the roster library to localStorage (autosave + restore-on-open).
+// Any test file that mounts <App /> more than once would otherwise leak a saved
+// roster from one `it` into the next (the restore effect would replay it on the
+// following mount) — reset storage before every test so each one starts fresh,
+// the same guarantee the old, persistence-free App gave for free.
+beforeEach(() => {
+  if (typeof localStorage !== "undefined" && typeof localStorage.clear === "function") localStorage.clear();
+});
