@@ -10,6 +10,7 @@ import { UnitDetail } from "./components/UnitDetail";
 import { AddUnitPicker } from "./components/AddUnitPicker";
 import { SetupWizard, type SetupStep } from "./components/SetupWizard";
 import { SetupBar } from "./components/SetupBar";
+import { DetachmentPanel } from "./components/DetachmentPanel";
 import { LegalityPanel } from "./components/LegalityPanel";
 import { bundledDescriptor, loadRegistry, loadCatalogueFor, normalizeBase, type CatalogueDescriptor } from "./registry/catalogueRegistry";
 import mini40k from "./mini40k.ir.json";
@@ -127,6 +128,7 @@ export function App() {
       </header>
       <SetupBar catalogue={catalogue} roster={roster} onEdit={openWizardAt}
         registry={registry} activeDescriptorId={activeDescriptorId} />
+      <DetachmentPanel catalogue={catalogue} roster={roster} />
       <LegalityPanel
         result={result}
         // Resolves the name of a TOP-LEVEL unit. Issues carrying a nested
