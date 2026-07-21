@@ -5,7 +5,7 @@ import {
   selectedGroupMembers, toggleGroupMember, groupControl, optionControl, catalogueEntry,
   unitLoadout, availableDetachments, selectedDetachment, selectedDetachments, toggleDetachment, setPointsLimit,
   unitsByRole, detachmentSelectionIds, groupMemberCounts, groupTotal, setGroupMemberCount,
-  invulnSave,
+  invulnSave, enhancementsForDetachment,
 } from "./index";
 
 const catalogue: IrCatalogue = {
@@ -1004,6 +1004,105 @@ describe("detachment + points-limit API", () => {
 
   it("setPointsLimit changes the army's points limit", () => {
     expect(setPointsLimit(createRoster(detCat, 2000), 1000).pointsLimit).toBe(1000);
+  });
+});
+
+// Enhancement gating: enhancements carry a `set hidden` visibility modifier whose
+// `lessThan selections <detachmentId> 1` condition means "hidden until that detachment
+// is chosen". enhancementsForDetachment reads that gate.
+function selGate(detId: string) {
+  return {
+    set: true,
+    conditionGroups: [{
+      type: "and" as const,
+      conditions: [{
+        id: `cond.${detId}`, comparator: "lessThan" as const, value: 1,
+        field: "selections" as const, scope: "roster", targetType: "entry" as const,
+        targetId: detId, includeChildSelections: true,
+      }],
+    }],
+  };
+}
+const enhCat: IrCatalogue = {
+  id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [], categoryNames: {},
+  entries: [
+    {
+      id: "e.det", name: "Detachment", type: "upgrade", costs: [], categories: [], constraints: [],
+      children: [
+        { id: "e.gladius", name: "Gladius", type: "upgrade", costs: [], categories: [], constraints: [], children: [] },
+        { id: "e.anvil", name: "Anvil", type: "upgrade", costs: [], categories: [], constraints: [], children: [] },
+      ],
+      groups: [{ id: "g.det", name: "Detachment", memberEntryIds: ["e.gladius", "e.anvil"], constraints: [] }],
+    },
+    // Enhancements live under a character; each gated to one detachment.
+    {
+      id: "e.hero", name: "Hero", type: "model", costs: [], categories: [], constraints: [],
+      children: [
+        { id: "e.enhG", name: "Gladius Relic", type: "upgrade", costs: [{ name: "pts", value: 10 }], categories: [], constraints: [], children: [], visibilityModifiers: [selGate("e.gladius")] },
+        { id: "e.enhA", name: "Anvil Relic", type: "upgrade", costs: [{ name: "pts", value: 15 }], categories: [], constraints: [], children: [], visibilityModifiers: [selGate("e.anvil")] },
+        { id: "e.enhForce", name: "Force-gated", type: "upgrade", costs: [], categories: [], constraints: [], children: [], visibilityModifiers: [{ set: true, conditions: [{ id: "cf", comparator: "lessThan", value: 1, field: "forces", scope: "roster", targetType: "entry", targetId: "e.gladius", includeChildSelections: true }] }] },
+        { id: "e.enhNone", name: "Ungated", type: "upgrade", costs: [], categories: [], constraints: [], children: [] },
+      ],
+    },
+  ],
+};
+
+describe("enhancementsForDetachment", () => {
+  it("returns only the enhancements gated to the given detachment", () => {
+    expect(enhancementsForDetachment(enhCat, "e.gladius").map((e) => e.id)).toEqual(["e.enhG"]);
+    expect(enhancementsForDetachment(enhCat, "e.anvil").map((e) => e.id)).toEqual(["e.enhA"]);
+  });
+  it("ignores a forces-gated entry and an ungated entry (MVP: selections only)", () => {
+    const ids = enhancementsForDetachment(enhCat, "e.gladius").map((e) => e.id);
+    expect(ids).not.toContain("e.enhForce");
+    expect(ids).not.toContain("e.enhNone");
+  });
+  it("finds a gate nested in a conditionGroup and dedupes repeats", () => {
+    const twice = {
+      ...enhCat.entries[1]!,
+      children: [{
+        id: "e.enhDup", name: "Dup", type: "upgrade" as const, costs: [], categories: [], constraints: [], children: [],
+        visibilityModifiers: [selGate("e.gladius"), selGate("e.gladius")],
+      }],
+    };
+    const cat2 = { ...enhCat, entries: [enhCat.entries[0]!, twice] };
+    expect(enhancementsForDetachment(cat2, "e.gladius").map((e) => e.id)).toEqual(["e.enhDup"]);
+  });
+  it("skips a set:false modifier and still finds a gate nested two conditionGroups deep", () => {
+    const cat: IrCatalogue = {
+      ...enhCat,
+      entries: [
+        enhCat.entries[0]!,
+        {
+          id: "e.hero2", name: "Hero2", type: "model", costs: [], categories: [], constraints: [],
+          children: [
+            {
+              id: "e.enhHidden", name: "Not shown (set:false)", type: "upgrade", costs: [], categories: [], constraints: [], children: [],
+              visibilityModifiers: [{
+                set: false,
+                conditions: [{ id: "c1", comparator: "lessThan", value: 1, field: "selections", scope: "roster", targetType: "entry", targetId: "e.gladius", includeChildSelections: true }],
+              }],
+            },
+            {
+              id: "e.enhNested", name: "Nested-only gate", type: "upgrade", costs: [], categories: [], constraints: [], children: [],
+              visibilityModifiers: [{
+                set: true,
+                conditionGroups: [{
+                  type: "and",
+                  conditionGroups: [{
+                    type: "and",
+                    conditions: [{ id: "c2", comparator: "lessThan", value: 1, field: "selections", scope: "roster", targetType: "entry", targetId: "e.gladius", includeChildSelections: true }],
+                  }],
+                }],
+              }],
+            },
+          ],
+        },
+      ],
+    };
+    const ids = enhancementsForDetachment(cat, "e.gladius").map((e) => e.id);
+    expect(ids).not.toContain("e.enhHidden");
+    expect(ids).toContain("e.enhNested");
   });
 });
 
