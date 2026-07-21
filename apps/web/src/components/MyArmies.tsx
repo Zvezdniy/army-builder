@@ -34,7 +34,7 @@ export function MyArmies({
           <strong>My armies</strong>
           <button className="picker-close" aria-label="close" onClick={onClose}>✕</button>
         </div>
-        <div className="picker-actions" style={{ display: "flex", gap: 8, padding: "8px 0" }}>
+        <div className="picker-actions" style={{ display: "flex", flexWrap: "wrap", gap: 8, padding: "8px 0" }}>
           <button onClick={onNew}>+ New army</button>
           <label style={{ fontSize: 13 }}>
             Import:{" "}
@@ -45,7 +45,7 @@ export function MyArmies({
         <div className="picker-list">
           {entries.length === 0 && <div className="picker-empty">No saved armies yet</div>}
           {entries.map((e) => (
-            <div key={e.id} className="army-row" style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0" }}>
+            <div key={e.id} className="army-row">
               {renaming === e.id ? (
                 <input autoFocus value={draft} aria-label={`rename ${e.name}`}
                   onChange={(ev) => setDraft(ev.target.value)}
@@ -56,7 +56,7 @@ export function MyArmies({
                   }} />
               ) : (
                 <>
-                  <button className="army-open" aria-label={`open ${e.name}`} style={{ flex: 1, textAlign: "left" }}
+                  <button className="army-open" aria-label={`open ${e.name}`}
                     onClick={() => onOpen(e.id)}>
                     <strong>{e.name}</strong>{" — "}
                     <span>{e.catalogueName}</span>{" · "}

@@ -159,6 +159,12 @@ section { background: var(--panel); border: 1px solid var(--line); border-radius
 .picker-item-name { flex: 1; min-width: 0; }
 .picker-pts { color: var(--muted, #888); font-variant-numeric: tabular-nums; }
 .picker-empty { color: var(--muted, #888); padding: 12px; }
+
+/* My armies library modal (reuses the .picker shell). One row per saved army:
+   its name/meta opens it, with rename / duplicate / export / delete actions. */
+.army-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; }
+.army-open { flex: 1; text-align: left; }
+
 .ud { position: relative; min-width: 0; }
 .ud-remove { position: absolute; top: 12px; right: 12px; z-index: 2; padding: 4px 9px; font-size: 16px; line-height: 1;
   border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--muted); cursor: pointer; }
@@ -414,3 +420,24 @@ section { background: var(--panel); border: 1px solid var(--line); border-radius
 .strat-section + .strat-section { margin-top: 12px; }
 .strat-section-title { flex: 1; }
 .strat-count { color: var(--head-ink); opacity: 0.7; font-variant-numeric: tabular-nums; }
+
+/* ── Mobile adaptation pass (phones) ──────────────────────────────────────────
+   The layout already collapses its grids at ≤640px (builder, det-layout, ds-cols,
+   setup chips); these rules fix what still reads poorly at phone width. */
+@media (max-width: 640px) {
+  /* The title carries the full faction name ("Muster — Imperium - Adeptus Astartes
+     - Space Marines"); at the UA h1 size (32px) it eats three lines and dwarfs the
+     header controls. Shrink it and let long faction names break cleanly. */
+  header h1 { font-size: 19px; line-height: 1.2; overflow-wrap: break-word; }
+
+  /* Start modals nearer the top so short phones don't waste a chunk of the viewport
+     above the dialog (overlay is align-items: flex-start). */
+  .picker-overlay { padding: 4vh 12px; }
+
+  /* Stack each saved-army row: the (long) name/meta gets the full width, the action
+     buttons wrap onto their own line as comfortably tappable ≥40px targets — instead
+     of squeezing the name into a tall multi-line column beside four small icons. */
+  .army-row { flex-wrap: wrap; }
+  .army-open { flex: 1 1 100%; }
+  .army-row button:not(.army-open) { min-width: 40px; min-height: 40px; }
+}
