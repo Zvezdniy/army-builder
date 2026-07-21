@@ -15,7 +15,7 @@ function nodeToReact(node: Node, key: string): ReactNode {
   if (node.nodeType === Node.TEXT_NODE) return node.textContent;
   if (node.nodeType !== Node.ELEMENT_NODE) return null;
   const el = node as Element;
-  const tag = el.tagName;
+  const tag = el.tagName.toUpperCase();
   if (DROP.has(tag)) return null;
   if (tag === "BR") return <br key={key} />;
   const kids = childrenOf(el, key);

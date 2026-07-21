@@ -37,6 +37,11 @@ describe("renderStratagemHtml", () => {
     expect(container.querySelector("script")).toBeNull();
   });
 
+  it("drops a script wrapped in SVG foreign content (no leaked text)", () => {
+    view("safe<svg><script>alert(1)</script></svg>text");
+    expect(screen.getByTestId("out").textContent).toBe("safetext");
+  });
+
   it("never emits event-handler or style attributes", () => {
     const { container } = view('<b onclick="evil()" style="color:red">x</b>');
     const strong = container.querySelector("strong")!;
