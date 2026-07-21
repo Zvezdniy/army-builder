@@ -392,3 +392,13 @@ section { background: var(--panel); border: 1px solid var(--line); border-radius
   max-height: 160px; overflow-y: auto; background: var(--head-bg); border: 1px solid var(--line); border-radius: 8px; }
 .enh-menu button { background: none; border: none; padding: 6px 10px; font: inherit; color: var(--ink); cursor: pointer; text-align: left; white-space: nowrap; }
 .enh-menu button:hover { background: var(--line); }
+
+/* Stratagem panel cards (reuses .det-panel*, .ds-section-head, .preview-body/empty). */
+.strat-card { padding: 6px 0; border-bottom: 1px dashed var(--line); }
+.strat-card:last-child { border-bottom: none; }
+.strat-head { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.strat-name { font-weight: 700; font-size: 12.5px; }
+.strat-cp { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 11.5px; white-space: nowrap; }
+.strat-meta { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; margin-top: 1px; }
+.strat-text { font-size: 12.5px; line-height: 1.45; color: var(--ink); margin-top: 3px; }
+.strat-attribution { color: var(--muted); font-size: 11px; font-style: italic; padding: 8px 12px; }
