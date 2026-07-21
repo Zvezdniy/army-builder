@@ -10,7 +10,11 @@ name: Update catalogues + stratagems
 # far more often than Wahapedia's stratagem text, so they stay fresh in practice.
 # GitHub Pages hosts a SINGLE artifact, so both libraries must ship together — a
 # separate stratagem workflow deploying to Pages would overwrite the catalogues.
-# Publishes ONLY data (catalogue + stratagem manifests + files), not the web app.
+# Publishes the built web app AND the data together: `vite build` emits the app to
+# apps/web/dist and copies the freshly-generated apps/web/public data into it, and
+# that dist/ is the Pages artifact. The marker key also hashes the app + shared
+# package sources, so an app-code change (not just a BSData/config change) triggers
+# a rebuild + redeploy.
 
 on:
   schedule:
@@ -87,10 +91,12 @@ jobs:
         with:
           # Rebuild when the upstream data (fingerprint — one SHA per edition) OR
           # anything that shapes our output changes: the faction config + pipeline
-          # scripts + the Rust parser source. Keying on config alone let a
-          # parser/pipeline fix land without a rebuild.
+          # scripts + the Rust parser source + the web app and the packages it bundles
+          # (so an app-code change alone triggers a rebuild + redeploy, not only a
+          # BSData/config change). Keying on config alone let a parser/pipeline fix
+          # land without a rebuild.
           path: .bsdata-built
-          key: bsdata-${{ steps.upstream.outputs.fingerprint }}-${{ hashFiles('scripts/**', 'packages/engine-parser/src/**/*.rs', 'packages/engine-parser/Cargo.toml') }}
+          key: bsdata-${{ steps.upstream.outputs.fingerprint }}-${{ hashFiles('scripts/**', 'packages/engine-parser/src/**/*.rs', 'packages/engine-parser/Cargo.toml', 'apps/web/src/**', 'apps/web/index.html', 'apps/web/vite.config.ts', 'apps/web/package.json', 'packages/domain/src/**', 'packages/roster/src/**', 'packages/engine-eval/src/**', 'pnpm-lock.yaml') }}
           lookup-only: true
 
       - if: steps.marker.outputs.cache-hit == 'true'
@@ -145,15 +151,21 @@ jobs:
         run: pnpm run update-stratagems
         continue-on-error: true
 
+      - name: Build the web app
+        # Emits apps/web/dist: the React app (base /army-builder/) plus a copy of
+        # everything in apps/web/public — i.e. the catalogue + stratagem data the two
+        # steps above just generated. dist/ is the single Pages artifact (app + data).
+        run: pnpm --filter @muster/web build
+
       - uses: actions/configure-pages@v6
 
-      - name: Upload the data library as the Pages artifact
+      - name: Upload the built app + data as the Pages artifact
         uses: actions/upload-pages-artifact@v5
         with:
-          # apps/web/public is gitignored → in CI it holds only what the pipeline just
-          # wrote: catalogues.json + catalogues/*.ir.json AND (if the stratagem step
-          # succeeded) stratagems.json + stratagems/*.json.
-          path: apps/web/public
+          # apps/web/dist = the built app with the freshly-generated apps/web/public
+          # data (catalogues.json + catalogues/*.ir.json, and stratagems.json +
+          # stratagems/*.json when the stratagem step succeeded) copied in by Vite.
+          path: apps/web/dist
 
   deploy:
     needs: [check, build]
