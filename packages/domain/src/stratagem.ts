@@ -48,3 +48,37 @@ export function loadStratagemFile(raw: unknown): StratagemFile {
 export function loadStratagemManifest(raw: unknown): StratagemManifest {
   return StratagemManifest.parse(raw);
 }
+
+/** The stratagem file serving a faction slug, or undefined if the slug is absent
+ *  from the manifest (caller then treats the faction as core-only). */
+export function stratagemFileForSlug(manifest: StratagemManifest, slug: string): string | undefined {
+  return manifest.factions.find((f) => f.slug === slug)?.file;
+}
+
+// Detachment names differ only in case/punctuation across BSData and Wahapedia; match
+// on a normalised form (lowercase, non-alphanumerics collapsed to single spaces).
+function normalizeDetachmentName(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+/**
+ * The stratagems relevant to a roster: Core (always) plus one group per selected
+ * detachment. Each group holds the faction file's stratagems whose `detachment`
+ * matches the (normalised) detachment name; an unmatched name — or an undefined
+ * faction file — yields an empty group, never an error. The original detachment
+ * name is preserved in the output for display, and input order is kept.
+ */
+export function selectStratagems(
+  core: StratagemFile,
+  faction: StratagemFile | undefined,
+  detachmentNames: string[],
+): { core: Stratagem[]; byDetachment: { detachment: string; stratagems: Stratagem[] }[] } {
+  const byDetachment = detachmentNames.map((detachment) => {
+    const key = normalizeDetachmentName(detachment);
+    const stratagems = faction
+      ? faction.stratagems.filter((s) => normalizeDetachmentName(s.detachment) === key)
+      : [];
+    return { detachment, stratagems };
+  });
+  return { core: core.stratagems, byDetachment };
+}
