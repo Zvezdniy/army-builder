@@ -1,0 +1,26 @@
+{
+  "sourceBase": "https://wahapedia.ru/wh40k10ed",
+  "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36",
+  "attribution": "Data from Wahapedia (wahapedia.ru). Not affiliated with Games Workshop.",
+  "factionMap": {
+    "space-marines": "SM", "blood-angels": "SM", "dark-angels": "SM", "space-wolves": "SM",
+    "black-templars": "SM", "deathwatch": "SM", "ultramarines": "SM", "imperial-fists": "SM",
+    "iron-hands": "SM", "raven-guard": "SM", "salamanders": "SM", "white-scars": "SM",
+    "chaos-space-marines": "CSM", "aeldari": "AE", "ynnari": "AE", "drukhari": "DRU",
+    "necrons": "NEC", "orks": "ORK", "tyranids": "TYR", "genestealer-cults": "GC",
+    "astra-militarum": "AM", "agents-of-the-imperium": "AoI", "adeptus-mechanicus": "AdM",
+    "adeptus-custodes": "AC", "adepta-sororitas": "AS", "grey-knights": "GK",
+    "imperial-knights": "QI", "tau-empire": "TAU", "leagues-of-votann": "LoV",
+    "chaos-daemons": "CD", "chaos-knights": "QT", "death-guard": "DG",
+    "thousand-sons": "TS", "emperors-children": "EC", "world-eaters": "WE"
+  },
+  "canonicalSlug": {
+    "SM": "space-marines", "CSM": "chaos-space-marines", "AE": "aeldari", "DRU": "drukhari",
+    "NEC": "necrons", "ORK": "orks", "TYR": "tyranids", "GC": "genestealer-cults",
+    "AM": "astra-militarum", "AoI": "agents-of-the-imperium", "AdM": "adeptus-mechanicus",
+    "AC": "adeptus-custodes", "AS": "adepta-sororitas", "GK": "grey-knights",
+    "QI": "imperial-knights", "TAU": "tau-empire", "LoV": "leagues-of-votann",
+    "CD": "chaos-daemons", "QT": "chaos-knights", "DG": "death-guard",
+    "TS": "thousand-sons", "EC": "emperors-children", "WE": "world-eaters"
+  }
+}
