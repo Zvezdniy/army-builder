@@ -11,6 +11,9 @@ importers:
       '@muster/domain':
         specifier: workspace:^
         version: link:packages/domain
+      '@muster/roster':
+        specifier: workspace:^
+        version: link:packages/roster
       '@types/node':
         specifier: ^22.7.0
         version: 22.20.1

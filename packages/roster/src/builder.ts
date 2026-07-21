@@ -100,7 +100,7 @@ function isDetachmentLabel(name: string): boolean {
  * NOTE: identification is by English name + type; a localized detachment node would
  * still slip past. Revisit if we ingest non-English catalogues.
  */
-function detachmentRoot(catalogue: IrCatalogue): IrEntry | undefined {
+export function detachmentRoot(catalogue: IrCatalogue): IrEntry | undefined {
   return catalogue.entries.find((e) => e.type === "upgrade" && isDetachmentLabel(e.name));
 }
 
