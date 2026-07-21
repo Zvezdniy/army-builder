@@ -36,9 +36,11 @@ export function MyArmies({
         </div>
         <div className="picker-actions" style={{ display: "flex", flexWrap: "wrap", gap: 8, padding: "8px 0" }}>
           <button onClick={onNew}>+ New army</button>
-          <label style={{ fontSize: 13 }}>
-            Import:{" "}
-            <input type="file" accept="application/json"
+          {/* Native file input hidden; the label is the tappable button (matches the
+              header's Load IR, avoiding the UA's untidy locale-dependent widget). */}
+          <label className="file-btn">
+            Import
+            <input type="file" accept="application/json" className="vh"
               onChange={(e) => { const f = e.target.files?.[0]; if (f) onImport(f); e.currentTarget.value = ""; }} />
           </label>
         </div>

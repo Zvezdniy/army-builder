@@ -27,7 +27,10 @@ export function SetupBar({
   const currentEditionName = registry?.find((d) => d.id === activeDescriptorId)?.editionName;
 
   const chip = (step: SetupStep, label: string, value: string) => (
-    <button className="setup-chip" onClick={() => onEdit(step)}>
+    // The value is clamped to a single line (see .setup-val) so a long faction name
+    // ("Imperium - Adeptus Astartes - Space Marines") can't balloon one chip taller
+    // than its row-mate on a phone; the title carries the full text for discovery.
+    <button className="setup-chip" onClick={() => onEdit(step)} title={value}>
       <span className="setup-lbl">{label}</span>
       <span className="setup-val">{value}</span>
       <span className="setup-edit">Change</span>

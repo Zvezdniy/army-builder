@@ -222,13 +222,20 @@ export function App() {
   return (
     <main style={{ fontFamily: "system-ui, sans-serif", padding: 16 }}>
       <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-        <h1 style={{ margin: 0 }}>Muster — {catalogue.name}</h1>
-        <button onClick={() => setMyArmiesOpen(true)}>My armies</button>
-        <label style={{ fontSize: 13 }}>
-          load IR:{" "}
-          <input type="file" accept="application/json"
-            onChange={(e) => { const f = e.target.files?.[0]; if (f) void loadIr(f); }} />
-        </label>
+        {/* The faction half is dropped on phones (.h1-faction) — the Faction chip
+            below already names it, so the title reads just "Muster" and stops
+            dwarfing the header controls. */}
+        <h1 style={{ margin: 0 }}>Muster<span className="h1-faction"> — {catalogue.name}</span></h1>
+        <div className="header-actions">
+          <button onClick={() => setMyArmiesOpen(true)}>My armies</button>
+          {/* Native file input is visually hidden; the label is the tappable button
+              (the UA's own "Choose file" widget is locale-dependent and untidy). */}
+          <label className="file-btn">
+            Load IR
+            <input type="file" accept="application/json" className="vh"
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) void loadIr(f); }} />
+          </label>
+        </div>
       </header>
       {factionError && !wizardOpen && (
         <p role="alert" style={{ color: "#c0392b", margin: "8px 0" }}>{factionError}</p>

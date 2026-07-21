@@ -59,6 +59,15 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 /* A chosen member of a choose-N group is filled to read as selected. */
 button.chosen { background: var(--accent); color: var(--accent-ink); border-color: transparent; font-weight: 600; }
 
+/* Header controls kept together so they wrap as a unit beside the title. */
+.header-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+/* A <label>-as-button wrapping a visually hidden file input (see .vh): reads like a
+   regular button instead of the browser's untidy native file-picker widget. */
+.file-btn { display: inline-flex; align-items: center; font: inherit; color: var(--ink);
+  background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; cursor: pointer; }
+.file-btn:hover { border-color: var(--accent); }
+.file-btn:focus-within { outline: 2px solid var(--accent); outline-offset: 1px; }
+
 input[type="number"] {
   font: inherit;
   color: var(--ink);
@@ -254,7 +263,9 @@ section { background: var(--panel); border: 1px solid var(--line); border-radius
   border: 1px solid var(--line); border-radius: 10px; background: var(--panel); cursor: pointer; text-align: left; }
 .setup-chip:hover { border-color: var(--accent); }
 .setup-lbl { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
-.setup-val { font-size: 15px; font-weight: 700; }
+/* Clamp the value to one line: a long faction name is ellipsised (full text on the
+   button's title) rather than wrapping, so every chip in a row stays the same height. */
+.setup-val { font-size: 15px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
 .setup-edit { font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--accent); }
 
 .wizard { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; width: 100%;
@@ -425,10 +436,10 @@ section { background: var(--panel); border: 1px solid var(--line); border-radius
    The layout already collapses its grids at ≤640px (builder, det-layout, ds-cols,
    setup chips); these rules fix what still reads poorly at phone width. */
 @media (max-width: 640px) {
-  /* The title carries the full faction name ("Muster — Imperium - Adeptus Astartes
-     - Space Marines"); at the UA h1 size (32px) it eats three lines and dwarfs the
-     header controls. Shrink it and let long faction names break cleanly. */
+  /* The title's faction half is dropped on phones (the Faction chip already names it),
+     leaving a compact "Muster" that no longer dwarfs the header controls. */
   header h1 { font-size: 19px; line-height: 1.2; overflow-wrap: break-word; }
+  .h1-faction { display: none; }
 
   /* Start modals nearer the top so short phones don't waste a chunk of the viewport
      above the dialog (overlay is align-items: flex-start). */
