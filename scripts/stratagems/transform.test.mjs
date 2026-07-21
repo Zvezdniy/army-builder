@@ -32,3 +32,53 @@ describe("parseStratagemCsv", () => {
     expect(rows[1].description).toBe("<b>WHEN:</b> Your Shooting phase.");
   });
 });
+
+import { deriveCategory, coerceCp, recordToStratagem } from "./transform.mjs";
+
+describe("deriveCategory", () => {
+  it("extracts the category between the en-dash and 'Stratagem'", () => {
+    expect(deriveCategory("1st Company Task Force – Battle Tactic Stratagem")).toBe("Battle Tactic");
+    expect(deriveCategory("Core – Strategic Ploy Stratagem")).toBe("Strategic Ploy");
+  });
+  it("returns empty for a bare '… – Stratagem' or empty type", () => {
+    expect(deriveCategory("Serpent's Brood – Stratagem")).toBe("");
+    expect(deriveCategory("")).toBe("");
+  });
+});
+
+describe("coerceCp", () => {
+  it("parses an integer, defaulting non-numeric to 0", () => {
+    expect(coerceCp("1")).toBe(1);
+    expect(coerceCp("2")).toBe(2);
+    expect(coerceCp("")).toBe(0);
+    expect(coerceCp("free")).toBe(0);
+  });
+});
+
+describe("recordToStratagem", () => {
+  const detRec = {
+    faction_id: "SM", name: "ARMOUR OF CONTEMPT", id: "000008495003",
+    type: "1st Company Task Force – Battle Tactic Stratagem", cp_cost: "1",
+    legend: "flavour", turn: "Either Player's turn", phase: "Shooting or Fight phase",
+    detachment: "1st Company Task Force", detachment_id: "000000798",
+    description: "<b>WHEN:</b> …",
+  };
+  it("maps a detachment record, using rec.id verbatim", () => {
+    expect(recordToStratagem(detRec)).toEqual({
+      id: "000008495003", name: "ARMOUR OF CONTEMPT", category: "Battle Tactic",
+      cpCost: 1, turn: "Either Player's turn", phase: "Shooting or Fight phase",
+      detachment: "1st Company Task Force", detachmentId: "000000798",
+      legend: "flavour", description: "<b>WHEN:</b> …",
+    });
+  });
+  it("maps a Core record (empty detachment, category still parsed)", () => {
+    const core = { faction_id: "", name: "GRENADE", id: "000000123",
+      type: "Core – Wargear Stratagem", cp_cost: "1", legend: "", turn: "Your turn",
+      phase: "Shooting phase", detachment: "", detachment_id: "", description: "<b>WHEN:</b> …" };
+    const out = recordToStratagem(core);
+    expect(out.detachment).toBe("");
+    expect(out.detachmentId).toBe("");
+    expect(out.category).toBe("Wargear");
+    expect(out.id).toBe("000000123");
+  });
+});
