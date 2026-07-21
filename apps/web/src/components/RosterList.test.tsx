@@ -50,4 +50,29 @@ describe("RosterList", () => {
       onSelect={() => {}} onOpenPicker={() => {}} hiddenIds={new Set()} />);
     expect(screen.queryByTitle(/not available in the current army/i)).toBeNull();
   });
+  it("renders an attached leader under its bodyguard, not in its own bucket", () => {
+    const cat2 = {
+      id: "c", name: "C", gameSystemId: "gs", revision: 1,
+      categoryNames: { "cat.hq": "HQ", "cat.tr": "Battleline" },
+      entries: [
+        { id: "e.lead", name: "Canoness", costs: [], categories: ["cat.hq"], constraints: [], children: [], groups: [],
+          profiles: [{ name: "Canoness", typeName: "Unit", characteristics: [] }] },
+        { id: "e.bss", name: "Battle Sisters Squad", costs: [], categories: ["cat.tr"], constraints: [], children: [], groups: [],
+          profiles: [{ name: "Battle Sisters Squad", typeName: "Unit", characteristics: [] }] },
+      ],
+    } as unknown as IrCatalogue;
+    const r2 = {
+      id: "r", name: "R", gameSystemId: "gs", catalogueId: "c", catalogueRevision: 1, pointsLimit: 2000,
+      selections: [
+        { id: "L", entryId: "e.lead", count: 1, selections: [], attachedTo: "B" },
+        { id: "B", entryId: "e.bss", count: 1, selections: [] },
+      ],
+    } as unknown as Roster;
+    render(<RosterList roster={r2} catalogue={cat2} selectedUnitId={undefined}
+      onSelect={() => {}} onOpenPicker={() => {}} />);
+    // The leader is not listed under its own "HQ" role bucket…
+    expect(screen.queryByRole("heading", { name: "HQ" })).toBeNull();
+    // …but appears as a "leading" child of the bodyguard.
+    expect(screen.getByRole("button", { name: /open Canoness/i })).toHaveTextContent(/leading/i);
+  });
 });

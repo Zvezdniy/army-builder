@@ -1,4 +1,4 @@
-import type { IrCatalogue, Roster } from "@muster/domain";
+import type { IrCatalogue, Roster, RosterSelection } from "@muster/domain";
 import { unitsByRole, modelCount, catalogueEntry } from "@muster/roster";
 
 function unitHasHiddenSelection(
@@ -9,7 +9,8 @@ function unitHasHiddenSelection(
   return sel.selections.some((c) => unitHasHiddenSelection(c as typeof sel, hidden));
 }
 
-/** The roster window: added units grouped by role, plus the add-unit trigger. */
+/** The roster window: added units grouped by role, plus the add-unit trigger.
+ *  An attached Leader is drawn under its Bodyguard (and omitted from its own bucket). */
 export function RosterList({
   roster, catalogue, selectedUnitId, onSelect, onOpenPicker, hiddenIds,
 }: {
@@ -22,6 +23,30 @@ export function RosterList({
 }) {
   const hidden = hiddenIds ?? new Set<string>();
   const groups = unitsByRole(roster, catalogue);
+  const attachedByHost = new Map<string, RosterSelection[]>();
+  for (const s of roster.selections) {
+    if (s.attachedTo !== undefined) {
+      const list = attachedByHost.get(s.attachedTo) ?? [];
+      list.push(s);
+      attachedByHost.set(s.attachedTo, list);
+    }
+  }
+  const renderUnitButton = (u: RosterSelection, extraClass = "", leading = false) => {
+    const name = catalogueEntry(catalogue, u.entryId)?.name ?? u.entryId;
+    const models = modelCount(catalogue, u);
+    const flagged = unitHasHiddenSelection(u, hidden);
+    return (
+      <button
+        className={`${u.id === selectedUnitId ? "rl-unit selected" : "rl-unit"}${extraClass ? " " + extraClass : ""}`}
+        aria-label={`open ${name}`} onClick={() => onSelect(u.id)}>
+        <span>{leading ? `↳ ${name} (leading)` : name}</span>
+        {flagged && (
+          <span className="rl-warn" title="Contains a selection not available in the current army configuration">⚠</span>
+        )}
+        <span className="rl-models">{models} model{models === 1 ? "" : "s"}</span>
+      </button>
+    );
+  };
   return (
     <section data-testid="roster-list" className="rl">
       <div className="rl-head">
@@ -29,31 +54,27 @@ export function RosterList({
         <button className="rl-add-open" onClick={onOpenPicker}>+ Add unit</button>
       </div>
       {groups.length === 0 && <div className="rl-empty">Roster is empty — add a unit</div>}
-      {groups.map((g) => (
-        <div key={g.role} className="rl-group">
-          <h3 className="rl-role">{g.role}</h3>
-          <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-            {g.units.map((u) => {
-              const name = catalogueEntry(catalogue, u.entryId)?.name ?? u.entryId;
-              const models = modelCount(catalogue, u);
-              const flagged = unitHasHiddenSelection(u, hidden);
-              return (
+      {groups.map((g) => {
+        const units = g.units.filter((u) => u.attachedTo === undefined);
+        if (units.length === 0) return null;
+        return (
+          <div key={g.role} className="rl-group">
+            <h3 className="rl-role">{g.role}</h3>
+            <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+              {units.map((u) => (
                 <li key={u.id}>
-                  <button
-                    className={u.id === selectedUnitId ? "rl-unit selected" : "rl-unit"}
-                    aria-label={`open ${name}`} onClick={() => onSelect(u.id)}>
-                    <span>{name}</span>
-                    {flagged && (
-                      <span className="rl-warn" title="Contains a selection not available in the current army configuration">⚠</span>
-                    )}
-                    <span className="rl-models">{models} model{models === 1 ? "" : "s"}</span>
-                  </button>
+                  {renderUnitButton(u)}
+                  {(attachedByHost.get(u.id) ?? []).map((leader) => (
+                    <div key={leader.id} className="rl-leader">
+                      {renderUnitButton(leader, "rl-leading", true)}
+                    </div>
+                  ))}
                 </li>
-              );
-            })}
-          </ul>
-        </div>
-      ))}
+              ))}
+            </ul>
+          </div>
+        );
+      })}
     </section>
   );
 }
