@@ -128,7 +128,9 @@ export function App() {
       </header>
       <SetupBar catalogue={catalogue} roster={roster} onEdit={openWizardAt}
         registry={registry} activeDescriptorId={activeDescriptorId} />
-      <DetachmentPanel catalogue={catalogue} roster={roster} />
+      <DetachmentPanel catalogue={catalogue} roster={roster}
+        onSelectUnit={setSelectedUnitId}
+        onToggleGroupMember={(pid, group, eid) => setRoster((r) => toggleGroupMember(r, pid, group, eid, catalogue))} />
       <LegalityPanel
         result={result}
         // Resolves the name of a TOP-LEVEL unit. Issues carrying a nested

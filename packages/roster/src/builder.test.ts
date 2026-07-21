@@ -5,7 +5,7 @@ import {
   selectedGroupMembers, toggleGroupMember, groupControl, optionControl, catalogueEntry,
   unitLoadout, availableDetachments, selectedDetachment, selectedDetachments, toggleDetachment, setPointsLimit,
   unitsByRole, detachmentSelectionIds, groupMemberCounts, groupTotal, setGroupMemberCount,
-  invulnSave, enhancementsForDetachment, detachmentRuleTexts,
+  invulnSave, enhancementsForDetachment, detachmentRuleTexts, enhancementTargets,
 } from "./index";
 
 const catalogue: IrCatalogue = {
@@ -1334,5 +1334,67 @@ describe("addOption/toggleGroupMember seed required children", () => {
     const r2 = toggleGroupMember(r, heroId, mountGroup, "mount"); // no catalogue arg
     const hero = r2.selections[r2.selections.length - 1]!;
     expect(childrenOf(hero, "mount")).toEqual([]);
+  });
+});
+
+// A catalogue where a Character hosts an "Enhancements" group containing e.enh, gated to
+// detachment e.saga; enhancementTargets must find the Character and report taken/parent.
+const enhHostCat: IrCatalogue = {
+  id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [], categoryNames: {},
+  entries: [
+    {
+      id: "e.det", name: "Detachment", type: "upgrade", costs: [], categories: [], constraints: [],
+      groups: [{ id: "g.det", name: "Detachment", memberEntryIds: ["e.saga"], constraints: [] }],
+      children: [{ id: "e.saga", name: "Saga", type: "upgrade", costs: [], categories: [], constraints: [], children: [] }],
+    },
+    {
+      id: "e.canoness", name: "Canoness", type: "model", costs: [{ name: "pts", value: 50 }], categories: ["cat.char"], constraints: [],
+      groups: [{ id: "g.enh", name: "Enhancements", memberEntryIds: ["e.enh"], constraints: [{ id: "gc", type: "max", value: 1, scope: "self" }] }],
+      children: [{ id: "e.enh", name: "Relic Blade", type: "upgrade", costs: [{ name: "pts", value: 10 }], categories: [], constraints: [], children: [] }],
+    },
+  ],
+};
+
+describe("enhancementTargets", () => {
+  it("finds a hosting Character, reports taken false→true and the owning parent id", () => {
+    let r = addUnit(createRoster(enhHostCat, 2000), "e.canoness", enhHostCat);
+    const unitSel = r.selections.find((s) => s.entryId === "e.canoness")!;
+    const before = enhancementTargets(r, enhHostCat, "e.enh");
+    expect(before).toHaveLength(1);
+    expect(before[0]).toMatchObject({ unitSelectionId: unitSel.id, unitName: "Canoness", parentSelectionId: unitSel.id, taken: false });
+    expect(before[0]!.group.id).toBe("g.enh");
+    // Assign via the same path the panel uses, then it reports taken:true.
+    r = toggleGroupMember(r, unitSel.id, before[0]!.group, "e.enh", enhHostCat);
+    expect(enhancementTargets(r, enhHostCat, "e.enh")[0]!.taken).toBe(true);
+  });
+  it("returns [] when no roster unit hosts the group, and two targets for two Characters", () => {
+    expect(enhancementTargets(createRoster(enhHostCat, 2000), enhHostCat, "e.enh")).toEqual([]);
+    let r = addUnit(createRoster(enhHostCat, 2000), "e.canoness", enhHostCat);
+    r = addUnit(r, "e.canoness", enhHostCat);
+    expect(enhancementTargets(r, enhHostCat, "e.enh")).toHaveLength(2);
+  });
+  it("skips the WHOLE detachment-root subtree even when a node in it hosts the group", () => {
+    // Give the detachment option itself a matching "…Enhancements" group with e.enh. Once
+    // the detachment is chosen, e.saga sits under the detachment root; the whole root
+    // subtree must be skipped, so no target leaks — proving the skip, not just an absent group.
+    const cat = {
+      ...enhHostCat,
+      entries: [
+        {
+          ...enhHostCat.entries[0]!,
+          children: [{
+            id: "e.saga", name: "Saga", type: "upgrade" as const, costs: [], categories: [], constraints: [], children: [],
+            groups: [{ id: "g.saga.enh", name: "Enhancements", memberEntryIds: ["e.enh"], constraints: [] }],
+          }],
+        },
+        enhHostCat.entries[1]!,
+      ],
+    };
+    const r = toggleDetachment(createRoster(cat, 2000), "e.saga", cat);
+    expect(enhancementTargets(r, cat, "e.enh")).toEqual([]);
+  });
+  it("falls back to the entryId when a top-level selection's entry is absent from the catalogue", () => {
+    const r = { ...createRoster(enhHostCat, 2000), selections: [{ id: "sel.ghost", entryId: "e.ghost", count: 1, selections: [] }] };
+    expect(enhancementTargets(r, enhHostCat, "e.enh")).toEqual([]);
   });
 });

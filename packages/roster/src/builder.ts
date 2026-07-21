@@ -244,6 +244,38 @@ export function enhancementsForDetachment(catalogue: IrCatalogue, detachmentId: 
   return out;
 }
 
+/** For one enhancement, every roster unit that can host it: where to toggle it and
+ *  whether it is currently on. Walks each top-level unit's subtree (skipping the
+ *  detachment-root subtree) for a node whose catalogue entry has an "…Enhancements"
+ *  group containing `enhancementEntryId`; returns the OWNING node as the
+ *  toggleGroupMember parent. */
+export function enhancementTargets(
+  roster: Roster, catalogue: IrCatalogue, enhancementEntryId: string,
+): { unitSelectionId: string; unitName: string; parentSelectionId: string; group: IrGroup; taken: boolean }[] {
+  const detIds = detachmentSelectionIds(roster, catalogue);
+  const out: { unitSelectionId: string; unitName: string; parentSelectionId: string; group: IrGroup; taken: boolean }[] = [];
+  for (const unit of roster.selections) {
+    if (detIds.has(unit.id)) continue;
+    const unitName = catalogueEntry(catalogue, unit.entryId)?.name ?? unit.entryId;
+    const stack: RosterSelection[] = [unit];
+    while (stack.length > 0) {
+      const node = stack.pop()!;
+      const entry = catalogueEntry(catalogue, node.entryId);
+      for (const group of entry?.groups ?? []) {
+        if (group.name.endsWith("Enhancements") && group.memberEntryIds.includes(enhancementEntryId)) {
+          out.push({
+            unitSelectionId: unit.id, unitName,
+            parentSelectionId: node.id, group,
+            taken: node.selections.some((s) => s.entryId === enhancementEntryId),
+          });
+        }
+      }
+      stack.push(...node.selections);
+    }
+  }
+  return out;
+}
+
 /** The detachment's own rules resolved to displayable text, in declaration order,
  *  dropping any name whose text is absent or empty in `ruleTexts`. Shared by the
  *  wizard preview and the builder's detachment panel so they render identical rules. */
