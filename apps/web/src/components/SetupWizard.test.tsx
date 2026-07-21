@@ -366,9 +366,34 @@ describe("SetupWizard", () => {
   });
 
   const registry = [
-    { id: "a", catalogueId: "a", name: "Alpha", edition: "10e", editionName: "10th Edition", source: { kind: "bundled" as const, data: {} } },
+    { id: "a", catalogueId: "a", name: "Alpha", edition: "10e", editionName: "10th Edition", source: { kind: "manifest" as const, file: "a.ir.json" } },
     { id: "b", catalogueId: "b", name: "Beta", edition: "10e", editionName: "10th Edition", source: { kind: "manifest" as const, file: "b.ir.json" } },
   ];
+
+  it("hides the bundled fixture from the picker once a real faction exists", () => {
+    const withBundled = [
+      { id: "bundled", catalogueId: "mini", name: "Mini 40k", edition: "10e", editionName: "10th Edition", source: { kind: "bundled" as const, data: {} } },
+      ...registry,
+    ];
+    render(
+      <SetupWizard catalogue={cat} roster={createRoster(cat, 2000)} initialStep={1}
+        registry={withBundled} activeDescriptorId="bundled" onSelectFaction={noop}
+        onSetPoints={noop} onToggleDetachment={noop} onClose={noop} />,
+    );
+    expect(screen.queryByText("Mini 40k")).toBeNull();
+    expect(screen.getByText("Alpha")).toBeTruthy();
+    expect(screen.getByText("Beta")).toBeTruthy();
+  });
+
+  it("keeps the bundled fixture when it is the only faction (manifest unavailable)", () => {
+    render(
+      <SetupWizard catalogue={cat} roster={createRoster(cat, 2000)} initialStep={1}
+        registry={[{ id: "bundled", catalogueId: "mini", name: "Mini 40k", edition: "10e", editionName: "10th Edition", source: { kind: "bundled" as const, data: {} } }]}
+        activeDescriptorId="bundled" onSelectFaction={noop}
+        onSetPoints={noop} onToggleDetachment={noop} onClose={noop} />,
+    );
+    expect(screen.getByText("Mini 40k")).toBeTruthy();
+  });
 
   it("renders a card per registry faction and marks the active one", () => {
     render(
@@ -422,7 +447,7 @@ describe("SetupWizard", () => {
   });
 
   const twoEditionRegistry = [
-    { id: "10e:a", catalogueId: "a", name: "Alpha", edition: "10e", editionName: "10th Edition", source: { kind: "bundled" as const, data: {} } },
+    { id: "10e:a", catalogueId: "a", name: "Alpha", edition: "10e", editionName: "10th Edition", source: { kind: "manifest" as const, file: "a.ir.json" } },
     { id: "10e:b", catalogueId: "b", name: "Beta", edition: "10e", editionName: "10th Edition", source: { kind: "manifest" as const, file: "b.ir.json" } },
     { id: "11e:a", catalogueId: "a", name: "Alpha", edition: "11e", editionName: "11th Edition", source: { kind: "manifest" as const, file: "a11.ir.json" } },
   ];

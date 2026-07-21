@@ -71,13 +71,23 @@ export function SetupWizard({
   const chosenIds = selectedDetachments(roster, catalogue);
   const [customPts, setCustomPts] = useState("");
 
-  // Edition list derived from the registry, first-appearance order preserved.
-  const editions = registry
-    ? registry.reduce<{ id: string; name: string }[]>((acc, d) => (
+  // Mini 40k (the bundled fixture) is the app's guaranteed-available fallback and its
+  // initial active catalogue, but it should not be offered as a faction to build once
+  // real catalogues are loaded. Hide the bundled descriptor from the picker WHENEVER a
+  // real (manifest) faction exists; keep it when it is the only thing there (manifest
+  // fetch failed), so the picker is never empty. Both the edition tabs and the faction
+  // grid derive from this filtered view.
+  const shownRegistry = registry?.some((d) => d.source.kind !== "bundled")
+    ? registry.filter((d) => d.source.kind !== "bundled")
+    : registry;
+
+  // Edition list derived from the shown registry, first-appearance order preserved.
+  const editions = shownRegistry
+    ? shownRegistry.reduce<{ id: string; name: string }[]>((acc, d) => (
         acc.some((e) => e.id === d.edition) ? acc : [...acc, { id: d.edition, name: d.editionName }]
       ), [])
     : [];
-  const activeEdition = registry?.find((d) => d.id === activeDescriptorId)?.edition ?? editions[0]?.id;
+  const activeEdition = shownRegistry?.find((d) => d.id === activeDescriptorId)?.edition ?? editions[0]?.id;
   // `undefined` means "the user hasn't picked an edition locally yet" — the displayed
   // edition then tracks `activeEdition` for free. Once the user clicks a segment this
   // holds their explicit choice instead. A useEffect to resync on `activeEdition` changes
@@ -180,8 +190,8 @@ export function SetupWizard({
                 </div>
               )}
               <div className="faction-grid">
-                {registry
-                  ? registry.filter((d) => d.edition === displayedEdition).map((d) => (
+                {shownRegistry
+                  ? shownRegistry.filter((d) => d.edition === displayedEdition).map((d) => (
                       <button key={d.id}
                         className={`faction-card${d.id === activeDescriptorId ? " chosen" : ""}`}
                         aria-pressed={d.id === activeDescriptorId}
