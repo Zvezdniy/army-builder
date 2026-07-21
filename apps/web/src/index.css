@@ -370,3 +370,13 @@ section { background: var(--panel); border: 1px solid var(--line); border-radius
 .issue.warning { color: var(--warn); }
 .issue-link { border: none; background: none; padding: 0; font: inherit; color: inherit; cursor: pointer; text-align: left; text-decoration: underline dotted; }
 .issue-link:hover { text-decoration: underline; }
+
+/* Detachment panel in the builder (collapsible shell; content reuses the wizard's
+   .det-preview-section / .preview-body / .det-rules / .enh-line classes). */
+.det-panel { border: 1px solid var(--line); border-radius: 10px; margin: 10px 0; overflow: hidden; }
+.det-panel-head { display: flex; align-items: center; gap: 8px; width: 100%; padding: 10px 12px;
+  background: none; border: none; cursor: pointer; text-align: left; font: inherit; color: var(--ink); }
+.det-panel-caret { color: var(--muted); width: 12px; }
+.det-panel-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+.det-panel-names { font-weight: 600; font-size: 13px; }
+.det-panel-body { border-top: 1px solid var(--line); }

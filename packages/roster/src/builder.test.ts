@@ -5,7 +5,7 @@ import {
   selectedGroupMembers, toggleGroupMember, groupControl, optionControl, catalogueEntry,
   unitLoadout, availableDetachments, selectedDetachment, selectedDetachments, toggleDetachment, setPointsLimit,
   unitsByRole, detachmentSelectionIds, groupMemberCounts, groupTotal, setGroupMemberCount,
-  invulnSave, enhancementsForDetachment,
+  invulnSave, enhancementsForDetachment, detachmentRuleTexts,
 } from "./index";
 
 const catalogue: IrCatalogue = {
@@ -1105,6 +1105,31 @@ describe("enhancementsForDetachment", () => {
     const ids = enhancementsForDetachment(cat, "e.gladius").map((e) => e.id);
     expect(ids).not.toContain("e.enhHidden");
     expect(ids).toContain("e.enhNested");
+  });
+});
+
+const ruleTextCat: IrCatalogue = {
+  id: "c", name: "C", gameSystemId: "gs", revision: 1, forceConstraints: [], categoryNames: {},
+  ruleTexts: { "Loping Charge": "Advance and charge.", "Empty Rule": "" },
+  entries: [{
+    id: "e.det", name: "Detachment", type: "upgrade", costs: [], categories: [], constraints: [],
+    groups: [{ id: "g.det", name: "Detachment", memberEntryIds: ["e.saga", "e.plain"], constraints: [] }],
+    children: [
+      { id: "e.saga", name: "Saga", type: "upgrade", costs: [], categories: [], constraints: [], children: [], ruleNames: ["Loping Charge", "Missing Text", "Empty Rule"] },
+      { id: "e.plain", name: "Plain", type: "upgrade", costs: [], categories: [], constraints: [], children: [] },
+    ],
+  }],
+};
+
+describe("detachmentRuleTexts", () => {
+  it("resolves each ruleName to its text, dropping names with no/empty text", () => {
+    expect(detachmentRuleTexts(ruleTextCat, "e.saga")).toEqual([
+      { name: "Loping Charge", text: "Advance and charge." },
+    ]);
+  });
+  it("returns [] for a detachment with no ruleNames and for an unknown id", () => {
+    expect(detachmentRuleTexts(ruleTextCat, "e.plain")).toEqual([]);
+    expect(detachmentRuleTexts(ruleTextCat, "e.nope")).toEqual([]);
   });
 });
 
