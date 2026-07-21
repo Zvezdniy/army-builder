@@ -5,6 +5,7 @@ export * from "./ir";
 export * from "./modifiers";
 export * from "./packed";
 export * from "./roster";
+export * from "./stratagem";
 export * from "./validation";
 export * from "./validation-rules";
 export * from "./visibility";
