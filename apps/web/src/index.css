@@ -105,7 +105,7 @@ section { background: var(--panel); border: 1px solid var(--line); border-radius
 
 /* Dark section bar shared by weapon table heads and description sections (War Organ look). */
 .ds-section-head { background: var(--head-bg); color: var(--head-ink); font-size: 12px; font-weight: 700;
-  text-transform: uppercase; letter-spacing: 0.05em; padding: 6px 10px; border-radius: 6px; }
+  text-transform: uppercase; letter-spacing: 0.05em; padding: 6px 10px; border-radius: 0; }
 .ds-section { display: flex; flex-direction: column; gap: 4px; }
 .ds-loadout { margin: 4px 2px; font-size: 13px; }
 .ds-ability-line { margin: 2px 2px; font-size: 13px; }
@@ -410,5 +410,7 @@ section { background: var(--panel); border: 1px solid var(--line); border-radius
 /* Collapsible group head (Core / detachment): the .ds-section-head bar as a button. */
 .strat-section-head { display: flex; align-items: center; gap: 8px; width: 100%;
   border: none; cursor: pointer; text-align: left; }
+/* Space each group off from the previous (Core → detachment, detachment → detachment). */
+.strat-section + .strat-section { margin-top: 12px; }
 .strat-section-title { flex: 1; }
 .strat-count { color: var(--head-ink); opacity: 0.7; font-variant-numeric: tabular-nums; }
