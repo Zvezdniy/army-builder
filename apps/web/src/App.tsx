@@ -151,8 +151,7 @@ export function App() {
       <DetachmentPanel catalogue={catalogue} roster={roster}
         onSelectUnit={setSelectedUnitId}
         onToggleGroupMember={(pid, group, eid) => setRoster((r) => toggleGroupMember(r, pid, group, eid, catalogue))} />
-      <StratagemPanel data={stratagemData} roster={roster} catalogue={catalogue}
-        attribution={stratagemManifest?.attribution} />
+      <StratagemPanel data={stratagemData} roster={roster} catalogue={catalogue} />
       <LegalityPanel
         result={result}
         // Resolves the name of a TOP-LEVEL unit. Issues carrying a nested

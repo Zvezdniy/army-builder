@@ -406,4 +406,8 @@ section { background: var(--panel); border: 1px solid var(--line); border-radius
 .strat-detail { padding: 0 0 7px 20px; }
 .strat-meta { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
 .strat-text { font-size: 12.5px; line-height: 1.45; color: var(--ink); margin-top: 3px; }
-.strat-attribution { color: var(--muted); font-size: 11px; font-style: italic; padding: 8px 12px; }
+/* Collapsible group head (Core / detachment): the .ds-section-head bar as a button. */
+.strat-section-head { display: flex; align-items: center; gap: 8px; width: 100%;
+  border: none; cursor: pointer; text-align: left; }
+.strat-section-title { flex: 1; }
+.strat-count { color: var(--head-ink); opacity: 0.7; font-variant-numeric: tabular-nums; }
