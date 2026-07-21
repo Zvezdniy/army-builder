@@ -292,6 +292,7 @@ fn apply_link_content(
 
     resolved.profiles.extend(link.profiles.iter().cloned());
     resolve_info_links(&link.info_links, symbols, diags, &mut resolved.profiles);
+    resolve_rule_info_links(&link.info_links, &mut resolved.rule_names);
     Ok(())
 }
 
@@ -1050,6 +1051,27 @@ mod tests {
         let clone = &resolved.entries[0].entries[0];
         let ids: Vec<&str> = clone.profiles.iter().map(|p| p.id.as_str()).collect();
         assert_eq!(ids, vec!["inline.p", "shared.p"], "inline profile and infoLink target both land");
+    }
+
+    #[test]
+    fn link_declared_rule_infolink_reaches_the_clone() {
+        let target = entry("t", vec![]);
+        let mut rich = link("t");
+        rich.info_links.push(RawInfoLink {
+            target_id: "t".into(), link_type: "rule".into(), hidden: false,
+            name: "Placement Rule".into() });
+        let owner = RawEntry {
+            id: "owner".into(), entry_type: "unit".into(),
+            entry_links: vec![rich], ..Default::default()
+        };
+        let cat = RawCatalogue {
+            id: "c".into(), entries: vec![owner], shared_entries: vec![target],
+            ..Default::default()
+        };
+        let resolved = resolve(cat).unwrap();
+        let clone = &resolved.entries[0].entries[0];
+        assert!(clone.rule_names.contains(&"Placement Rule".to_string()),
+            "a rule infoLink declared on the entryLink itself should reach the clone");
     }
 
     fn rule_link(name: &str, hidden: bool) -> RawInfoLink {
