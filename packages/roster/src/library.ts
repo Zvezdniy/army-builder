@@ -28,6 +28,20 @@ export function upsertActive(lib: RosterLibrary, roster: Roster, meta: EntryMeta
   return { ...lib, activeId: roster.id, entries: [...rest, entry] };
 }
 
+/** Refresh an EXISTING entry's content from an edited roster (name/points/roster +
+ *  updatedAt), leaving edition/catalogueId/catalogueName and activeId untouched.
+ *  No-op (returns the same library) if roster.id is not already tracked — so autosave
+ *  can never insert or re-activate a roster the library doesn't own (a throwaway
+ *  default after a failed restore, or one the user just deleted). */
+export function updateEntry(lib: RosterLibrary, roster: Roster, now: number): RosterLibrary {
+  if (!lib.entries.some((e) => e.id === roster.id)) return lib;
+  return {
+    ...lib,
+    entries: lib.entries.map((e) =>
+      e.id === roster.id ? { ...e, name: roster.name, points: roster.pointsLimit, updatedAt: now, roster } : e),
+  };
+}
+
 export function renameEntry(lib: RosterLibrary, id: string, name: string, now: number): RosterLibrary {
   return {
     ...lib,

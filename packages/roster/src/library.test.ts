@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { Roster } from "@muster/domain";
 import {
-  emptyLibrary, upsertActive, renameEntry, duplicateEntry, deleteEntry, setActive,
+  emptyLibrary, upsertActive, updateEntry, renameEntry, duplicateEntry, deleteEntry, setActive,
   activeEntry, parseLibrary, toEnvelope, fromEnvelope,
 } from "./library";
 
@@ -30,6 +30,28 @@ describe("upsertActive", () => {
     const lib0 = emptyLibrary();
     upsertActive(lib0, roster("r1"), meta, 100);
     expect(lib0.entries).toHaveLength(0);
+  });
+});
+
+describe("updateEntry", () => {
+  // A second untracked-target entry (r2) so the map's ternary exercises both
+  // branches: r1 gets refreshed, r2 is passed through unchanged.
+  const base = upsertActive(upsertActive(emptyLibrary(), roster("r1", "Old"), meta, 100), roster("r2", "Other"), meta, 110);
+  it("refreshes an existing entry's name/points/roster/updatedAt, keeping activeId", () => {
+    const lib = updateEntry(base, { ...roster("r1", "New"), pointsLimit: 1000 }, 200);
+    const e = lib.entries.find((x) => x.id === "r1")!;
+    expect(e.name).toBe("New");
+    expect(e.points).toBe(1000);
+    expect(e.updatedAt).toBe(200);
+    expect(lib.activeId).toBe("r2");
+  });
+  it("leaves other entries untouched", () => {
+    const lib = updateEntry(base, { ...roster("r1", "New"), pointsLimit: 1000 }, 200);
+    const other = lib.entries.find((x) => x.id === "r2")!;
+    expect(other).toBe(base.entries.find((x) => x.id === "r2"));
+  });
+  it("is a no-op (same reference) when the id is not tracked", () => {
+    expect(updateEntry(base, roster("ghost"), 300)).toBe(base);
   });
 });
 

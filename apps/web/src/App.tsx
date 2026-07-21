@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { IrCatalogue, Roster } from "@muster/domain";
 import { loadCatalogue } from "@muster/domain";
 import { createRoster, addUnit, addOption, toggleGroupMember, setGroupMemberCount, setCount, remove,
   toggleDetachment, setPointsLimit, availableDetachments, selectedDetachment,
   detachmentSelectionIds, attachLeader, detachLeader,
-  upsertActive, activeEntry, renameEntry, duplicateEntry, deleteEntry, toEnvelope, fromEnvelope } from "@muster/roster";
+  upsertActive, updateEntry, activeEntry, setActive, renameEntry, duplicateEntry, deleteEntry, toEnvelope, fromEnvelope } from "@muster/roster";
 import { evaluate, hiddenEntryIds, hiddenSelectionIds } from "@muster/engine-eval";
 import { RosterList } from "./components/RosterList";
 import { UnitDetail } from "./components/UnitDetail";
@@ -55,6 +55,12 @@ export function App() {
   const { library, setLibrary } = useRosterLibrary();
   const [myArmiesOpen, setMyArmiesOpen] = useState(false);
   const [restored, setRestored] = useState(false);
+  const [registryLoaded, setRegistryLoaded] = useState(false);
+  // The pre-session library snapshot (whatever was in localStorage at mount), frozen
+  // via a ref so a same-session explicit action (e.g. "+ New army", which writes to
+  // the live `library` state before restore has settled) can never be mistaken by
+  // restore for "the last-edited roster to restore" and clobber it back.
+  const initialLibraryRef = useRef(library);
   const result = useMemo(() => {
     const r = evaluate(roster, catalogue);
     // The detachment is an army-level choice made in the wizard, not a roster unit,
@@ -73,41 +79,34 @@ export function App() {
   // Discover the catalogue library from the local manifest on mount. Any failure
   // degrades to bundled-only (loadRegistry never throws).
   useEffect(() => {
-    if (!boundFetch) return;
-    // Only replace the bundled-only default when the manifest actually adds factions,
-    // so a missing/empty manifest is a no-op (no needless re-render).
-    void loadRegistry(bundled, boundFetch, `${CATALOGUES_BASE}catalogues.json`).then((reg) => {
-      if (reg.length > 1) setRegistry(reg);
-    });
+    if (!boundFetch) { setRegistryLoaded(true); return; }
+    void loadRegistry(bundled, boundFetch, `${CATALOGUES_BASE}catalogues.json`)
+      .then((reg) => { if (reg.length > 1) setRegistry(reg); })
+      .finally(() => setRegistryLoaded(true));
   }, []);
 
-  // Autosave the active roster whenever it or the catalogue changes, once restore
-  // has settled (otherwise this would overwrite the stored active entry with a
-  // fresh empty roster on first mount, before restore gets a chance to run).
+  // Auto-save the active roster's content once restore has settled. update-only:
+  // a roster the library doesn't own (a post-failed-restore default, or a
+  // just-deleted entry) is left untouched.
   useEffect(() => {
     if (!restored) return;
-    const desc = registry.find((d) => d.id === activeDescriptorId);
-    if (!desc) return; // bundled/imported-IR without a descriptor still has one; guard anyway
-    setLibrary((lib) => upsertActive(lib, roster, { edition: desc.edition, catalogueId: desc.catalogueId, catalogueName: desc.name }, Date.now()));
-  }, [roster, activeDescriptorId, restored]);
+    setLibrary((lib) => updateEntry(lib, roster, Date.now()));
+  }, [roster, restored]);
 
-  // Restore the last-edited roster once the manifest is available. Runs once.
+  // Restore the last-edited roster once the manifest load has settled (success or
+  // failure). Runs exactly once — the restored guard also prevents the re-entrancy
+  // via autosave→setLibrary.
   useEffect(() => {
-    if (restored) return;
-    const entry = activeEntry(library);
+    if (restored || !registryLoaded) return;
+    const entry = activeEntry(initialLibraryRef.current);
     if (!entry) { setRestored(true); return; }
     const desc = registry.find((d) => d.edition === entry.edition && d.catalogueId === entry.catalogueId);
-    if (!desc) {
-      // Descriptor not in the manifest yet — wait for a fuller registry, unless
-      // it is already the full one (then surface an error and keep the default).
-      if (registry.length > 1) { setFactionError(`Couldn't load ${entry.catalogueName}`); setRestored(true); }
-      return;
-    }
+    if (!desc) { setFactionError(`Couldn't load ${entry.catalogueName}`); setRestored(true); return; }
     void loadCatalogueFor(desc, boundFetch, CATALOGUES_BASE)
       .then((next) => { applyCatalogueWithRoster(next, desc.id, entry.roster); })
       .catch(() => setFactionError(`Couldn't load ${entry.catalogueName}`))
       .finally(() => setRestored(true));
-  }, [registry, library, restored]);
+  }, [registryLoaded, restored]);
 
   // Discover the stratagem library from the same base as the catalogue library.
   // Any failure leaves the manifest undefined → the panel simply never appears.
@@ -134,9 +133,15 @@ export function App() {
     setWizardStep("points");
     setWizardOpen(needsSetup(next, nextRoster));
   };
-  // Swap to a fresh roster (faction switch / new army).
-  const applyCatalogue = (next: IrCatalogue, descriptorId: string) =>
-    applyCatalogueWithRoster(next, descriptorId, createRoster(next, 2000));
+  // Swap to a fresh roster (faction switch / new army). Adds it to the library only
+  // when the descriptor is a real known faction, so it can be restored later —
+  // imported ad-hoc IR (descriptorId "imported", no registry entry) stays session-only.
+  const applyCatalogue = (next: IrCatalogue, descriptorId: string) => {
+    const nextRoster = createRoster(next, 2000);
+    applyCatalogueWithRoster(next, descriptorId, nextRoster);
+    const desc = registry.find((d) => d.id === descriptorId);
+    if (desc) setLibrary((lib) => upsertActive(lib, nextRoster, { edition: desc.edition, catalogueId: desc.catalogueId, catalogueName: desc.name }, Date.now()));
+  };
 
   const loadIr = async (file: File) => {
     applyCatalogue(loadCatalogue(JSON.parse(await file.text())), "imported");
@@ -191,7 +196,9 @@ export function App() {
     const a = document.createElement("a");
     a.href = url;
     a.download = `${entry.name.replace(/[^\w.-]+/g, "_") || "roster"}.muster.json`;
+    document.body.appendChild(a);
     a.click();
+    a.remove();
     URL.revokeObjectURL(url);
   };
 
@@ -223,6 +230,9 @@ export function App() {
             onChange={(e) => { const f = e.target.files?.[0]; if (f) void loadIr(f); }} />
         </label>
       </header>
+      {factionError && !wizardOpen && (
+        <p role="alert" style={{ color: "#c0392b", margin: "8px 0" }}>{factionError}</p>
+      )}
       <SetupBar catalogue={catalogue} roster={roster} onEdit={openWizardAt}
         registry={registry} activeDescriptorId={activeDescriptorId} />
       <DetachmentPanel catalogue={catalogue} roster={roster}
