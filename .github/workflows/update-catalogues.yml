@@ -25,6 +25,9 @@ permissions:
   contents: read
   pages: write
   id-token: write
+  # Lets the stratagem-fallback step below read + download prior Pages artifacts
+  # (via the GitHub API) to recover the last-good stratagems when Wahapedia is down.
+  actions: read
 
 # Never run two publishes at once; let a newer run supersede an in-flight one.
 concurrency:
@@ -144,12 +147,45 @@ jobs:
       - name: Build the stratagem library
         # Fetches Wahapedia's stratagem export → apps/web/public/stratagems.json +
         # stratagems/*.json. continue-on-error so a Wahapedia outage never blocks the
-        # catalogue publish: on failure the artifact simply ships without stratagems
-        # and the app's panel stays hidden (its loader degrades to nothing) until the
-        # next successful run — no partial/broken data, since apps/web/public is a
-        # fresh gitignored dir each run.
+        # catalogue publish. On failure the fallback step below restores the last-good
+        # stratagems from a prior artifact, so the panel keeps working across outages
+        # (apps/web/public is a fresh gitignored dir each run — nothing persists here).
         run: pnpm run update-stratagems
         continue-on-error: true
+
+      - name: Restore last-good stratagems if the fetch failed
+        # Wahapedia is intermittently unreachable; because apps/web/public is rebuilt
+        # from scratch every run, a failed fetch would drop stratagems from the site
+        # entirely (the panel vanishes) until some later run happens to catch Wahapedia
+        # up. Instead, when stratagems.json is absent, pull it (plus stratagems/*.json)
+        # from the most recent prior "github-pages" artifact that still has it — the
+        # last-good data lives in CI artifacts, never in git. Skipped when the fresh
+        # fetch succeeded (stratagems.json present).
+        if: hashFiles('apps/web/public/stratagems.json') == ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "stratagems.json is absent (Wahapedia fetch failed) — restoring last-good from a prior Pages artifact."
+          ids=$(gh api "repos/${{ github.repository }}/actions/artifacts?per_page=50" \
+            --jq '.artifacts[] | select(.name=="github-pages" and .expired==false) | .id')
+          restored=""
+          for id in $ids; do
+            echo "  trying artifact $id ..."
+            gh api "repos/${{ github.repository }}/actions/artifacts/$id/zip" > /tmp/pg.zip 2>/dev/null || continue
+            rm -rf /tmp/pg && mkdir -p /tmp/pg
+            unzip -o -q /tmp/pg.zip -d /tmp/pg || continue
+            # upload-pages-artifact wraps the site in a plain artifact.tar (GNU tar).
+            [ -f /tmp/pg/artifact.tar ] || continue
+            if tar -tf /tmp/pg/artifact.tar ./stratagems.json >/dev/null 2>&1; then
+              tar -xf /tmp/pg/artifact.tar -C apps/web/public ./stratagems.json ./stratagems
+              echo "  restored stratagems from artifact $id"
+              restored=1
+              break
+            fi
+          done
+          if [ -z "$restored" ]; then
+            echo "  no prior artifact carried stratagems — the panel will stay hidden this run."
+          fi
 
       - name: Build the web app
         # Emits apps/web/dist: the React app (base /army-builder/) plus a copy of
