@@ -31,24 +31,28 @@ export function useRosterLibrary(): {
   library: RosterLibrary;
   setLibrary: (updater: (lib: RosterLibrary) => RosterLibrary) => void;
 } {
-  const [library, setLibraryState] = useState<RosterLibrary>(() => loadLibrary());
-  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const [library, setLibrary] = useState<RosterLibrary>(() => loadLibrary());
+  // Keep a ref to the latest library synced during render (not inside a
+  // setState updater, which must stay pure).
   const latest = useRef(library);
+  latest.current = library;
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
-  const setLibrary = (updater: (lib: RosterLibrary) => RosterLibrary) => {
-    setLibraryState((prev) => {
-      const next = updater(prev);
-      latest.current = next;
-      return next;
-    });
-  };
-
+  // Debounced write on change: keystroke-level roster edits coalesce into one.
   useEffect(() => {
-    latest.current = library;
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => saveLibrary(latest.current), 400);
     return () => { if (timer.current) clearTimeout(timer.current); };
   }, [library]);
+
+  // Flush the pending write on unmount AND on page hide (tab close / navigation),
+  // so an edit made inside the debounce window is not lost. localStorage writes
+  // are synchronous, so a pagehide flush completes before the page unloads.
+  useEffect(() => {
+    const flush = () => saveLibrary(latest.current);
+    window.addEventListener("pagehide", flush);
+    return () => { window.removeEventListener("pagehide", flush); flush(); };
+  }, []);
 
   return { library, setLibrary };
 }
