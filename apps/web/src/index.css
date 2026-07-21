@@ -258,8 +258,12 @@ section { background: var(--panel); border: 1px solid var(--line); border-radius
 
 /* ── Army setup: persistent setup bar + first-run wizard ──────────────────────
    Reuses .picker-overlay, .uc-opt/.chosen (pills), .ds-section-head (dark bar). */
-.setup-bar { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 4px; }
-.setup-chip { display: flex; flex-direction: column; gap: 2px; min-width: 150px; padding: 8px 12px;
+/* Equal-width columns that reflow into even rows at every width (auto-fit stretches
+   the filled tracks to 1fr): a flex row instead sized each chip to its content, so the
+   wide Faction chip and fixed Points/Edition chips wrapped into ragged 3+1 / uneven 2+2
+   rows across the 640–900px band. The grid keeps all chips the same width per row. */
+.setup-bar { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin: 10px 0 4px; }
+.setup-chip { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: 8px 12px;
   border: 1px solid var(--line); border-radius: 10px; background: var(--panel); cursor: pointer; text-align: left; }
 .setup-chip:hover { border-color: var(--accent); }
 .setup-lbl { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
@@ -349,7 +353,6 @@ section { background: var(--panel); border: 1px solid var(--line); border-radius
   .det-layout { grid-template-columns: 1fr; }
   .det-preview { position: static; }
   .det-list { max-height: none; }
-  .setup-chip { flex: 1 1 45%; min-width: 0; }
 }
 
 /* Army legality panel */
@@ -432,14 +435,21 @@ section { background: var(--panel); border: 1px solid var(--line); border-radius
 .strat-section-title { flex: 1; }
 .strat-count { color: var(--head-ink); opacity: 0.7; font-variant-numeric: tabular-nums; }
 
-/* ── Mobile adaptation pass (phones) ──────────────────────────────────────────
-   The layout already collapses its grids at ≤640px (builder, det-layout, ds-cols,
-   setup chips); these rules fix what still reads poorly at phone width. */
-@media (max-width: 640px) {
-  /* The title's faction half is dropped on phones (the Faction chip already names it),
-     leaving a compact "Muster" that no longer dwarfs the header controls. */
-  header h1 { font-size: 19px; line-height: 1.2; overflow-wrap: break-word; }
+/* ── Responsive adaptation (tablet band, then phones) ─────────────────────────
+   The layout collapses its grids at ≤640px (builder, det-layout, ds-cols); the setup
+   bar reflows fluidly on its own (auto-fit grid). These rules fix what still reads
+   poorly between the breakpoints. */
+/* The title's faction half ("Muster — Imperium - Adeptus Astartes - Space Marines")
+   only fits on one line beside the header controls above ~1000px; below that it wrapped
+   to 2–3 lines across the whole tablet/small-laptop band. Drop it there (the Faction
+   chip already names the army) so the title stays a compact "Muster". */
+@media (max-width: 1023px) {
   .h1-faction { display: none; }
+}
+
+@media (max-width: 640px) {
+  /* On phones the compact title also shrinks so it never dwarfs the controls. */
+  header h1 { font-size: 19px; line-height: 1.2; overflow-wrap: break-word; }
 
   /* Start modals nearer the top so short phones don't waste a chunk of the viewport
      above the dialog (overlay is align-items: flex-start). */
