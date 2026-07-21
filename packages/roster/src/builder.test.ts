@@ -1106,6 +1106,46 @@ describe("enhancementsForDetachment", () => {
     expect(ids).not.toContain("e.enhHidden");
     expect(ids).toContain("e.enhNested");
   });
+  it("matches an `equalTo 0` detachment gate, not only `lessThan 1`", () => {
+    // Real data gates a detachment's enhancements two equivalent ways: `lessThan
+    // selections <det> 1` and `equalTo selections <det> 0` (both mean "hidden until
+    // that detachment is chosen"). Whole factions (Thousand Sons, World Eaters,
+    // Emperor's Children, Leagues of Votann, Chaos Knights…) use the equalTo form.
+    const eqGate = {
+      set: true,
+      conditionGroups: [{
+        type: "and" as const,
+        conditions: [{
+          id: "cond.eq", comparator: "equalTo" as const, value: 0,
+          field: "selections" as const, scope: "roster", targetType: "entry" as const,
+          targetId: "e.anvil", includeChildSelections: true,
+        }],
+      }],
+    };
+    const cat: IrCatalogue = {
+      ...enhCat,
+      entries: [
+        enhCat.entries[0]!,
+        {
+          id: "e.hero3", name: "Hero3", type: "model", costs: [], categories: [], constraints: [],
+          children: [
+            { id: "e.enhEq", name: "Anvil Relic (equalTo gate)", type: "upgrade", costs: [], categories: [], constraints: [], children: [], visibilityModifiers: [eqGate] },
+          ],
+        },
+        // An allied unit carries the SAME per-detachment gate but is type `unit`/`model`
+        // — it must NOT surface as an enhancement (GSC allied Guard, TSons allied Daemons).
+        { id: "e.alliedUnit", name: "Allied Unit", type: "unit", costs: [{ name: "pts", value: 100 }], categories: ["cat.infantry"], constraints: [], children: [], visibilityModifiers: [eqGate] },
+      ],
+    };
+    expect(enhancementsForDetachment(cat, "e.anvil").map((e) => e.id)).toEqual(["e.enhEq"]);
+    // A non-zero equalTo (e.g. "exactly 1 selected") is NOT an unlock gate — stays ignored.
+    const nonZero = { ...eqGate, conditionGroups: [{ type: "and" as const, conditions: [{ ...eqGate.conditionGroups[0]!.conditions[0]!, id: "cond.eq1", value: 1 }] }] };
+    const cat2: IrCatalogue = {
+      ...enhCat,
+      entries: [enhCat.entries[0]!, { id: "e.hero4", name: "Hero4", type: "model", costs: [], categories: [], constraints: [], children: [{ id: "e.enhEq1", name: "equalTo 1", type: "upgrade", costs: [], categories: [], constraints: [], children: [], visibilityModifiers: [nonZero] }] }],
+    };
+    expect(enhancementsForDetachment(cat2, "e.anvil").map((e) => e.id)).toEqual([]);
+  });
 });
 
 const ruleTextCat: IrCatalogue = {

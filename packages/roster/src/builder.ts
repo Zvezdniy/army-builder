@@ -230,13 +230,18 @@ function flattenConditions(vm: VisibilityModifier): IrCondition[] {
 }
 
 /** True when `entry` has a `set hidden` visibility gate that hides it until
- *  `detachmentId` is selected — a `lessThan selections <detachmentId>` condition. */
+ *  `detachmentId` is selected. Real data spells "that detachment has 0 selections"
+ *  two equivalent ways — `lessThan selections <detachmentId> 1` and `equalTo
+ *  selections <detachmentId> 0` — and whole factions (Thousand Sons, World Eaters,
+ *  Emperor's Children, Leagues of Votann, Chaos Knights…) use the equalTo form, so
+ *  both count. A `forces`-field condition targets a force marker rather than the
+ *  detachment, so only `selections` gates qualify. */
 function visibilityGatesDetachment(entry: IrEntry, detachmentId: string): boolean {
   for (const vm of entry.visibilityModifiers ?? []) {
     if (vm.set !== true) continue;
     for (const c of flattenConditions(vm)) {
-      if (c.field === "selections" && c.comparator === "lessThan"
-        && c.targetType === "entry" && c.targetId === detachmentId) {
+      if (c.field === "selections" && c.targetType === "entry" && c.targetId === detachmentId
+        && (c.comparator === "lessThan" || (c.comparator === "equalTo" && c.value === 0))) {
         return true;
       }
     }
@@ -255,7 +260,10 @@ export function enhancementsForDetachment(catalogue: IrCatalogue, detachmentId: 
   const out: IrEntry[] = [];
   while (stack.length > 0) {
     const e = stack.pop()!;
-    if (!seen.has(e.id) && visibilityGatesDetachment(e, detachmentId)) {
+    // Enhancements are `upgrade` entries. Allied units (model/unit) carry the SAME
+    // per-detachment `set hidden` gate — GSC's Brood Brother Astra Militarum, Thousand
+    // Sons' allied Daemons — so gate them out by type or the panel lists whole units.
+    if (!seen.has(e.id) && e.type === "upgrade" && visibilityGatesDetachment(e, detachmentId)) {
       seen.add(e.id);
       out.push(e);
     }
