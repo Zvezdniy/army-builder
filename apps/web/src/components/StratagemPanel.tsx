@@ -6,16 +6,24 @@ import { renderStratagemHtml } from "./stratagemHtml";
 
 const FALLBACK_ATTRIBUTION = "Data from Wahapedia (wahapedia.ru).";
 
+/** One stratagem, collapsed to its name + CP; the meta line and effect text reveal
+ *  on click/tap (each card toggles independently), so an expanded panel stays compact. */
 function StratagemCard({ s }: { s: Stratagem }) {
+  const [open, setOpen] = useState(false);
   const meta = [s.category, s.phase, s.turn].filter(Boolean).join(" · ");
   return (
     <div className="strat-card">
-      <div className="strat-head">
+      <button className="strat-head" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        <span className="strat-caret" aria-hidden="true">{open ? "▾" : "▸"}</span>
         <span className="strat-name">{s.name}</span>
         <span className="strat-cp">{s.cpCost}CP</span>
-      </div>
-      {meta && <div className="strat-meta">{meta}</div>}
-      <div className="strat-text">{renderStratagemHtml(s.description)}</div>
+      </button>
+      {open && (
+        <div className="strat-detail">
+          {meta && <div className="strat-meta">{meta}</div>}
+          <div className="strat-text">{renderStratagemHtml(s.description)}</div>
+        </div>
+      )}
     </div>
   );
 }
