@@ -63,9 +63,19 @@ export function setCount(roster: Roster, selectionId: string, count: number): Ro
   return { ...roster, selections: mapTree(roster.selections, selectionId, (s) => ({ ...s, count })) };
 }
 
-/** Remove a selection and its subtree. */
+/** Remove a selection and its subtree. Also clears any Leader attachment that now
+ *  dangles because its Bodyguard was the removed selection. */
 export function remove(roster: Roster, selectionId: string): Roster {
-  return { ...roster, selections: removeTree(roster.selections, selectionId) };
+  const pruned = removeTree(roster.selections, selectionId);
+  const present = new Set<string>();
+  const collect = (s: RosterSelection): void => { present.add(s.id); s.selections.forEach(collect); };
+  pruned.forEach(collect);
+  const cleaned = pruned.map((s) => {
+    if (s.attachedTo === undefined || present.has(s.attachedTo)) return s;
+    const { attachedTo, ...rest } = s;
+    return rest;
+  });
+  return { ...roster, selections: cleaned };
 }
 
 /**

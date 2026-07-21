@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { IrCatalogue, IrGroup } from "@muster/domain";
+import type { IrCatalogue, IrGroup, Roster } from "@muster/domain";
 import {
   createRoster, availableUnits, addUnit, addOption, setCount, remove, optionsFor,
   selectedGroupMembers, toggleGroupMember, groupControl, optionControl, catalogueEntry,
@@ -1396,5 +1396,20 @@ describe("enhancementTargets", () => {
   it("falls back to the entryId when a top-level selection's entry is absent from the catalogue", () => {
     const r = { ...createRoster(enhHostCat, 2000), selections: [{ id: "sel.ghost", entryId: "e.ghost", count: 1, selections: [] }] };
     expect(enhancementTargets(r, enhHostCat, "e.enh")).toEqual([]);
+  });
+});
+
+describe("remove() clears dangling attachedTo", () => {
+  it("detaches a leader when its bodyguard is removed", () => {
+    const roster = {
+      id: "r", name: "R", gameSystemId: "gs", catalogueId: "c", catalogueRevision: 1, pointsLimit: 2000,
+      selections: [
+        { id: "L", entryId: "e.lead", count: 1, selections: [], attachedTo: "B" },
+        { id: "B", entryId: "e.bss", count: 1, selections: [] },
+      ],
+    } as unknown as Roster;
+    const next = remove(roster, "B");
+    expect(next.selections.map((s) => s.id)).toEqual(["L"]);
+    expect(next.selections[0].attachedTo).toBeUndefined();
   });
 });
