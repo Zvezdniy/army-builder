@@ -10,7 +10,14 @@ describe("baseKeyword", () => {
   it("strips a trailing numeric / N+ parameter", () => {
     expect(baseKeyword("Sustained Hits 2")).toBe("Sustained Hits");
     expect(baseKeyword("Rapid Fire 1")).toBe("Rapid Fire");
+    expect(baseKeyword("Rapid Fire 10")).toBe("Rapid Fire");
     expect(baseKeyword("Melta 2")).toBe("Melta");
+  });
+  it("strips a trailing DICE parameter (D3 / D6 / D6+3)", () => {
+    expect(baseKeyword("Rapid Fire D3")).toBe("Rapid Fire");
+    expect(baseKeyword("Rapid Fire D6")).toBe("Rapid Fire");
+    expect(baseKeyword("Rapid Fire D6+3")).toBe("Rapid Fire");
+    expect(baseKeyword("Sustained Hits D3")).toBe("Sustained Hits");
   });
   it("collapses any Anti-<type> N+ to the generic Anti rule", () => {
     expect(baseKeyword("Anti-Vehicle 3+")).toBe("Anti");
@@ -59,6 +66,11 @@ describe("makeRuleResolver", () => {
     expect(resolve("Anti")).toBe("Anti rule.");
     expect(resolve("anti")).toBe("Anti rule."); // case drift in the source token
     expect(resolve("Unknown")).toBeUndefined();
+  });
+  it("bridges punctuation/spacing drift (Twin Linked token vs Twin-linked rule)", () => {
+    // Real Aeldari/Drukhari/Ynnari data: weapon token "Twin Linked", rule keyed "Twin-linked".
+    const resolve = makeRuleResolver({ "Twin-linked": "Re-roll the Hit roll." });
+    expect(resolve("Twin Linked")).toBe("Re-roll the Hit roll.");
   });
   it("returns undefined for every key when the catalogue has no ruleTexts", () => {
     expect(makeRuleResolver(undefined)("Anti")).toBeUndefined();

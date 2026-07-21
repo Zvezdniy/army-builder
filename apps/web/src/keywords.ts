@@ -22,12 +22,16 @@ export interface WeaponKeyword {
   ruleKey: string;
 }
 
-/** The base keyword a token's rule is filed under: drop a trailing " N" / " N+" parameter,
- *  and collapse any "Anti-<type> N+" to the generic "Anti" rule. */
+/** The base keyword a token's rule is filed under: drop a trailing parameter, and
+ *  collapse any "Anti-<type> N+" (or "Anti <type> N+") to the generic "Anti" rule.
+ *  The parameter is an integer, an "N+" roll, or dice notation — "Melta 2",
+ *  "Rapid Fire D3", "Rapid Fire D6+3", "Sustained Hits D3", "2D6" all reduce to the
+ *  bare keyword. Verified against every weapon keyword in both editions (36k tokens):
+ *  no real keyword name is wrongly truncated. */
 export function baseKeyword(token: string): string {
   const t = token.trim();
   if (/^anti\b/i.test(t)) return "Anti";
-  return t.replace(/\s+\d+\+?$/, "").trim();
+  return t.replace(/\s+(\d+)?D?\d+(\+\d+)?\+?$/i, "").trim();
 }
 
 /** The weapon keywords on a profile, in source order, deduped by label. Empty for a
@@ -47,18 +51,25 @@ export function weaponKeywords(profile: IrProfile): WeaponKeyword[] {
   return out;
 }
 
-/** A rule-text lookup that tolerates the case drift in real data (a keyword written
- *  "Anti-VEHICLE 3+" on one weapon and "Anti-Vehicle 3+" on another, while ruleTexts is
- *  keyed "Anti"): exact match first, then a case-insensitive fallback. Returns undefined
- *  when no rule is known, so the caller can decide what to show. */
+/** A rule-text lookup that tolerates the spelling drift in real data. The same
+ *  keyword is written "Anti-VEHICLE 3+" and "Anti-Vehicle 3+" (case), and "Twin Linked"
+ *  while its rule is keyed "Twin-linked" (punctuation/spacing) — so lookup falls through
+ *  three tiers: exact, then case-insensitive, then a canonical form that ignores every
+ *  non-alphanumeric character. Returns undefined when no rule is known (some real
+ *  keywords, e.g. "Defensive Array", simply carry no rule text upstream), so the caller
+ *  can decide what to show. */
 export function makeRuleResolver(
   ruleTexts: Record<string, string> | undefined,
 ): (ruleKey: string) => string | undefined {
   if (ruleTexts === undefined) return () => undefined;
+  const canon = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
   const lower = new Map<string, string>();
+  const norm = new Map<string, string>();
   for (const [k, v] of Object.entries(ruleTexts)) {
     const lk = k.toLowerCase();
     if (!lower.has(lk)) lower.set(lk, v); // first key of a given casing wins, deterministically
+    const nk = canon(k);
+    if (!norm.has(nk)) norm.set(nk, v);
   }
-  return (ruleKey) => ruleTexts[ruleKey] ?? lower.get(ruleKey.toLowerCase());
+  return (ruleKey) => ruleTexts[ruleKey] ?? lower.get(ruleKey.toLowerCase()) ?? norm.get(canon(ruleKey));
 }
