@@ -40,7 +40,7 @@
         { "slug": "orks", "name": "Orks", "primary": "Orks.cat", "libraries": [] },
         { "slug": "tau-empire", "name": "T'au Empire", "primary": "T'au Empire.cat", "libraries": [] },
         { "slug": "tyranids", "name": "Tyranids", "primary": "Tyranids.cat", "libraries": ["Library - Tyranids.cat"] },
-        { "slug": "genestealer-cults", "name": "Genestealer Cults", "primary": "Genestealer Cults.cat", "libraries": [] },
+        { "slug": "genestealer-cults", "name": "Genestealer Cults", "primary": "Genestealer Cults.cat", "libraries": ["Library - Tyranids.cat"] },
         { "slug": "leagues-of-votann", "name": "Leagues of Votann", "primary": "Leagues of Votann.cat", "libraries": [] }
       ]
     },
@@ -83,7 +83,7 @@
         { "slug": "orks", "name": "Orks", "primary": "Orks.json", "libraries": [] },
         { "slug": "tau-empire", "name": "T'au Empire", "primary": "T'au Empire.json", "libraries": [] },
         { "slug": "tyranids", "name": "Tyranids", "primary": "Tyranids.json", "libraries": ["Library - Tyranids.json"] },
-        { "slug": "genestealer-cults", "name": "Genestealer Cults", "primary": "Genestealer Cults.json", "libraries": [] },
+        { "slug": "genestealer-cults", "name": "Genestealer Cults", "primary": "Genestealer Cults.json", "libraries": ["Library - Tyranids.json"] },
         { "slug": "leagues-of-votann", "name": "Leagues of Votann", "primary": "Leagues of Votann.json", "libraries": [] }
       ]
     }
