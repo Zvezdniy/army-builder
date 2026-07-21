@@ -2,6 +2,7 @@ import { Fragment, useMemo, useState } from "react";
 import type { IrCatalogue, IrCharacteristic, IrProfile, Roster, RosterSelection } from "@muster/domain";
 import { unitLoadout, invulnSave } from "@muster/roster";
 import { effectiveDatasheet, type DatasheetSection } from "@muster/engine-eval";
+import { weaponKeywords, makeRuleResolver, KEYWORDS_CHARACTERISTIC, type WeaponKeyword } from "../keywords";
 
 /** Devices that can hover (desktop) show rule popups on hover; touch shows on tap. */
 const canHover =
@@ -103,15 +104,21 @@ function ModelStatline({
 }
 
 type RuleHandlers = {
-  onShow: (keyword: string, el: HTMLElement) => void;
+  onShow: (kw: WeaponKeyword, el: HTMLElement) => void;
   onHide: () => void;
-  onToggle: (keyword: string, el: HTMLElement) => void;
+  onToggle: (kw: WeaponKeyword, el: HTMLElement) => void;
 };
 
 /** Weapons render as a table; keyword abilities become chips that reveal their
- *  rule on hover (desktop) or tap. The table head reads as the section bar. */
+ *  rule on hover (desktop) or tap. The table head reads as the section bar.
+ *
+ *  The "Keywords" characteristic is pulled OUT of the columns: on real data it is
+ *  where the keywords actually live, and rendering it as a plain column would both
+ *  duplicate the chips below and waste a wide column on a comma list. */
 function WeaponTable({ section, rules }: { section: DatasheetSection; rules: RuleHandlers }) {
-  const columns = section.profiles[0]?.characteristics.map((c) => c.name) ?? [];
+  const isKw = (name: string) => name === KEYWORDS_CHARACTERISTIC;
+  const columns = (section.profiles[0]?.characteristics ?? [])
+    .map((c) => c.name).filter((name) => !isKw(name));
   const span = columns.length + 1;
   return (
     <div className="ds-table-wrap">
@@ -124,22 +131,23 @@ function WeaponTable({ section, rules }: { section: DatasheetSection; rules: Rul
         </thead>
         <tbody>
           {section.profiles.map((p) => {
-            const keywords = p.keywords ?? [];
+            const keywords = weaponKeywords(p);
             return (
               <Fragment key={p.name}>
                 <tr>
                   <td>{p.name}</td>
-                  {p.characteristics.map((c) => <td key={c.name}>{c.value}</td>)}
+                  {p.characteristics.filter((c) => !isKw(c.name))
+                    .map((c) => <td key={c.name}>{c.value}</td>)}
                 </tr>
                 {keywords.length > 0 && (
                   <tr className="ds-kw-row">
                     <td colSpan={span}>
                       {keywords.map((k) => (
-                        <button key={k} className="ds-kw-chip" aria-label={`${k} rule`}
+                        <button key={k.label} className="ds-kw-chip" aria-label={`${k.label} rule`}
                           onMouseEnter={canHover ? (e) => rules.onShow(k, e.currentTarget) : undefined}
                           onMouseLeave={canHover ? rules.onHide : undefined}
                           onClick={(e) => rules.onToggle(k, e.currentTarget)}>
-                          {k}
+                          {k.label}
                         </button>
                       ))}
                     </td>
@@ -233,7 +241,8 @@ export function Datasheet({
   const weapons = all.filter((s) => WEAPON_TYPES.has(s.typeName));
   const specials = all.filter((s) => !WEAPON_TYPES.has(s.typeName) && !RESERVED.has(s.typeName));
   const loadout = unitLoadout(catalogue, selection);
-  const [tip, setTip] = useState<{ kw: string; x: number; y: number } | null>(null);
+  const [tip, setTip] = useState<{ kw: WeaponKeyword; x: number; y: number } | null>(null);
+  const resolveRule = useMemo(() => makeRuleResolver(catalogue.ruleTexts), [catalogue.ruleTexts]);
 
   // The invuln chip (in UnitStatline) already shows a bare "N+"; drop that same
   // ability line here to avoid showing it twice. A qualified invuln (extra prose or
@@ -255,9 +264,9 @@ export function Datasheet({
   const rules: RuleHandlers = {
     onShow: (kw, el) => setTip({ kw, ...at(el) }),
     onHide: () => setTip(null),
-    onToggle: (kw, el) => setTip((prev) => (prev?.kw === kw ? null : { kw, ...at(el) })),
+    onToggle: (kw, el) => setTip((prev) => (prev?.kw.label === kw.label ? null : { kw, ...at(el) })),
   };
-  const ruleText = tip ? (catalogue.ruleTexts?.[tip.kw] ?? "No rule description.") : "";
+  const ruleText = tip ? (resolveRule(tip.kw.ruleKey) ?? "No rule description.") : "";
 
   return (
     <div className="ds" data-testid="datasheet">
@@ -273,7 +282,7 @@ export function Datasheet({
       </div>
       {tip && (
         <div className="rule-tip" role="tooltip" style={{ position: "fixed", left: tip.x, top: tip.y }}>
-          <strong className="rule-tip-name">{tip.kw}</strong>
+          <strong className="rule-tip-name">{tip.kw.label}</strong>
           <span>{ruleText}</span>
         </div>
       )}

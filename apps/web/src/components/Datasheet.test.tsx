@@ -89,6 +89,39 @@ describe("Datasheet", () => {
   });
 });
 
+// Real 10e/11e data: weapon keywords live in a "Keywords" characteristic (a comma
+// list with per-weapon parameters like "Sustained Hits 2"), NOT the profile.keywords
+// array the bundled mini40k uses. Regression: the chips read only the array, so on
+// real data every popup vanished. These pin the real shape.
+const realKwCat = {
+  id: "c", name: "C", gameSystemId: "gs", revision: 1,
+  ruleTexts: { "Sustained Hits": "Each critical hit scores extra hits." },
+  entries: [
+    { id: "e.hero", name: "Hero", costs: [], categories: ["Infantry"], constraints: [], children: [
+        { id: "e.gun", name: "Gun", costs: [], categories: [], constraints: [], children: [], groups: [],
+          profiles: [{ name: "Gun", typeName: "Ranged Weapons",
+            characteristics: [{ name: "A", value: "3" }, { name: "Keywords", value: "Sustained Hits 2" }] }] },
+      ], groups: [],
+      profiles: [{ name: "Hero", typeName: "Unit", characteristics: [{ name: "M", value: '6"' }] }] },
+  ],
+} as unknown as IrCatalogue;
+
+describe("Datasheet weapon keywords from real (characteristic-encoded) data", () => {
+  it("renders a chip from the Keywords characteristic and resolves its base rule", async () => {
+    const hero = sel("e.hero", [sel("e.gun")]);
+    render(<Datasheet catalogue={realKwCat} roster={rosterOf(hero)} selection={hero} />);
+    // The full token is the chip label; the popup resolves the BASE keyword's rule.
+    await userEvent.click(screen.getByRole("button", { name: /Sustained Hits 2 rule/i }));
+    expect(screen.getByText(/critical hit scores extra hits/i)).toBeInTheDocument();
+  });
+
+  it("does not render 'Keywords' as a weapon-table column", () => {
+    const hero = sel("e.hero", [sel("e.gun")]);
+    render(<Datasheet catalogue={realKwCat} roster={rosterOf(hero)} selection={hero} />);
+    expect(screen.queryByRole("columnheader", { name: "Keywords" })).not.toBeInTheDocument();
+  });
+});
+
 // Real BSData encodes the invuln as an "Abilities" profile named "Invulnerable
 // Save", value in Description — not a dedicated typeName. These cover that shape.
 function realInvulnCat(abilityName: string, description: string): IrCatalogue {
