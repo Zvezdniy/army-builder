@@ -1,10 +1,16 @@
-name: Update catalogues
+name: Update catalogues + stratagems
 
-# Refresh the parsed catalogue library from BSData and publish it to GitHub Pages.
+# Refresh the parsed catalogue library from BSData AND the stratagem library from
+# Wahapedia, and publish both to GitHub Pages as one artifact.
 # Update-aware: a lightweight `check` job resolves BSData's latest commit and only
-# runs the (heavy) parse/pack/deploy when that revision — or our config — has
-# changed since the last successful publish. Runs on a schedule and on demand.
-# Publishes ONLY catalogue data (manifest + packed IR), not the web app.
+# runs the (heavy) parse/pack/deploy when that revision — or our config (which the
+# marker key hashes via scripts/**, so a stratagem-config change also triggers a
+# rebuild) — has changed since the last successful publish. Runs on a schedule and
+# on demand. Stratagems piggyback on the catalogue rebuild cadence: BSData changes
+# far more often than Wahapedia's stratagem text, so they stay fresh in practice.
+# GitHub Pages hosts a SINGLE artifact, so both libraries must ship together — a
+# separate stratagem workflow deploying to Pages would overwrite the catalogues.
+# Publishes ONLY data (catalogue + stratagem manifests + files), not the web app.
 
 on:
   schedule:
@@ -129,13 +135,24 @@ jobs:
       - name: Build the catalogue library
         run: pnpm run update-catalogues
 
+      - name: Build the stratagem library
+        # Fetches Wahapedia's stratagem export → apps/web/public/stratagems.json +
+        # stratagems/*.json. continue-on-error so a Wahapedia outage never blocks the
+        # catalogue publish: on failure the artifact simply ships without stratagems
+        # and the app's panel stays hidden (its loader degrades to nothing) until the
+        # next successful run — no partial/broken data, since apps/web/public is a
+        # fresh gitignored dir each run.
+        run: pnpm run update-stratagems
+        continue-on-error: true
+
       - uses: actions/configure-pages@v6
 
-      - name: Upload catalogue library as the Pages artifact
+      - name: Upload the data library as the Pages artifact
         uses: actions/upload-pages-artifact@v5
         with:
-          # apps/web/public is gitignored → in CI it holds only what the pipeline
-          # just wrote: catalogues.json + catalogues/*.ir.json.
+          # apps/web/public is gitignored → in CI it holds only what the pipeline just
+          # wrote: catalogues.json + catalogues/*.ir.json AND (if the stratagem step
+          # succeeded) stratagems.json + stratagems/*.json.
           path: apps/web/public
 
   deploy:
