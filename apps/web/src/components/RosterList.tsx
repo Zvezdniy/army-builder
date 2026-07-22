@@ -1,5 +1,7 @@
+import { useState } from "react";
 import type { IrCatalogue, Roster, RosterSelection } from "@muster/domain";
 import { unitsByRole, modelCount, catalogueEntry } from "@muster/roster";
+import { rosterToText } from "../rosterText";
 
 function unitHasHiddenSelection(
   sel: { id: string; selections: { id: string; selections: unknown[] }[] },
@@ -23,6 +25,17 @@ export function RosterList({
 }) {
   const hidden = hiddenIds ?? new Set<string>();
   const groups = unitsByRole(roster, catalogue);
+  const [copied, setCopied] = useState(false);
+  const copyList = () => {
+    // navigator.clipboard is absent in some contexts (insecure origin, older
+    // browsers) — no-op rather than throw, per the copy-as-text spec.
+    if (!navigator.clipboard) return;
+    const text = rosterToText(roster, catalogue, { pointsLimit: roster.pointsLimit });
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    }).catch(() => {});
+  };
   const attachedByHost = new Map<string, RosterSelection[]>();
   for (const s of roster.selections) {
     if (s.attachedTo !== undefined) {
@@ -51,7 +64,10 @@ export function RosterList({
     <section data-testid="roster-list" className="rl">
       <div className="rl-head">
         <h2 className="rl-title">Roster</h2>
-        <button className="rl-add-open" onClick={onOpenPicker}>+ Add unit</button>
+        <div className="rl-head-actions">
+          <button className="rl-copy" onClick={copyList}>{copied ? "Copied!" : "Copy list"}</button>
+          <button className="rl-add-open" onClick={onOpenPicker}>+ Add unit</button>
+        </div>
       </div>
       {groups.length === 0 && <div className="rl-empty">Roster is empty — add a unit</div>}
       {groups.map((g) => {

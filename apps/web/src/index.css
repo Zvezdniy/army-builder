@@ -148,7 +148,9 @@ section { background: var(--panel); border: 1px solid var(--line); border-radius
 .rl-models { color: var(--muted, #888); font-variant-numeric: tabular-nums; }
 .rl-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
 .rl-title { margin: 0; }
+.rl-head-actions { display: flex; gap: 8px; }
 .rl-add-open { padding: 6px 12px; border: 1px solid var(--accent); border-radius: 8px; background: transparent; color: var(--accent); cursor: pointer; font-weight: 600; }
+.rl-copy { padding: 6px 12px; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: inherit; cursor: pointer; font-weight: 600; }
 .rl-empty { color: var(--muted, #888); padding: 12px 4px; }
 /* Add-unit picker (modal) */
 .picker-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.5); display: flex; align-items: flex-start; justify-content: center; padding: 8vh 16px; z-index: 10; }
