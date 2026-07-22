@@ -15,6 +15,7 @@ import { DetachmentPanel } from "./components/DetachmentPanel";
 import { StratagemPanel } from "./components/StratagemPanel";
 import { LegalityPanel } from "./components/LegalityPanel";
 import { MyArmies } from "./components/MyArmies";
+import { ExportModal } from "./components/ExportModal";
 import { bundledDescriptor, loadRegistry, loadCatalogueFor, normalizeBase, type CatalogueDescriptor } from "./registry/catalogueRegistry";
 import { useRosterLibrary } from "./registry/rosterLibrary";
 import { loadStratagemLibrary, loadStratagemsFor, slugForDescriptor } from "./registry/stratagemRegistry";
@@ -54,6 +55,7 @@ export function App() {
   const [stratagemData, setStratagemData] = useState<{ core: StratagemFile; faction?: StratagemFile } | undefined>(undefined);
   const { library, setLibrary } = useRosterLibrary();
   const [myArmiesOpen, setMyArmiesOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const [restored, setRestored] = useState(false);
   const [registryLoaded, setRegistryLoaded] = useState(false);
   // The pre-session library snapshot (whatever was in localStorage at mount), frozen
@@ -261,7 +263,8 @@ export function App() {
       />
       <div className="builder" data-view={selectedUnitId ? "detail" : "list"}>
         <RosterList roster={roster} catalogue={catalogue} selectedUnitId={selectedUnitId}
-          onSelect={setSelectedUnitId} onOpenPicker={() => setPickerOpen(true)} hiddenIds={hiddenSelIds} />
+          onSelect={setSelectedUnitId} onOpenPicker={() => setPickerOpen(true)}
+          onOpenExport={() => setExportOpen(true)} hiddenIds={hiddenSelIds} />
         <UnitDetail roster={roster} catalogue={catalogue} selectedUnitId={selectedUnitId}
           onBack={() => setSelectedUnitId(undefined)}
           onAddOption={(pid, eid) => setRoster((r) => addOption(r, pid, eid, catalogue))}
@@ -282,6 +285,15 @@ export function App() {
           onSetPoints={(n) => setRoster((r) => setPointsLimit(r, n))}
           onToggleDetachment={(id) => setRoster((r) => toggleDetachment(r, id, catalogue))}
           onClose={() => setWizardOpen(false)} />
+      )}
+      {exportOpen && (
+        // edition/catalogueId identify the roster's faction for the re-importable
+        // .json envelope; a known faction supplies both, an imported ad-hoc IR falls
+        // back to the loaded catalogue's own id (text formats never need them).
+        <ExportModal roster={roster} catalogue={catalogue}
+          edition={registry.find((d) => d.id === activeDescriptorId)?.edition ?? "10e"}
+          catalogueId={registry.find((d) => d.id === activeDescriptorId)?.catalogueId ?? catalogue.id}
+          onClose={() => setExportOpen(false)} />
       )}
       {myArmiesOpen && (
         <MyArmies

@@ -167,6 +167,21 @@ section { background: var(--panel); border: 1px solid var(--line); border-radius
 .picker-item { width: 100%; display: flex; align-items: center; gap: 8px; padding: 8px 10px; margin-bottom: 4px;
   border: 1px solid var(--line); border-radius: 8px; background: transparent; text-align: left; cursor: pointer; }
 .picker-item:hover { border-color: var(--accent); }
+
+/* Export modal — reuses the .picker-overlay / .picker shell, wider for the preview. */
+.picker.exp { max-width: 640px; }
+.exp-formats { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+.exp-format { font-size: 13px; padding: 6px 14px; border-radius: 20px; border: 1px solid var(--line);
+  background: transparent; color: inherit; cursor: pointer; font-weight: 600; }
+.exp-format:hover { border-color: var(--accent); }
+.exp-preview { flex: 1 1 auto; min-height: 0; overflow: auto; margin: 0; padding: 12px 14px; background: var(--bg);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; line-height: 1.5; white-space: pre; color: inherit; }
+.exp-actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 14px; border-top: 1px solid var(--line); }
+.exp-copy, .exp-save { flex: 1 1 auto; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--line);
+  cursor: pointer; font-weight: 600; }
+.exp-copy { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+.exp-copy:disabled { opacity: 0.5; cursor: not-allowed; }
+.exp-save { background: transparent; color: inherit; }
 .picker-item-name { flex: 1; min-width: 0; }
 .picker-pts { color: var(--muted, #888); font-variant-numeric: tabular-nums; }
 .picker-empty { color: var(--muted, #888); padding: 12px; }

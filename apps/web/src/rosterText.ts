@@ -1,5 +1,8 @@
 import type { Roster, RosterSelection, IrCatalogue } from "@muster/domain";
-import { unitsByRole, modelCount, catalogueEntry, unitLoadout, selectedDetachmentNames } from "@muster/roster";
+import {
+  unitsByRole, modelCount, catalogueEntry, unitLoadout, selectedDetachmentNames,
+  selectedDetachment, enhancementsForDetachment, detachmentRoot, battlefieldRole, OTHER_ROLE,
+} from "@muster/roster";
 import { buildState, resolveCosts, totalCost, type EvalNode, type CostFn } from "@muster/engine-eval";
 
 // A top-level roster.selections entry (a unit OR an attached leader — both are
@@ -12,6 +15,18 @@ function subtreePoints(node: EvalNode, costOf: CostFn): number {
   let sum = costOf(node);
   for (const child of node.children) sum += subtreePoints(child, costOf);
   return sum;
+}
+
+// Points come from the same buildState/resolveCosts machinery evaluate() uses, so
+// the header total matches the on-screen points bar and each unit's figure is its
+// own subtree's share of that same resolved cost — the per-unit figures sum back to
+// the header total exactly.
+function computePoints(roster: Roster, catalogue: IrCatalogue): { total: number; pointsBySelectionId: Map<string, number> } {
+  const state = buildState(roster, catalogue);
+  const { costOf } = resolveCosts(state);
+  const total = totalCost(state, costOf);
+  const pointsBySelectionId = new Map(state.roots.map((root) => [root.selectionId, subtreePoints(root, costOf)]));
+  return { total, pointsBySelectionId };
 }
 
 // One line for a unit (or an attached leader), plus its wargear bullets at the
@@ -33,47 +48,128 @@ function unitLines(
   return lines;
 }
 
-/** Render the roster as a readable plain-text block (see apps/web COPY-list spec) —
- *  pure: no DOM, no clipboard. Points come from the same buildState/resolveCosts
- *  machinery evaluate() uses, so the header total matches the on-screen points bar;
- *  each top-level unit's points are its own subtree's share of that same resolved
- *  cost, so the per-unit figures sum back to the header total exactly. */
-export function rosterToText(roster: Roster, catalogue: IrCatalogue, opts: { pointsLimit: number }): string {
-  const state = buildState(roster, catalogue);
-  const { costOf } = resolveCosts(state);
-  const total = totalCost(state, costOf);
-  const pointsBySelectionId = new Map(state.roots.map((root) => [root.selectionId, subtreePoints(root, costOf)]));
-
-  const header = [`${roster.name} (${total} Points)`, catalogue.name];
-  const detachments = selectedDetachmentNames(roster, catalogue);
-  if (detachments.length > 0) header.push(detachments.join(", "));
-
-  // Attached leaders are separate top-level roster.selections (see @muster/roster's
-  // attachLeader) — group them by host id so each host unit can nest its leader(s),
-  // mirroring RosterList's own attachedByHost map.
-  const attachedByHost = new Map<string, RosterSelection[]>();
+// Attached leaders are separate top-level roster.selections (see @muster/roster's
+// attachLeader) — group them by host id so each host unit can nest its leader(s),
+// mirroring RosterList's own attachedByHost map.
+function attachedByHost(roster: Roster): Map<string, RosterSelection[]> {
+  const map = new Map<string, RosterSelection[]>();
   for (const sel of roster.selections) {
     if (sel.attachedTo !== undefined) {
-      const list = attachedByHost.get(sel.attachedTo) ?? [];
+      const list = map.get(sel.attachedTo) ?? [];
       list.push(sel);
-      attachedByHost.set(sel.attachedTo, list);
+      map.set(sel.attachedTo, list);
     }
   }
+  return map;
+}
 
-  const roleBlocks: string[] = [];
+// The role-grouped unit body shared by every text format: uppercase role headers,
+// each unit with its points + wargear bullets, attached leaders nested beneath their
+// host. Returns one string per role block (caller joins blocks with a blank line).
+function roleBlocks(roster: Roster, catalogue: IrCatalogue, pointsBySelectionId: Map<string, number>): string[] {
+  const byHost = attachedByHost(roster);
+  const blocks: string[] = [];
   for (const group of unitsByRole(roster, catalogue)) {
     const units = group.units.filter((u) => u.attachedTo === undefined);
     if (units.length === 0) continue; // match RosterList: no non-attached units → role omitted
     const lines = [group.role.toUpperCase(), ""];
     for (const unit of units) {
       lines.push(...unitLines(catalogue, unit, pointsBySelectionId.get(unit.id) ?? 0, "", "  • ", true));
-      for (const leader of attachedByHost.get(unit.id) ?? []) {
+      for (const leader of byHost.get(unit.id) ?? []) {
         lines.push(...unitLines(catalogue, leader, pointsBySelectionId.get(leader.id) ?? 0, "  ↳ ", "    • ", false));
       }
     }
-    roleBlocks.push(lines.join("\n"));
+    blocks.push(lines.join("\n"));
   }
+  return blocks;
+}
 
-  const footer = [`Total: ${total}/${opts.pointsLimit} Points`, "Exported from Muster"];
-  return [header.join("\n"), ...roleBlocks, footer.join("\n")].join("\n\n");
+// Every top-level unit (units + attached leaders), excluding the detachment's own
+// root selection — the datasheets that make up the army.
+function armyUnits(roster: Roster, catalogue: IrCatalogue): RosterSelection[] {
+  const detRootId = detachmentRoot(catalogue)?.id;
+  return roster.selections.filter((s) => s.entryId !== detRootId);
+}
+
+// The Warlord line the WTC header needs. Muster does not yet model an explicit
+// Warlord pick, so derive a best-effort one: the first Epic Hero, else the first
+// Character/HQ, in roster order. The exported text is editable, so a rare wrong
+// guess is trivially corrected; undefined means the roster has no character at all.
+function warlordName(roster: Roster, catalogue: IrCatalogue): string | undefined {
+  const roleOf = (sel: RosterSelection): string => {
+    const entry = catalogueEntry(catalogue, sel.entryId);
+    return entry ? battlefieldRole(entry, catalogue) : OTHER_ROLE;
+  };
+  const units = armyUnits(roster, catalogue);
+  for (const role of ["Epic Hero", "Character", "HQ"]) {
+    const hit = units.find((s) => roleOf(s) === role);
+    if (hit) return catalogueEntry(catalogue, hit.entryId)?.name;
+  }
+  return undefined;
+}
+
+// One "+ ENHANCEMENT: <name> (on <host>)" line per enhancement actually taken in the
+// roster: a selection whose entry is one of the current detachment's enhancements,
+// attributed to the top-level unit it sits under.
+function enhancementLines(roster: Roster, catalogue: IrCatalogue): string[] {
+  const detId = selectedDetachment(roster, catalogue);
+  if (detId === undefined) return [];
+  const enhIds = new Set(enhancementsForDetachment(catalogue, detId).map((e) => e.id));
+  if (enhIds.size === 0) return [];
+  const lines: string[] = [];
+  for (const unit of armyUnits(roster, catalogue)) {
+    const host = catalogueEntry(catalogue, unit.entryId)?.name ?? unit.entryId;
+    const walk = (sel: RosterSelection): void => {
+      for (const child of sel.selections) {
+        if (enhIds.has(child.entryId)) {
+          const nm = catalogueEntry(catalogue, child.entryId)?.name ?? child.entryId;
+          lines.push(`+ ENHANCEMENT: ${nm} (on ${host})`);
+        }
+        walk(child);
+      }
+    };
+    walk(unit);
+  }
+  return lines;
+}
+
+function footer(total: number, pointsLimit: number): string {
+  return [`Total: ${total}/${pointsLimit} Points`, "Exported from Muster"].join("\n");
+}
+
+/** Render the roster as a readable plain-text block (units by role, points, wargear
+ *  bullets, nested leaders) — pure: no DOM, no clipboard. Points come from the same
+ *  buildState/resolveCosts machinery evaluate() uses, so the header total matches the
+ *  on-screen points bar and per-unit figures sum back to it exactly. */
+export function rosterToText(roster: Roster, catalogue: IrCatalogue, opts: { pointsLimit: number }): string {
+  const { total, pointsBySelectionId } = computePoints(roster, catalogue);
+  const header = [`${roster.name} (${total} Points)`, catalogue.name];
+  const detachments = selectedDetachmentNames(roster, catalogue);
+  if (detachments.length > 0) header.push(detachments.join(", "));
+  return [header.join("\n"), ...roleBlocks(roster, catalogue, pointsBySelectionId), footer(total, opts.pointsLimit)].join("\n\n");
+}
+
+/** Render the roster in a tournament (WTC-style) layout: a "+ …" summary header
+ *  block — faction, detachment, total points, warlord, enhancements, unit count —
+ *  above the same role-grouped body as {@link rosterToText}. */
+export function rosterToTournamentText(roster: Roster, catalogue: IrCatalogue, opts: { pointsLimit: number }): string {
+  const { total, pointsBySelectionId } = computePoints(roster, catalogue);
+  const detachments = selectedDetachmentNames(roster, catalogue);
+  const bar = "+".repeat(50);
+  const summary = [
+    bar,
+    `+ FACTION: ${catalogue.name}`,
+    ...(detachments.length > 0 ? [`+ DETACHMENT: ${detachments.join(", ")}`] : []),
+    `+ TOTAL ARMY POINTS: ${total}pts`,
+    `+ WARLORD: ${warlordName(roster, catalogue) ?? "—"}`,
+    ...enhancementLines(roster, catalogue),
+    `+ NUMBER OF UNITS: ${armyUnits(roster, catalogue).length}`,
+    bar,
+  ].join("\n");
+  return [
+    `${roster.name} (${total} Points)`,
+    summary,
+    ...roleBlocks(roster, catalogue, pointsBySelectionId),
+    footer(total, opts.pointsLimit),
+  ].join("\n\n");
 }

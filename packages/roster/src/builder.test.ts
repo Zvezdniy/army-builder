@@ -395,6 +395,20 @@ describe("unitLoadout", () => {
     expect(unitLoadout(loadoutCat, sel).wargear).toEqual(["Rifle", "Blade"]);
   });
 
+  it("collapses a wrapper even when the wargear sits under a nested model body", () => {
+    // The wrapper's child is a model body (not itself wargear) that carries the
+    // weapon — so wrapsWargear must recurse THROUGH the body to find the wargear
+    // beneath it, dropping the wrapper's own label.
+    const sel = { id: "s0", entryId: "u", count: 1, selections: [
+      { id: "s1", entryId: "g.combo", count: 1, selections: [
+        { id: "s2", entryId: "m", count: 1, selections: [
+          { id: "s3", entryId: "w.rifle", count: 1, selections: [] },
+        ] },
+      ] },
+    ] };
+    expect(unitLoadout(loadoutCat, sel).wargear).toEqual(["Rifle"]);
+  });
+
   it("dedupes repeated wargear, skips unknown children, and falls back to entryId for an unknown root", () => {
     const dup = { id: "s0", entryId: "u", count: 1, selections: [
       { id: "s1", entryId: "w.sword", count: 1, selections: [] },

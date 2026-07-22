@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import type { IrCatalogue, Roster } from "@muster/domain";
 import { createRoster, toggleDetachment } from "@muster/roster";
 import { buildState, resolveCosts, totalCost } from "@muster/engine-eval";
-import { rosterToText } from "./rosterText";
+import { rosterToText, rosterToTournamentText } from "./rosterText";
 
 const unitProfile = [{ name: "Body", typeName: "Unit", characteristics: [] }];
 
@@ -127,5 +127,91 @@ describe("rosterToText", () => {
     const empty = createRoster(catalogue, 1500, "Empty");
     const out = rosterToText(empty, catalogue, { pointsLimit: 1500 });
     expect(out).toBe(["Empty (0 Points)", "Space Wolves", "", "Total: 0/1500 Points", "Exported from Muster"].join("\n"));
+  });
+});
+
+describe("rosterToTournamentText", () => {
+  const roster = buildRoster();
+  const text = rosterToTournamentText(roster, catalogue, { pointsLimit: 2000 });
+  const lines = text.split("\n");
+
+  it("opens with the roster name + total, then a WTC summary block", () => {
+    expect(lines[0]).toBe("Test Army (265 Points)");
+    expect(lines[1]).toBe(""); // blank line between the name header and the summary block
+    expect(lines[2]).toBe("+".repeat(50));
+  });
+
+  it("summary lists faction, detachment, total points, warlord and unit count", () => {
+    expect(text).toContain("+ FACTION: Space Wolves");
+    expect(text).toContain("+ DETACHMENT: Gladius Task Force");
+    expect(text).toContain("+ TOTAL ARMY POINTS: 265pts");
+    // No explicit Warlord in the model → first Character (the attached Wolf Lord) is derived.
+    expect(text).toContain("+ WARLORD: Wolf Lord");
+    // 3 datasheets: the squad, its attached Wolf Lord, and the Chaplain (detachment root excluded).
+    expect(text).toContain("+ NUMBER OF UNITS: 3");
+  });
+
+  it("has no ENHANCEMENT line when the roster takes none", () => {
+    expect(text).not.toContain("+ ENHANCEMENT:");
+  });
+
+  it("carries the same role-grouped body as the detailed format", () => {
+    expect(text).toContain("CHARACTER");
+    expect(text).toContain("4x Grey Hunters (90 Points)");
+    expect(text).toContain("  ↳ Wolf Lord (100 Points)");
+    expect(text.trim().endsWith("Exported from Muster")).toBe(true);
+    expect(text).toContain("Total: 265/2000 Points");
+  });
+
+  it("falls back to a — Warlord line when the roster has no character", () => {
+    // Battleline squad only — no Epic Hero / Character / HQ to derive a warlord from.
+    let r = createRoster(catalogue, 2000, "Grunts");
+    r = toggleDetachment(r, "e.gladius", catalogue);
+    r = { ...r, selections: [...r.selections, { id: "sq", entryId: "e.squad", count: 1, selections: [] }] };
+    expect(rosterToTournamentText(r, catalogue, { pointsLimit: 2000 })).toContain("+ WARLORD: —");
+  });
+});
+
+describe("rosterToTournamentText enhancements", () => {
+  // A `set hidden` gate keyed on the chosen detachment is how the parser marks a
+  // per-detachment enhancement; enhancementsForDetachment reads exactly that gate.
+  const selGate = (detId: string) => ({
+    set: true,
+    conditionGroups: [{
+      type: "and" as const,
+      conditions: [{
+        id: `cond.${detId}`, comparator: "lessThan" as const, value: 1,
+        field: "selections" as const, scope: "roster", targetType: "entry" as const,
+        targetId: detId, includeChildSelections: true,
+      }],
+    }],
+  });
+  const enhCat = {
+    id: "c", name: "Space Wolves", gameSystemId: "gs", revision: 1, forceConstraints: [],
+    categoryNames: { "cat.character": "Character" },
+    entries: [
+      {
+        id: "e.det", name: "Detachment", type: "upgrade", costs: [], categories: [], constraints: [],
+        children: [{ id: "e.gladius", name: "Gladius", type: "upgrade", costs: [], categories: [], constraints: [], children: [] }],
+        groups: [{ id: "g.det", name: "Detachment", memberEntryIds: ["e.gladius"], constraints: [{ id: "gc", type: "max", value: 1, scope: "self" }] }],
+      },
+      {
+        id: "e.lord", name: "Wolf Lord", type: "unit", costs: [{ name: "points", value: 100 }],
+        categories: ["cat.character"], constraints: [], profiles: [{ name: "Body", typeName: "Unit", characteristics: [] }],
+        children: [{ id: "e.relic", name: "Wolf Tooth", type: "upgrade", costs: [{ name: "points", value: 15 }], categories: [], constraints: [], children: [], visibilityModifiers: [selGate("e.gladius")] }],
+      },
+    ],
+  } as unknown as IrCatalogue;
+
+  it("emits one ENHANCEMENT line per enhancement taken, attributed to its host unit", () => {
+    let r = createRoster(enhCat, 2000, "SW");
+    r = toggleDetachment(r, "e.gladius", enhCat);
+    r = { ...r, selections: [...r.selections, {
+      id: "lord", entryId: "e.lord", count: 1,
+      selections: [{ id: "relic", entryId: "e.relic", count: 1, selections: [] }],
+    }] };
+    const out = rosterToTournamentText(r, enhCat, { pointsLimit: 2000 });
+    expect(out).toContain("+ ENHANCEMENT: Wolf Tooth (on Wolf Lord)");
+    expect(out).toContain("+ WARLORD: Wolf Lord");
   });
 });

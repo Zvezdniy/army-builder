@@ -1,7 +1,5 @@
-import { useState } from "react";
 import type { IrCatalogue, Roster, RosterSelection } from "@muster/domain";
 import { unitsByRole, modelCount, catalogueEntry } from "@muster/roster";
-import { rosterToText } from "../rosterText";
 
 function unitHasHiddenSelection(
   sel: { id: string; selections: { id: string; selections: unknown[] }[] },
@@ -14,28 +12,18 @@ function unitHasHiddenSelection(
 /** The roster window: added units grouped by role, plus the add-unit trigger.
  *  An attached Leader is drawn under its Bodyguard (and omitted from its own bucket). */
 export function RosterList({
-  roster, catalogue, selectedUnitId, onSelect, onOpenPicker, hiddenIds,
+  roster, catalogue, selectedUnitId, onSelect, onOpenPicker, onOpenExport, hiddenIds,
 }: {
   roster: Roster;
   catalogue: IrCatalogue;
   selectedUnitId: string | undefined;
   onSelect: (id: string) => void;
   onOpenPicker: () => void;
+  onOpenExport?: () => void;
   hiddenIds?: Set<string>;
 }) {
   const hidden = hiddenIds ?? new Set<string>();
   const groups = unitsByRole(roster, catalogue);
-  const [copied, setCopied] = useState(false);
-  const copyList = () => {
-    // navigator.clipboard is absent in some contexts (insecure origin, older
-    // browsers) — no-op rather than throw, per the copy-as-text spec.
-    if (!navigator.clipboard) return;
-    const text = rosterToText(roster, catalogue, { pointsLimit: roster.pointsLimit });
-    navigator.clipboard.writeText(text).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    }).catch(() => {});
-  };
   const attachedByHost = new Map<string, RosterSelection[]>();
   for (const s of roster.selections) {
     if (s.attachedTo !== undefined) {
@@ -65,7 +53,7 @@ export function RosterList({
       <div className="rl-head">
         <h2 className="rl-title">Roster</h2>
         <div className="rl-head-actions">
-          <button className="rl-copy" onClick={copyList}>{copied ? "Copied!" : "Copy list"}</button>
+          {onOpenExport && <button className="rl-copy" onClick={onOpenExport}>Export</button>}
           <button className="rl-add-open" onClick={onOpenPicker}>+ Add unit</button>
         </div>
       </div>
