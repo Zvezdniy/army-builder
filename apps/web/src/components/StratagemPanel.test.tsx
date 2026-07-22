@@ -83,4 +83,26 @@ describe("StratagemPanel", () => {
     fireEvent.click(screen.getByText("Core"));
     expect(screen.queryByText(/Wahapedia/)).toBeNull();
   });
+
+  it("tags each card with its colour-coded category (label + slug class)", () => {
+    const varied = {
+      core: {
+        source: "Wahapedia", kind: "core" as const, stratagems: [
+          { ...strat("c1", "GRENADE", ""), category: "" },              // Core (no category)
+          { ...strat("c2", "OVERWATCH", ""), category: "Strategic Ploy" },
+        ],
+      },
+    };
+    render(<StratagemPanel data={varied} roster={createRoster(cat, 2000)} catalogue={cat} />);
+    openPanel();
+    fireEvent.click(screen.getByText("Core"));
+    // The empty category renders the "Core" tag on a .strat-cat-core card…
+    const coreCard = screen.getByText("GRENADE").closest(".strat-card");
+    expect(coreCard).toHaveClass("strat-cat-core");
+    expect(coreCard?.querySelector(".strat-cat-tag")?.textContent).toBe("Core");
+    // …and "Strategic Ploy" maps to the ploy slug + its label.
+    const ployCard = screen.getByText("OVERWATCH").closest(".strat-card");
+    expect(ployCard).toHaveClass("strat-cat-ploy");
+    expect(ployCard?.querySelector(".strat-cat-tag")?.textContent).toBe("Strategic Ploy");
+  });
 });

@@ -4,16 +4,31 @@ import { selectStratagems } from "@muster/domain";
 import { selectedDetachmentNames } from "@muster/roster";
 import { renderStratagemHtml } from "./stratagemHtml";
 
-/** One stratagem, collapsed to its name + CP; the meta line and effect text reveal
- *  on click/tap (each card toggles independently), so an expanded panel stays compact. */
+// Map a stratagem's category to a colour slug + short label. The real data uses the
+// five 40k types ("Strategic Ploy", "Battle Tactic", "Epic Deed", "Wargear") plus an
+// empty category for Core stratagems; the regexes are tolerant of trailing words.
+function categoryMeta(category: string): { slug: string; label: string } {
+  const c = category.trim();
+  if (/battle\s*tactic/i.test(c)) return { slug: "battle", label: "Battle Tactic" };
+  if (/strategic\s*ploy/i.test(c)) return { slug: "ploy", label: "Strategic Ploy" };
+  if (/epic\s*deed/i.test(c)) return { slug: "epic", label: "Epic Deed" };
+  if (/wargear/i.test(c)) return { slug: "wargear", label: "Wargear" };
+  return { slug: "core", label: "Core" };
+}
+
+/** One stratagem, collapsed to its name + colour-coded category tag + CP; the meta
+ *  line and effect text reveal on click/tap. The card carries a category-coloured left
+ *  accent (War Organ-style), so types read at a glance without expanding. */
 function StratagemCard({ s }: { s: Stratagem }) {
   const [open, setOpen] = useState(false);
-  const meta = [s.category, s.phase, s.turn].filter(Boolean).join(" · ");
+  const cat = categoryMeta(s.category);
+  const meta = [s.phase, s.turn].filter(Boolean).join(" · "); // category is now the tag, not meta
   return (
-    <div className="strat-card">
+    <div className={`strat-card strat-cat-${cat.slug}`}>
       <button className="strat-head" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
         <span className="strat-caret" aria-hidden="true">{open ? "▾" : "▸"}</span>
         <span className="strat-name">{s.name}</span>
+        <span className="strat-cat-tag">{cat.label}</span>
         <span className="strat-cp">{s.cpCost}CP</span>
       </button>
       {open && (
