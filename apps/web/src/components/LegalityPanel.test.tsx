@@ -18,6 +18,11 @@ function baseResult(over: Partial<ValidationResult> = {}): ValidationResult {
 
 const noop = () => {};
 
+/** The panel is collapsed by default — reveal the checklist + issue detail. */
+function expand() {
+  fireEvent.click(screen.getByTestId("legality-toggle"));
+}
+
 describe("LegalityPanel", () => {
   it("shows a LEGAL verdict when valid", () => {
     render(<LegalityPanel result={baseResult()} unitNameOf={() => undefined} onEditPoints={noop} onFocusUnit={noop} />);
@@ -51,6 +56,33 @@ describe("LegalityPanel", () => {
     expect(screen.getByTestId("points")).toHaveTextContent(/over by 100/);
   });
 
+  it("hides the checklist until the summary is expanded", () => {
+    const result = baseResult({
+      valid: false,
+      checks: [
+        { id: "points", kind: "points", label: "Points", actual: 90, limit: 2000, satisfied: true },
+        { id: "f1", kind: "force", label: 'At least 1 category "Battleline"', actual: 0, limit: 1, satisfied: false, constraintType: "min" },
+      ],
+    });
+    render(<LegalityPanel result={result} unitNameOf={() => undefined} onEditPoints={noop} onFocusUnit={noop} />);
+    expect(screen.queryByTestId("army-checks")).toBeNull();
+    expand();
+    expect(screen.getByTestId("army-checks")).toHaveTextContent("Battleline");
+  });
+
+  it("summarises the number of problems in the collapsed line", () => {
+    const result = baseResult({
+      valid: false,
+      issues: [
+        { severity: "error", code: "points.over", message: "Over points limit" },
+        { severity: "error", code: "constraint.min", message: "Not enough", selectionId: "s1", entryId: "e1" },
+      ],
+    });
+    render(<LegalityPanel result={result} unitNameOf={() => "Captain"} onEditPoints={noop} onFocusUnit={noop} />);
+    // Visible without expanding: two issues → "2 problems".
+    expect(screen.getByTestId("legality-toggle")).toHaveTextContent(/2 problems/);
+  });
+
   it("renders a check row per check with satisfied semantics", () => {
     const result = baseResult({
       checks: [
@@ -59,10 +91,27 @@ describe("LegalityPanel", () => {
       ],
     });
     render(<LegalityPanel result={result} unitNameOf={() => undefined} onEditPoints={noop} onFocusUnit={noop} />);
+    expand();
     const checks = screen.getByTestId("army-checks");
     expect(checks).toHaveTextContent("Battleline");
     expect(checks.querySelectorAll("[data-satisfied='false']").length).toBe(1);
     expect(checks.querySelectorAll("[data-satisfied='true']").length).toBe(1);
+  });
+
+  it("collapses duplicate identical checks into a single row", () => {
+    const dup = { kind: "force" as const, label: 'At least 1 category "Character"', actual: 2, limit: 1, satisfied: true, constraintType: "min" as const };
+    const result = baseResult({
+      checks: [
+        { id: "points", kind: "points", label: "Points", actual: 90, limit: 2000, satisfied: true },
+        { id: "c1", ...dup },
+        { id: "c2", ...dup }, // same display as c1 → deduped away
+      ],
+    });
+    render(<LegalityPanel result={result} unitNameOf={() => undefined} onEditPoints={noop} onFocusUnit={noop} />);
+    expand();
+    const rows = screen.getByTestId("army-checks").querySelectorAll("li");
+    // Points + one Character row (the duplicate is dropped) = 2 rows.
+    expect(rows.length).toBe(2);
   });
 
   it("renders a house-ruled failing check distinctly (not a hard failure)", () => {
@@ -73,6 +122,7 @@ describe("LegalityPanel", () => {
       ],
     });
     render(<LegalityPanel result={result} unitNameOf={() => undefined} onEditPoints={noop} onFocusUnit={noop} />);
+    expand();
     const checks = screen.getByTestId("army-checks");
     const ruled = checks.querySelector("[data-state='ruled']");
     expect(ruled).not.toBeNull();
@@ -83,6 +133,7 @@ describe("LegalityPanel", () => {
 
   it("does not render the checklist when there are no checks", () => {
     render(<LegalityPanel result={baseResult({ checks: [] })} unitNameOf={() => undefined} onEditPoints={noop} onFocusUnit={noop} />);
+    expand();
     expect(screen.queryByTestId("army-checks")).toBeNull();
   });
 
@@ -93,6 +144,7 @@ describe("LegalityPanel", () => {
       issues: [{ severity: "error", code: "constraint.min", message: "Not enough", selectionId: "s1", entryId: "e1" }],
     });
     render(<LegalityPanel result={result} unitNameOf={() => "Captain"} onEditPoints={noop} onFocusUnit={onFocusUnit} />);
+    expand();
     fireEvent.click(screen.getByText(/Captain/));
     expect(onFocusUnit).toHaveBeenCalledWith("s1");
   });
@@ -103,6 +155,7 @@ describe("LegalityPanel", () => {
       issues: [{ severity: "error", code: "points.over", message: "Over points limit" }],
     });
     render(<LegalityPanel result={result} unitNameOf={() => undefined} onEditPoints={noop} onFocusUnit={noop} />);
+    expand();
     expect(screen.getByText(/Over points limit/)).toBeTruthy();
   });
 
