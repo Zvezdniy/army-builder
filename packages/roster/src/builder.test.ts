@@ -365,6 +365,11 @@ describe("unitLoadout", () => {
         { id: "w.sword", name: "Sword", costs: [], categories: [], constraints: [], children: [] },
         { id: "m", name: "Trooper", costs: [], categories: [], constraints: [], children: [],
           profiles: [{ name: "Trooper", typeName: "Unit", characteristics: [] }] },
+        // A loadout-choice group wrapping the two weapons it grants.
+        { id: "g.combo", name: "Rifle and Blade", costs: [], categories: [], constraints: [], children: [
+          { id: "w.rifle", name: "Rifle", costs: [], categories: [], constraints: [], children: [] },
+          { id: "w.blade", name: "Blade", costs: [], categories: [], constraints: [], children: [] },
+        ] },
       ],
     }],
   };
@@ -377,6 +382,17 @@ describe("unitLoadout", () => {
     const lo = unitLoadout(loadoutCat, sel);
     expect(lo.unit).toBe("Squad");
     expect(lo.wargear).toEqual(["Sword"]); // Trooper (Unit body) excluded
+  });
+
+  it("collapses a loadout-choice group to its concrete items, dropping the group's own label", () => {
+    const sel = { id: "s0", entryId: "u", count: 1, selections: [
+      { id: "s1", entryId: "g.combo", count: 1, selections: [
+        { id: "s2", entryId: "w.rifle", count: 1, selections: [] },
+        { id: "s3", entryId: "w.blade", count: 1, selections: [] },
+      ] },
+    ] };
+    // "Rifle and Blade" (the wrapper) is omitted; only the two weapons it grants show.
+    expect(unitLoadout(loadoutCat, sel).wargear).toEqual(["Rifle", "Blade"]);
   });
 
   it("dedupes repeated wargear, skips unknown children, and falls back to entryId for an unknown root", () => {

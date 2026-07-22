@@ -695,10 +695,21 @@ export function unitLoadout(
   const root = catalogueEntry(catalogue, selection.entryId);
   const wargear: string[] = [];
   const seen = new Set<string>();
+  // A selection resolves to a real wargear item (non-body entry). Model bodies
+  // (a Unit statline) are the models, not their equipment.
+  const isWargear = (sel: RosterSelection): boolean => {
+    const entry = catalogueEntry(catalogue, sel.entryId);
+    return !!entry && !(entry.profiles ?? []).some((p) => p.typeName === "Unit");
+  };
+  // A choice/loadout group (e.g. "Bolt pistol and Chainsword") carries wargear
+  // items as its children; listing the group's own label alongside those items is
+  // redundant. Show only the concrete leaves — a node that has any wargear item
+  // beneath it is a wrapper, so it contributes no line of its own.
+  const wrapsWargear = (sel: RosterSelection): boolean =>
+    sel.selections.some((c) => isWargear(c) || wrapsWargear(c));
   const visit = (sel: RosterSelection, depth: number): void => {
     const entry = catalogueEntry(catalogue, sel.entryId);
-    const isBody = (entry?.profiles ?? []).some((p) => p.typeName === "Unit");
-    if (depth > 0 && entry && !isBody && !seen.has(entry.name)) {
+    if (depth > 0 && isWargear(sel) && !wrapsWargear(sel) && entry && !seen.has(entry.name)) {
       seen.add(entry.name);
       wargear.push(entry.name);
     }
