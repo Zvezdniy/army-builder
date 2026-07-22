@@ -163,6 +163,16 @@ describe("rosterToTournamentText", () => {
     expect(text).toContain("Total: 265/2000 Points");
   });
 
+  it("uses the explicit warlordId over the heuristic and tags the unit line in the body", () => {
+    // roster's first Character is the attached Wolf Lord; pin the warlord to the
+    // Chaplain instead to prove the explicit pick wins and the [Warlord] tag follows it.
+    const pinned = { ...roster, warlordId: "chaplain" };
+    const out = rosterToTournamentText(pinned, catalogue, { pointsLimit: 2000 });
+    expect(out).toContain("+ WARLORD: Chaplain");
+    expect(out).not.toContain("+ WARLORD: Wolf Lord");
+    expect(out).toContain("Chaplain (75 Points) [Warlord]");
+  });
+
   it("falls back to a — Warlord line when the roster has no character", () => {
     // Battleline squad only — no Epic Hero / Character / HQ to derive a warlord from.
     let r = createRoster(catalogue, 2000, "Grunts");

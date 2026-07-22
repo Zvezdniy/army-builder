@@ -141,11 +141,20 @@ section { background: var(--panel); border: 1px solid var(--line); border-radius
 .builder { display: grid; grid-template-columns: minmax(220px, 320px) 1fr; gap: 16px; margin-top: 8px; }
 .rl-group { margin-bottom: 10px; }
 .rl-role { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted, #888); margin: 8px 0 4px; }
-.rl-unit { width: 100%; display: flex; justify-content: space-between; gap: 8px; text-align: left;
+.rl-unit { width: 100%; display: flex; flex-direction: column; gap: 6px; text-align: left; color: inherit;
   padding: 8px 10px; margin-bottom: 4px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; background: transparent; }
 .rl-unit.selected { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
-.rl-warn { color: var(--warn); margin-left: 6px; }
-.rl-models { color: var(--muted, #888); font-variant-numeric: tabular-nums; }
+.rl-unit-top { display: flex; align-items: center; gap: 6px; }
+.rl-unit-name { font-weight: 600; }
+.rl-warn { color: var(--warn); }
+/* War Organ-style chip row: points, model count, Warlord tag, enhancements, paid wargear. */
+.rl-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.rl-chip { font-size: 11px; padding: 2px 7px; border-radius: 10px; white-space: nowrap; font-variant-numeric: tabular-nums;
+  background: color-mix(in srgb, var(--line) 45%, transparent); color: var(--muted); }
+.rl-chip-pts { background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--ink); font-weight: 600; }
+.rl-chip-warlord { background: color-mix(in srgb, var(--warn) 32%, transparent); color: var(--ink); font-weight: 700; letter-spacing: 0.02em; }
+.rl-chip-enh { background: color-mix(in srgb, #9b59b6 34%, transparent); color: var(--ink); }
+.rl-chip-wargear { background: color-mix(in srgb, var(--ink) 10%, transparent); color: var(--muted); }
 .rl-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
 .rl-title { margin: 0; }
 .rl-head-actions { display: flex; gap: 8px; }
@@ -205,6 +214,10 @@ section { background: var(--panel); border: 1px solid var(--line); border-radius
 .ud-kw { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px; }
 .ud-kw .kw { font-size: 11px; padding: 2px 8px; border-radius: 20px; border: 1px solid var(--line); color: var(--muted, #888); }
 .ud-back { display: none; margin-bottom: 8px; padding: 4px 10px; border: 1px solid var(--line); border-radius: 8px; background: transparent; cursor: pointer; }
+.ud-warlord { display: inline-block; margin: 0 8px 8px 0; padding: 5px 12px; border: 1px solid var(--line); border-radius: 20px;
+  background: transparent; color: inherit; cursor: pointer; font-weight: 600; }
+.ud-warlord:hover { border-color: var(--warn); }
+.ud-warlord.active { background: color-mix(in srgb, var(--warn) 30%, transparent); border-color: var(--warn); color: var(--ink); }
 @media (max-width: 640px) {
   .builder { grid-template-columns: 1fr; }
   .builder[data-view="detail"] .rl { display: none; }
@@ -446,7 +459,14 @@ section { background: var(--panel); border: 1px solid var(--line); border-radius
 
 /* Stratagem panel cards (reuses .det-panel*, .ds-section-head, .preview-body/empty).
    Each card is collapsed to its name + CP; the effect text reveals on click/tap. */
-.strat-card { border-bottom: 1px dashed var(--line); }
+/* Category colour-coding: a left accent + a coloured type tag, so a stratagem's type
+   reads at a glance (War Organ-style). --cat drives both; slugs match categoryMeta(). */
+.strat-cat-battle { --cat: #3b82f6; }
+.strat-cat-ploy { --cat: #14b8a6; }
+.strat-cat-epic { --cat: #f0883e; }
+.strat-cat-wargear { --cat: #a855f7; }
+.strat-cat-core { --cat: var(--muted); }
+.strat-card { border-bottom: 1px dashed var(--line); border-left: 3px solid var(--cat, var(--line)); }
 .strat-card:last-child { border-bottom: none; }
 .strat-head { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 8px;
   background: none; border: none; border-radius: 6px; font: inherit; color: inherit; cursor: pointer; text-align: left; }
@@ -454,6 +474,9 @@ section { background: var(--panel); border: 1px solid var(--line); border-radius
 .strat-head:hover { background: var(--line); }
 .strat-caret { color: var(--muted); width: 12px; flex: none; font-size: 11px; }
 .strat-name { font-weight: 700; font-size: 12.5px; flex: 1; }
+.strat-cat-tag { flex: none; font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.03em; font-weight: 700;
+  padding: 1px 6px; border-radius: 8px; white-space: nowrap; color: var(--cat);
+  background: color-mix(in srgb, var(--cat) 18%, transparent); }
 .strat-cp { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 11.5px; white-space: nowrap; }
 .strat-detail { padding: 0 8px 7px 28px; }
 .strat-meta { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }

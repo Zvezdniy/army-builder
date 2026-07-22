@@ -15,6 +15,18 @@ describe("UnitDetail statline wiring", () => {
     expect(screen.getByText("Invulnerable Save")).toBeInTheDocument();
   });
 
+  it("marks a character as Warlord and shows the tag on its roster card", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(screen.getByRole("button", { name: /Add unit/i }));
+    await user.click(screen.getByRole("button", { name: /add Captain/i }));
+    // Captain is an HQ character → the Make Warlord control is offered.
+    await user.click(screen.getByRole("button", { name: "Make Warlord" }));
+    expect(screen.getByRole("button", { name: "★ Warlord" })).toBeInTheDocument();
+    // The tag appears as a chip on the unit's card in the roster list.
+    expect(screen.getByText("Warlord", { selector: ".rl-chip-warlord" })).toBeInTheDocument();
+  });
+
   it("does not crash for a unit without any profiles", async () => {
     const user = userEvent.setup();
     render(<App />);

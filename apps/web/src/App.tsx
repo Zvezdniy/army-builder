@@ -3,7 +3,7 @@ import type { IrCatalogue, Roster } from "@muster/domain";
 import { loadCatalogue } from "@muster/domain";
 import { createRoster, addUnit, addOption, toggleGroupMember, setGroupMemberCount, setCount, remove,
   toggleDetachment, setPointsLimit, availableDetachments, selectedDetachment,
-  detachmentSelectionIds, attachLeader, detachLeader,
+  detachmentSelectionIds, attachLeader, detachLeader, toggleWarlord,
   upsertActive, updateEntry, activeEntry, setActive, renameEntry, duplicateEntry, deleteEntry, toEnvelope, fromEnvelope } from "@muster/roster";
 import { evaluate, hiddenEntryIds, hiddenSelectionIds } from "@muster/engine-eval";
 import { RosterList } from "./components/RosterList";
@@ -273,7 +273,8 @@ export function App() {
           onRemove={handleRemove}
           onSetCount={(id, c) => setRoster((r) => setCount(r, id, c))}
           onAttachLeader={(lid, bid) => setRoster((r) => attachLeader(r, catalogue, lid, bid))}
-          onDetachLeader={(lid) => setRoster((r) => detachLeader(r, lid))} />
+          onDetachLeader={(lid) => setRoster((r) => detachLeader(r, lid))}
+          onToggleWarlord={(id) => setRoster((r) => toggleWarlord(r, id))} />
       </div>
       {pickerOpen && (
         <AddUnitPicker catalogue={catalogue} hiddenIds={hiddenIds} onAdd={addAndSelect} onClose={() => setPickerOpen(false)} />

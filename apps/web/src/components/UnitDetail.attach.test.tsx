@@ -27,7 +27,7 @@ function renderDetail(roster: Roster, over: Partial<Record<string, unknown>> = {
     <UnitDetail roster={roster} catalogue={catalogue} selectedUnitId="L"
       onBack={noop} onAddOption={noop} onToggleGroupMember={noop}
       onSetGroupMemberCount={noop} onRemove={noop} onSetCount={noop}
-      onAttachLeader={noop} onDetachLeader={noop} {...over} />,
+      onAttachLeader={noop} onDetachLeader={noop} onToggleWarlord={noop} {...over} />,
   );
 }
 

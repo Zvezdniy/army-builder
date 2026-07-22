@@ -16,11 +16,13 @@ const roster = {
 } as unknown as Roster;
 
 describe("RosterList", () => {
-  it("shows units under their role heading and reports model count", () => {
+  it("shows units under their role heading with a points chip; a 1-model unit shows no model chip", () => {
     render(<RosterList roster={roster} catalogue={cat} selectedUnitId={undefined}
       onSelect={() => {}} onOpenPicker={() => {}} />);
     expect(screen.getByText("HQ")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /open Captain/i })).toHaveTextContent("1 model");
+    const card = screen.getByRole("button", { name: /open Captain/i });
+    expect(card).toHaveTextContent("0 pts"); // Captain has no cost in this fixture
+    expect(card).not.toHaveTextContent(/model/); // single-model unit: model chip suppressed
   });
   it("selects a unit on click", async () => {
     const onSelect = vi.fn();

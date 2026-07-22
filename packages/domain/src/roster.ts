@@ -42,6 +42,10 @@ export const Roster = z.object({
   pointsLimit: z.number().finite(),
   selections: z.array(RosterSelection).default([]),
   overrides: z.array(RosterOverride).optional(),
+  // The selection id of the unit designated Warlord (a top-level character). Optional
+  // and player-set; cleared automatically when that unit is removed. Absent on rosters
+  // saved before this field existed — treated as "no warlord chosen".
+  warlordId: z.string().optional(),
 });
 export type Roster = z.infer<typeof Roster>;
 

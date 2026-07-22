@@ -39,11 +39,12 @@ function unitLines(
   linePrefix: string,
   bulletPrefix: string,
   prefixNx: boolean,
+  suffix = "",
 ): string[] {
   const name = catalogueEntry(catalogue, sel.entryId)?.name ?? sel.entryId;
   const models = modelCount(catalogue, sel);
   const nx = prefixNx && models > 1 ? `${models}x ` : "";
-  const lines = [`${linePrefix}${nx}${name} (${points} Points)`];
+  const lines = [`${linePrefix}${nx}${name} (${points} Points)${suffix}`];
   for (const item of unitLoadout(catalogue, sel).wargear) lines.push(`${bulletPrefix}${item}`);
   return lines;
 }
@@ -68,15 +69,16 @@ function attachedByHost(roster: Roster): Map<string, RosterSelection[]> {
 // host. Returns one string per role block (caller joins blocks with a blank line).
 function roleBlocks(roster: Roster, catalogue: IrCatalogue, pointsBySelectionId: Map<string, number>): string[] {
   const byHost = attachedByHost(roster);
+  const wl = (id: string): string => (roster.warlordId === id ? " [Warlord]" : "");
   const blocks: string[] = [];
   for (const group of unitsByRole(roster, catalogue)) {
     const units = group.units.filter((u) => u.attachedTo === undefined);
     if (units.length === 0) continue; // match RosterList: no non-attached units → role omitted
     const lines = [group.role.toUpperCase(), ""];
     for (const unit of units) {
-      lines.push(...unitLines(catalogue, unit, pointsBySelectionId.get(unit.id) ?? 0, "", "  • ", true));
+      lines.push(...unitLines(catalogue, unit, pointsBySelectionId.get(unit.id) ?? 0, "", "  • ", true, wl(unit.id)));
       for (const leader of byHost.get(unit.id) ?? []) {
-        lines.push(...unitLines(catalogue, leader, pointsBySelectionId.get(leader.id) ?? 0, "  ↳ ", "    • ", false));
+        lines.push(...unitLines(catalogue, leader, pointsBySelectionId.get(leader.id) ?? 0, "  ↳ ", "    • ", false, wl(leader.id)));
       }
     }
     blocks.push(lines.join("\n"));
@@ -91,11 +93,15 @@ function armyUnits(roster: Roster, catalogue: IrCatalogue): RosterSelection[] {
   return roster.selections.filter((s) => s.entryId !== detRootId);
 }
 
-// The Warlord line the WTC header needs. Muster does not yet model an explicit
-// Warlord pick, so derive a best-effort one: the first Epic Hero, else the first
-// Character/HQ, in roster order. The exported text is editable, so a rare wrong
-// guess is trivially corrected; undefined means the roster has no character at all.
+// The Warlord line the WTC header needs. Prefer the player's explicit pick
+// (roster.warlordId); when unset, derive a best-effort one — the first Epic Hero,
+// else the first Character/HQ, in roster order. The exported text is editable, so a
+// rare wrong guess is trivially corrected; undefined means no character at all.
 function warlordName(roster: Roster, catalogue: IrCatalogue): string | undefined {
+  if (roster.warlordId !== undefined) {
+    const picked = roster.selections.find((s) => s.id === roster.warlordId);
+    if (picked) return catalogueEntry(catalogue, picked.entryId)?.name;
+  }
   const roleOf = (sel: RosterSelection): string => {
     const entry = catalogueEntry(catalogue, sel.entryId);
     return entry ? battlefieldRole(entry, catalogue) : OTHER_ROLE;

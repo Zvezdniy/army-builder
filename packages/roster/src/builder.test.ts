@@ -5,7 +5,7 @@ import {
   selectedGroupMembers, toggleGroupMember, groupControl, optionControl, catalogueEntry,
   unitLoadout, availableDetachments, selectedDetachment, selectedDetachments, selectedDetachmentNames, toggleDetachment, setPointsLimit,
   unitsByRole, detachmentSelectionIds, groupMemberCounts, groupTotal, setGroupMemberCount,
-  invulnSave, enhancementsForDetachment, detachmentRuleTexts, enhancementTargets,
+  invulnSave, enhancementsForDetachment, detachmentRuleTexts, enhancementTargets, toggleWarlord,
 } from "./index";
 
 const catalogue: IrCatalogue = {
@@ -1504,5 +1504,31 @@ describe("selectedDetachmentNames", () => {
   it("drops a selected entryId with no catalogue entry", () => {
     const r = toggleDetachment(createRoster(detCat, 2000), "e.unknown", detCat);
     expect(selectedDetachmentNames(r, detCat)).toEqual([]);
+  });
+});
+
+describe("toggleWarlord", () => {
+  const roster = {
+    id: "r", name: "R", gameSystemId: "gs", catalogueId: "c", catalogueRevision: 1, pointsLimit: 2000,
+    selections: [
+      { id: "a", entryId: "e.a", count: 1, selections: [] },
+      { id: "b", entryId: "e.b", count: 1, selections: [] },
+    ],
+  } as unknown as Roster;
+
+  it("sets the warlord when none is chosen", () => {
+    expect(toggleWarlord(roster, "a").warlordId).toBe("a");
+  });
+  it("clears the warlord when the same unit is toggled again", () => {
+    expect(toggleWarlord({ ...roster, warlordId: "a" }, "a").warlordId).toBeUndefined();
+  });
+  it("switches the warlord to a different unit", () => {
+    expect(toggleWarlord({ ...roster, warlordId: "a" }, "b").warlordId).toBe("b");
+  });
+  it("remove() drops the warlord designation when the warlord unit is removed", () => {
+    expect(remove({ ...roster, warlordId: "a" }, "a").warlordId).toBeUndefined();
+  });
+  it("remove() keeps the warlord when a different unit is removed", () => {
+    expect(remove({ ...roster, warlordId: "a" }, "b").warlordId).toBe("a");
   });
 });

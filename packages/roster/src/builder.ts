@@ -75,7 +75,16 @@ export function remove(roster: Roster, selectionId: string): Roster {
     const { attachedTo, ...rest } = s;
     return rest;
   });
-  return { ...roster, selections: cleaned };
+  // Drop the Warlord designation if the removed subtree was the Warlord unit.
+  const warlordId = roster.warlordId !== undefined && present.has(roster.warlordId) ? roster.warlordId : undefined;
+  return { ...roster, selections: cleaned, warlordId };
+}
+
+/** Designate `selectionId` the roster's Warlord, or clear the designation if that
+ *  unit is already the Warlord (one Warlord per roster). The caller decides which
+ *  units are eligible (characters); this only records the choice. */
+export function toggleWarlord(roster: Roster, selectionId: string): Roster {
+  return { ...roster, warlordId: roster.warlordId === selectionId ? undefined : selectionId };
 }
 
 /**

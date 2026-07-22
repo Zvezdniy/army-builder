@@ -1,5 +1,7 @@
+import { useMemo } from "react";
 import type { IrCatalogue, Roster, RosterSelection } from "@muster/domain";
 import { unitsByRole, modelCount, catalogueEntry } from "@muster/roster";
+import { unitBreakdowns, type UnitBreakdown } from "../rosterCards";
 
 function unitHasHiddenSelection(
   sel: { id: string; selections: { id: string; selections: unknown[] }[] },
@@ -10,7 +12,8 @@ function unitHasHiddenSelection(
 }
 
 /** The roster window: added units grouped by role, plus the add-unit trigger.
- *  An attached Leader is drawn under its Bodyguard (and omitted from its own bucket). */
+ *  Each unit card carries its points, model count, paid wargear, enhancements, and a
+ *  Warlord tag (War Organ-style). An attached Leader is drawn under its Bodyguard. */
 export function RosterList({
   roster, catalogue, selectedUnitId, onSelect, onOpenPicker, onOpenExport, hiddenIds,
 }: {
@@ -24,6 +27,7 @@ export function RosterList({
 }) {
   const hidden = hiddenIds ?? new Set<string>();
   const groups = unitsByRole(roster, catalogue);
+  const breakdowns = useMemo(() => unitBreakdowns(roster, catalogue), [roster, catalogue]);
   const attachedByHost = new Map<string, RosterSelection[]>();
   for (const s of roster.selections) {
     if (s.attachedTo !== undefined) {
@@ -32,19 +36,39 @@ export function RosterList({
       attachedByHost.set(s.attachedTo, list);
     }
   }
+  const chips = (u: RosterSelection) => {
+    const models = modelCount(catalogue, u);
+    const b: UnitBreakdown | undefined = breakdowns.get(u.id);
+    return (
+      <span className="rl-chips">
+        <span className="rl-chip rl-chip-pts">{b?.points ?? 0} pts</span>
+        {models > 1 && <span className="rl-chip rl-chip-models">{models} models</span>}
+        {roster.warlordId === u.id && <span className="rl-chip rl-chip-warlord">Warlord</span>}
+        {(b?.enhancements ?? []).map((e) => (
+          <span key={`e-${e.id}`} className="rl-chip rl-chip-enh">{e.name} · {e.points} pts</span>
+        ))}
+        {(b?.wargear ?? []).map((w) => (
+          <span key={`w-${w.id}`} className="rl-chip rl-chip-wargear">
+            {w.count > 1 ? `${w.count}× ` : ""}{w.name} · {w.points} pts
+          </span>
+        ))}
+      </span>
+    );
+  };
   const renderUnitButton = (u: RosterSelection, extraClass = "", leading = false) => {
     const name = catalogueEntry(catalogue, u.entryId)?.name ?? u.entryId;
-    const models = modelCount(catalogue, u);
     const flagged = unitHasHiddenSelection(u, hidden);
     return (
       <button
         className={`${u.id === selectedUnitId ? "rl-unit selected" : "rl-unit"}${extraClass ? " " + extraClass : ""}`}
         aria-label={`open ${name}`} onClick={() => onSelect(u.id)}>
-        <span>{leading ? `↳ ${name} (leading)` : name}</span>
-        {flagged && (
-          <span className="rl-warn" title="Contains a selection not available in the current army configuration">⚠</span>
-        )}
-        <span className="rl-models">{models} model{models === 1 ? "" : "s"}</span>
+        <span className="rl-unit-top">
+          <span className="rl-unit-name">{leading ? `↳ ${name} (leading)` : name}</span>
+          {flagged && (
+            <span className="rl-warn" title="Contains a selection not available in the current army configuration">⚠</span>
+          )}
+        </span>
+        {chips(u)}
       </button>
     );
   };

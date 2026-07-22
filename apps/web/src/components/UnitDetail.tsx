@@ -1,11 +1,15 @@
 import type { IrCatalogue, IrGroup, Roster } from "@muster/domain";
-import { catalogueEntry, isLeaderUnit, leaderTargets } from "@muster/roster";
+import { catalogueEntry, isLeaderUnit, leaderTargets, battlefieldRole } from "@muster/roster";
 import { SelectionNode } from "./SelectionNode";
 import { Datasheet, UnitStatline } from "./Datasheet";
 
+// Only characters can be Warlord; reuse the battlefield-role buckets that already
+// distinguish heroes from line units.
+const WARLORD_ROLES = new Set(["Epic Hero", "Character", "HQ"]);
+
 export function UnitDetail({
   roster, catalogue, selectedUnitId, onBack, onAddOption, onToggleGroupMember,
-  onSetGroupMemberCount, onRemove, onSetCount, onAttachLeader, onDetachLeader,
+  onSetGroupMemberCount, onRemove, onSetCount, onAttachLeader, onDetachLeader, onToggleWarlord,
 }: {
   roster: Roster;
   catalogue: IrCatalogue;
@@ -18,6 +22,7 @@ export function UnitDetail({
   onSetCount: (id: string, count: number) => void;
   onAttachLeader: (leaderId: string, bodyguardId: string) => void;
   onDetachLeader: (leaderId: string) => void;
+  onToggleWarlord: (id: string) => void;
 }) {
   const sel = selectedUnitId ? roster.selections.find((s) => s.id === selectedUnitId) : undefined;
   if (!sel) {
@@ -26,11 +31,19 @@ export function UnitDetail({
   const entry = catalogueEntry(catalogue, sel.entryId);
   const name = entry?.name ?? sel.entryId;
   const keywords = (entry?.categories ?? []).map((id) => catalogue.categoryNames?.[id] ?? id);
+  const canBeWarlord = entry !== undefined && WARLORD_ROLES.has(battlefieldRole(entry, catalogue));
+  const isWarlord = roster.warlordId === sel.id;
   return (
     <section className="ud">
       <button className="ud-remove" title="Remove unit" aria-label={`remove ${name}`}
         onClick={() => onRemove(sel.id)}>🗑</button>
       <button className="ud-back" aria-label="back to list" onClick={onBack}>‹ Back</button>
+      {canBeWarlord && (
+        <button className={`ud-warlord${isWarlord ? " active" : ""}`} aria-pressed={isWarlord}
+          onClick={() => onToggleWarlord(sel.id)}>
+          {isWarlord ? "★ Warlord" : "Make Warlord"}
+        </button>
+      )}
       {keywords.length > 0 && (
         <div className="ud-kw">
           {keywords.map((k) => <span key={k} className="kw">{k}</span>)}
