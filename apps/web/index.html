@@ -1,6 +1,21 @@
 <!doctype html>
 <html lang="en">
-  <head><meta charset="UTF-8" /><title>Muster — Roster Builder</title></head>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Muster — Roster Builder</title>
+    <!-- Apply the saved theme before first paint so there's no flash of the wrong
+         palette. A missing/invalid value leaves data-theme unset → the OS preference
+         (prefers-color-scheme) governs, matching the CSS. -->
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem("muster-theme");
+          if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+        } catch (e) {}
+      })();
+    </script>
+  </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>

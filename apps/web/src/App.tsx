@@ -16,6 +16,7 @@ import { StratagemPanel } from "./components/StratagemPanel";
 import { LegalityPanel } from "./components/LegalityPanel";
 import { MyArmies } from "./components/MyArmies";
 import { ExportModal } from "./components/ExportModal";
+import { ThemeToggle } from "./components/ThemeToggle";
 import { bundledDescriptor, loadRegistry, loadCatalogueFor, normalizeBase, type CatalogueDescriptor } from "./registry/catalogueRegistry";
 import { useRosterLibrary } from "./registry/rosterLibrary";
 import { loadStratagemLibrary, loadStratagemsFor, slugForDescriptor } from "./registry/stratagemRegistry";
@@ -229,6 +230,7 @@ export function App() {
             dwarfing the header controls. */}
         <h1 style={{ margin: 0 }}>Muster<span className="h1-faction"> — {catalogue.name}</span></h1>
         <div className="header-actions">
+          <ThemeToggle />
           <button onClick={() => setMyArmiesOpen(true)}>My armies</button>
           {/* Native file input is visually hidden; the label is the tappable button
               (the UA's own "Choose file" widget is locale-dependent and untidy). */}
